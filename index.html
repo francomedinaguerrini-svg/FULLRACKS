@@ -882,6 +882,17 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
           <span id="cob-stock-fuera">— unidades fuera de rack</span>
         </div>
       </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
+        <div class="cob-header">
+          <span class="cob-title">🏭 Ocupación física de racks</span>
+          <span class="cob-pct" id="cob-ocup-pct">—</span>
+        </div>
+        <div class="cob-track"><div class="cob-fill" id="cob-ocup-fill" style="width:0%"></div></div>
+        <div class="cob-detail">
+          <span id="cob-ocup-en">— posiciones ocupadas</span>
+          <span id="cob-ocup-libres">— posiciones libres</span>
+        </div>
+      </div>
     </div>
     <!-- Aplicar Stock Bajo -->
     <div style="margin-bottom:10px">
@@ -2637,6 +2648,23 @@ function renderCobertura(){
   if(sfillEl) sfillEl.style.width = pctStock+'%';
   if(senEl) senEl.textContent = stockEnRack.toLocaleString('es-AR')+' unidades en rack';
   if(sfEl) sfEl.textContent = stockFuera.toLocaleString('es-AR')+' unidades fuera de rack';
+
+  // Ocupación física de racks: posiciones realmente cargadas vs. las 448 posiciones totales del rack
+  const totalPosicionesRack = FRENTES.reduce((s,f)=>s+f.niveles.length*f.modulos,0);
+  let posicionesOcupadas = 0;
+  Object.values(ASIGN).forEach(function(v){ if(v && (v.unidades||0)>0) posicionesOcupadas++; });
+  const posicionesLibres = totalPosicionesRack - posicionesOcupadas;
+  const pctOcup = totalPosicionesRack>0 ? Math.round((posicionesOcupadas/totalPosicionesRack)*100) : 0;
+
+  const opctEl = document.getElementById('cob-ocup-pct');
+  const ofillEl = document.getElementById('cob-ocup-fill');
+  const oenEl = document.getElementById('cob-ocup-en');
+  const olibEl = document.getElementById('cob-ocup-libres');
+  if(opctEl) opctEl.textContent = pctOcup+'%';
+  if(opctEl) opctEl.style.color = pctOcup>=80?'#34c759':pctOcup>=60?'#ff9500':'#d70015';
+  if(ofillEl) ofillEl.style.width = pctOcup+'%';
+  if(oenEl) oenEl.textContent = posicionesOcupadas.toLocaleString('es-AR')+' posiciones ocupadas';
+  if(olibEl) olibEl.textContent = posicionesLibres.toLocaleString('es-AR')+' posiciones libres (de '+totalPosicionesRack+')';
 }
 
 function toggleFrente(id){
