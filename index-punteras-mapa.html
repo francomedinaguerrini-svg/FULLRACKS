@@ -588,7 +588,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 </head>
 <style>
 /* === Vista reducida: solo Punteras + Mapa de Racks, asociado a Pedidos y Carga/Descarga === */
-#maintab-stock, #maintab-prod, #tab-bar-row2, #tab-more-btn, .bottom-nav { display:none !important; }
+#maintab-prod, #tab-bar-row2, #tab-more-btn, .bottom-nav { display:none !important; }
 </style>
 <body>
 
@@ -653,6 +653,14 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 
   <div class="home-section-title" style="margin-top:12px">Operaciones diarias</div>
   <div class="home-grid" style="grid-template-columns:repeat(3,1fr)">
+
+    <button class="home-btn accent-blue" onclick="goHome('stock')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="3" y="8" width="22" height="16" rx="2" fill="#0071e3" opacity=".15"/><rect x="3" y="8" width="22" height="16" rx="2" stroke="#0071e3" stroke-width="1.8"/><path d="M9 8V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2" stroke="#0071e3" stroke-width="1.8" stroke-linecap="round"/><path d="M9 14h10M9 18h6" stroke="#0071e3" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="home-btn-label">Stock</div>
+      <div class="home-btn-sub">Consulta</div>
+    </button>
 
     <button class="home-btn accent-orange" onclick="goHome('pedidos')">
       <div class="home-btn-icon">
