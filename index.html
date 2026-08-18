@@ -863,34 +863,34 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   <div class="mapa-wrap">
     <div class="cobertura-bar" id="cob-bar">
       <div class="cob-header">
-        <span class="cob-title">📊 Cobertura de rotación en racks</span>
+        <span class="cob-title">🔻 Baja rotación vs. Rotación</span>
         <span class="cob-pct" id="cob-pct">—</span>
       </div>
       <div class="cob-track"><div class="cob-fill" id="cob-fill" style="width:0%"></div></div>
       <div class="cob-detail">
-        <span id="cob-en-rack">— rot. cubierta en rack</span>
-        <span id="cob-fuera">— rot. fuera de rack</span>
+        <span id="cob-en-rack">— art. baja rotación</span>
+        <span id="cob-fuera">— art. rotación normal</span>
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
         <div class="cob-header">
-          <span class="cob-title">📦 Cobertura de stock en racks</span>
+          <span class="cob-title">🏭 Espacio libre en la nave</span>
           <span class="cob-pct" id="cob-stock-pct">—</span>
         </div>
         <div class="cob-track"><div class="cob-fill" id="cob-stock-fill" style="width:0%"></div></div>
         <div class="cob-detail">
-          <span id="cob-stock-en-rack">— unidades en rack</span>
-          <span id="cob-stock-fuera">— unidades fuera de rack</span>
+          <span id="cob-stock-en-rack">— un. libres (de 140.000)</span>
+          <span id="cob-stock-fuera">— un. ocupadas en total</span>
         </div>
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
         <div class="cob-header">
-          <span class="cob-title">🏭 Ocupación física de racks</span>
-          <span class="cob-pct" id="cob-ocup-pct">—</span>
+          <span class="cob-title">🗄️ Ocupación de racks</span>
+          <span class="cob-pct" id="cob-rackocup-pct">—</span>
         </div>
-        <div class="cob-track"><div class="cob-fill" id="cob-ocup-fill" style="width:0%"></div></div>
+        <div class="cob-track"><div class="cob-fill" id="cob-rackocup-fill" style="width:0%"></div></div>
         <div class="cob-detail">
-          <span id="cob-ocup-en">— posiciones ocupadas</span>
-          <span id="cob-ocup-libres">— posiciones libres</span>
+          <span id="cob-rackocup-en">— un. en rack</span>
+          <span id="cob-rackocup-total">— del total guardado</span>
         </div>
       </div>
     </div>
@@ -2602,69 +2602,60 @@ function renderCobertura(){
     var uso = (r.uso||'').trim();
     if(['TT','TL','TLSB'].indexOf(uso)>=0) return false;
     if(r.wms === '#DIV/0!' || r.wms === '') return false;
-    if((r.rot||0) <= 0) return false;
     return true;
   });
-  const rotTotal = universo.reduce((s,r)=>s+(r.rot||0),0);
-  if(!rotTotal){ return; }
+  if(!universo.length){ return; }
 
-  // Artículos asignados en cualquier nivel del rack
-  const artsEnRack = new Set();
-  Object.entries(ASIGN).forEach(([pos,v])=>{
-    if(v) artsEnRack.add(v.art);
-  });
-  // Cobertura = rotación de artículos en rack / rotación total universo
-  const rotRack = universo.filter(r=>artsEnRack.has(r.art)).reduce((s,r)=>s+(r.rot||0),0);
-  const rotFuera = rotTotal - rotRack;
-  const pct = Math.round((rotRack/rotTotal)*100);
+  // Baja rotación vs Rotación normal — por cantidad de artículos, mismo
+  // umbral que ya usa el motor de rack (nivelSegunRot): rot_sem < 1.25
+  // agrupa los "muertos" (N4) + "casi muertos" (N3) como baja rotación.
+  const artsBaja = universo.filter(r => (r.rot_sem||0) < 1.25).length;
+  const artsNormal = universo.length - artsBaja;
+  const pct = Math.round((artsBaja/universo.length)*100);
 
   const pctEl = document.getElementById('cob-pct');
   const fillEl = document.getElementById('cob-fill');
   const enEl = document.getElementById('cob-en-rack');
   const fEl = document.getElementById('cob-fuera');
   if(pctEl) pctEl.textContent = pct+'%';
-  if(pctEl) pctEl.style.color = pct>=90?'#34c759':pct>=70?'#ff9500':'#d70015';
+  if(pctEl) pctEl.style.color = pct>=40?'#d70015':pct>=20?'#ff9500':'#34c759';
   if(fillEl) fillEl.style.width = pct+'%';
-  if(enEl) enEl.textContent = rotRack.toLocaleString('es-AR')+' rot. cubierta en rack';
-  if(fEl) fEl.textContent = rotFuera.toLocaleString('es-AR')+' rot. fuera de rack';
+  if(enEl) enEl.textContent = artsBaja.toLocaleString('es-AR')+' art. baja rotación';
+  if(fEl) fEl.textContent = artsNormal.toLocaleString('es-AR')+' art. rotación normal';
 
-  // Stock coverage — usar unidades reales asignadas al rack, no el stock total del artículo
-  // Stock total = todo el DATA (incluyendo excluidos del rack)
+  // Espacio libre en la nave — capacidad total 140.000 un. (rack + bloques +
+  // punteras), comparado contra TODO lo que hay guardado (stock total).
+  const CAP_NAVE = 140000;
   const stockTotal = DATA.reduce((s,r)=>s+(r.stock||0),0);
-  // Sumar unidades efectivamente asignadas al rack
   var stockEnRack = 0;
   Object.values(ASIGN).forEach(function(v){
     if(v) stockEnRack += (v.unidades||0);
   });
-  const stockFuera = stockTotal - stockEnRack;
-  const pctStock = stockTotal>0?Math.round((stockEnRack/stockTotal)*100):0;
+  const libre = Math.max(0, CAP_NAVE - stockTotal);
+  const pctStock = Math.round((libre/CAP_NAVE)*100);
 
   const spctEl = document.getElementById('cob-stock-pct');
   const sfillEl = document.getElementById('cob-stock-fill');
   const senEl = document.getElementById('cob-stock-en-rack');
   const sfEl = document.getElementById('cob-stock-fuera');
   if(spctEl) spctEl.textContent = pctStock+'%';
-  if(spctEl) spctEl.style.color = pctStock>=80?'#34c759':pctStock>=60?'#ff9500':'#d70015';
+  if(spctEl) spctEl.style.color = pctStock>=40?'#34c759':pctStock>=20?'#ff9500':'#d70015';
   if(sfillEl) sfillEl.style.width = pctStock+'%';
-  if(senEl) senEl.textContent = stockEnRack.toLocaleString('es-AR')+' unidades en rack';
-  if(sfEl) sfEl.textContent = stockFuera.toLocaleString('es-AR')+' unidades fuera de rack';
+  if(senEl) senEl.textContent = libre.toLocaleString('es-AR')+' un. libres (de '+CAP_NAVE.toLocaleString('es-AR')+')';
+  if(sfEl) sfEl.textContent = stockTotal.toLocaleString('es-AR')+' un. ocupadas en total';
 
-  // Ocupación física de racks: posiciones realmente cargadas vs. las 448 posiciones totales del rack
-  const totalPosicionesRack = FRENTES.reduce((s,f)=>s+f.niveles.length*f.modulos,0);
-  let posicionesOcupadas = 0;
-  Object.values(ASIGN).forEach(function(v){ if(v && (v.unidades||0)>0) posicionesOcupadas++; });
-  const posicionesLibres = totalPosicionesRack - posicionesOcupadas;
-  const pctOcup = totalPosicionesRack>0 ? Math.round((posicionesOcupadas/totalPosicionesRack)*100) : 0;
-
-  const opctEl = document.getElementById('cob-ocup-pct');
-  const ofillEl = document.getElementById('cob-ocup-fill');
-  const oenEl = document.getElementById('cob-ocup-en');
-  const olibEl = document.getElementById('cob-ocup-libres');
-  if(opctEl) opctEl.textContent = pctOcup+'%';
-  if(opctEl) opctEl.style.color = pctOcup>=80?'#34c759':pctOcup>=60?'#ff9500':'#d70015';
-  if(ofillEl) ofillEl.style.width = pctOcup+'%';
-  if(oenEl) oenEl.textContent = posicionesOcupadas.toLocaleString('es-AR')+' posiciones ocupadas';
-  if(olibEl) olibEl.textContent = posicionesLibres.toLocaleString('es-AR')+' posiciones libres (de '+totalPosicionesRack+')';
+  // Ocupación de racks — del total guardado (stockTotal), qué % está
+  // efectivamente puesto en rack (vs. suelto en bloques/punteras)
+  const pctRackOcup = stockTotal>0 ? Math.round((stockEnRack/stockTotal)*100) : 0;
+  const rpctEl = document.getElementById('cob-rackocup-pct');
+  const rfillEl = document.getElementById('cob-rackocup-fill');
+  const renEl = document.getElementById('cob-rackocup-en');
+  const rtEl = document.getElementById('cob-rackocup-total');
+  if(rpctEl) rpctEl.textContent = pctRackOcup+'%';
+  if(rpctEl) rpctEl.style.color = pctRackOcup>=60?'#34c759':pctRackOcup>=30?'#ff9500':'#d70015';
+  if(rfillEl) rfillEl.style.width = pctRackOcup+'%';
+  if(renEl) renEl.textContent = stockEnRack.toLocaleString('es-AR')+' un. en rack';
+  if(rtEl) rtEl.textContent = 'de '+stockTotal.toLocaleString('es-AR')+' un. guardadas en total';
 }
 
 function toggleFrente(id){
@@ -5459,12 +5450,6 @@ function cydPlanillaPicking(id){
     'tr:nth-child(even) td{background:#f8f8f8}'+
     'tfoot td{font-weight:700;border-top:2px solid #1d1d1f;background:#f0f0f0}'+
     '.pie{margin-top:8px;font-size:8.5px;color:#999;border-top:1px solid #eee;padding-top:4px}'+
-    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:8px 0}'+
-    '.firma-box{border:1px solid #ccc;border-radius:6px;padding:6px 10px}'+
-    '.firma-label{font-size:8.5px;color:#86868b;margin-bottom:2px}'+
-    '.firma-val{font-weight:700;font-size:11px}'+
-    '.firma-line{border-top:1px solid #bbb;margin-top:14px;padding-top:3px;font-size:8px;color:#999;text-align:center}'+
-    '.hora-linea{border-bottom:1px solid #999;display:inline-block;min-width:70px}'+
     '</style></head><body>'+
     '<h2>📋 Planilla de picking — '+tr.tipoIcon+' '+(tr.destino||tr.tipoLabel)+'</h2>'+
     '<div class="meta">'+
@@ -5474,24 +5459,6 @@ function cydPlanillaPicking(id){
       '<span>Arts: <b>'+tr.items.length+'</b></span>'+
       '<span>Unidades: <b>'+totalCant+'</b></span>'+
       '<span style="margin-left:auto;color:#bbb">ID: '+tr.id+'</span>'+
-    '</div>'+
-    '<div class="firmas">'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Responsable de preparado</div>'+
-        '<div class="firma-val">&nbsp;</div>'+
-        '<div class="firma-line">Firma responsable</div>'+
-      '</div>'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Muelle</div>'+
-        '<div class="firma-val">&nbsp;</div>'+
-        '<div class="firma-line">Completar a mano</div>'+
-      '</div>'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Horario de preparado</div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400">Inicio: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400;margin-top:6px">Fin: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-line">Completar a mano</div>'+
-      '</div>'+
     '</div>'+
     (enPuntera.length?
       '<div class="sec sec-puntera">🔚 PUNTERA — preparar primero ('+enPuntera.length+' arts)</div>'+
@@ -11310,8 +11277,8 @@ function formatPalletizado(total, maxPos){
   var completos = Math.floor(total / maxPos);
   var resto = total % maxPos;
   var partes = [];
-  if(completos>0) partes.push(completos+'×'+maxPos);
-  if(resto>0) partes.push('1×'+resto);
+  if(completos>0) partes.push(completos+'p x '+maxPos);
+  if(resto>0) partes.push('1p x '+resto);
   if(!partes.length) return '0';
   return partes.join(' + ');
 }
@@ -11348,15 +11315,10 @@ function cydExportarPlanilla(id){
     var rango = (typeof RANGOS !== 'undefined' && RANGOS[String(r.art)]) ? RANGOS[String(r.art)] : '—';
     var dataArtRow = DATA.find(function(x){ return x.art===r.art; });
     var maxPosRow = dataArtRow ? (dataArtRow.max_pos||32) : 32;
-    var paletizadoStr = formatPalletizado(stockNuevo, maxPosRow);
-    var dot = (function(){
-      try{
-        var dots = JSON.parse(localStorage.getItem('wms_dots')||'{}');
-        var artDots = dots[String(r.art)];
-        if(!artDots||!artDots.length) return '—';
-        return artDots.map(function(d){return d.anio||d;}).join(' / ');
-      }catch(e){return '—';}
-    })();
+    // Paletizado de GUARDADO: cómo se arma lo que está entrando ahora
+    // (r.cant), no el stock total acumulado — es la mercadería que hay
+    // que palletizar en este momento, no una recalculación de todo el stock
+    var paletizadoStr = formatPalletizado(r.cant, maxPosRow);
 
     return '<tr>'+
       '<td style="font-weight:700">'+r.art+'</td>'+
@@ -11364,7 +11326,7 @@ function cydExportarPlanilla(id){
       '<td>'+(r.diseno||'')+'</td>'+
       '<td style="color:#555">'+(r.prov||'')+'</td>'+
       '<td style="text-align:center;font-weight:700;color:#0071e3">'+rango+'</td>'+
-      '<td style="text-align:center;color:#555">'+dot+'</td>'+
+      '<td style="border:2px solid #bbb;min-width:60px">&nbsp;</td>'+
       '<td style="text-align:right">'+(r.stockActual||0)+'</td>'+
       '<td style="text-align:right;font-weight:700;color:'+cantColor+'">'+cantStr+'</td>'+
       '<td style="text-align:right;font-weight:700">'+stockNuevo+'</td>'+
@@ -11385,12 +11347,11 @@ function cydExportarPlanilla(id){
     'h2{font-size:13px;margin:0 0 3px;font-weight:700}'+
     '.meta{display:flex;gap:20px;flex-wrap:wrap;font-size:10px;color:#555;margin-bottom:6px;border-bottom:1px solid #ddd;padding-bottom:6px}'+
     '.meta b{color:#1d1d1f}'+
-    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin:10px 0 8px;font-size:9.5px}'+
+    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:10px 0 8px;font-size:9.5px}'+
     '.firma-box{border:1px solid #ccc;border-radius:6px;padding:6px 10px}'+
     '.firma-label{font-size:8.5px;color:#86868b;margin-bottom:2px}'+
     '.firma-val{font-weight:700;font-size:11px}'+
     '.firma-line{border-top:1px solid #bbb;margin-top:14px;padding-top:3px;font-size:8px;color:#999;text-align:center}'+
-    '.hora-linea{border-bottom:1px solid #999;display:inline-block;min-width:70px}'+
     'table{width:100%;border-collapse:collapse;font-size:9.5px}'+
     'th{background:#1d1d1f;color:#fff;padding:4px 6px;text-align:left;font-size:9px;white-space:nowrap;border-right:1px solid #444}'+
     'td{padding:3px 6px;border-bottom:1px solid #e8e8e8;vertical-align:middle;border-right:1px solid #f0f0f0}'+
@@ -11424,12 +11385,6 @@ function cydExportarPlanilla(id){
         '<div class="firma-label">Equipo de descarga</div>'+
         '<div class="firma-val">'+(equipo||'&nbsp;')+'</div>'+
         '<div class="firma-line">Firma equipo</div>'+
-      '</div>'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Horario de '+(esCarga?'carga':'descarga')+'</div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400">Inicio: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400;margin-top:6px">Fin: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-line">Completar a mano</div>'+
       '</div>'+
     '</div>'+
     '<table><thead><tr>'+
