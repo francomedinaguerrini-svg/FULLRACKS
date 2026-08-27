@@ -967,11 +967,20 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       <span id="nave-total" style="font-size:12px;color:#86868b"></span>
     </div>
     <div id="nave-config" style="display:none"></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
       <input id="nave-buscar-input" type="text" placeholder="Buscar artículo (código o medida) para ver dónde está..."
         style="flex:1;padding:11px 14px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px"
         onkeydown="if(event.key==='Enter') buscarUbicacionArticulo()">
       <button onclick="buscarUbicacionArticulo()" style="padding:11px 18px;background:#0071e3;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">🔎 Buscar</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end;background:#f5f5f7;border-radius:10px;padding:10px 12px">
+      <div style="flex:1;min-width:110px"><label style="font-size:10px;color:#86868b">Diseño (código completo)</label>
+        <input id="nave-mover-diseno" type="text" placeholder="ej: AT52" style="width:100%;padding:8px 10px;margin-top:2px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+      <div style="flex:1;min-width:90px"><label style="font-size:10px;color:#86868b">De bloque</label>
+        <input id="nave-mover-origen" type="text" placeholder="ej: 3S" style="width:100%;padding:8px 10px;margin-top:2px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+      <div style="flex:1;min-width:90px"><label style="font-size:10px;color:#86868b">A bloque</label>
+        <input id="nave-mover-destino" type="text" placeholder="ej: 4S" style="width:100%;padding:8px 10px;margin-top:2px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+      <button onclick="moverDisenoEntreBloques()" style="padding:9px 16px;background:#0071e3;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">🔄 Mover diseño completo</button>
     </div>
     <div id="nave-buscar-resultado"></div>
     <div id="nave-grid"></div>
@@ -10492,6 +10501,36 @@ function renderNave(){
 
   html2 += '</div>';
   document.getElementById('nave-grid').innerHTML = html2;
+}
+
+// Mueve TODOS los artículos de un diseño (código completo, ej "AT52") que
+// hoy están en un bloque origen, hacia un bloque destino, de una — para no
+// tener que tocar "🔄 Mover" medida por medida cuando se mueve el diseño
+// entero de un bloque a otro (ej: "AT52 del 3 al 4").
+function moverDisenoEntreBloques(){
+  var diseno = (document.getElementById('nave-mover-diseno').value||'').trim();
+  var origen = (document.getElementById('nave-mover-origen').value||'').trim();
+  var destino = (document.getElementById('nave-mover-destino').value||'').trim();
+  if(!diseno || !origen || !destino){ showToast('❌ Completá diseño, bloque origen y bloque destino'); return; }
+  if(origen.toUpperCase()===destino.toUpperCase()){ showToast('El origen y el destino son el mismo bloque'); return; }
+
+  var afectados = DATA.filter(function(r){
+    if(!r.diseno || String(r.diseno).toUpperCase()!==diseno.toUpperCase()) return false;
+    if(!r.bloque) return false;
+    var bs = r.bloque.includes('/')?r.bloque.split('/'):[r.bloque];
+    return bs.map(function(b){return b.trim().toUpperCase();}).indexOf(origen.toUpperCase())>=0;
+  });
+
+  if(!afectados.length){ showToast('No encontré artículos de diseño "'+diseno+'" en bloque '+origen); return; }
+  if(!confirm('¿Mover '+afectados.length+' artículo(s) de diseño "'+diseno+'" de bloque '+origen+' a '+destino+'?')) return;
+
+  afectados.forEach(function(r){ r.bloque = destino; });
+  saveDataStock();
+  showToast('✅ '+afectados.length+' artículo(s) de "'+diseno+'" movidos de '+origen+' a '+destino);
+  if(typeof renderNave==='function') renderNave();
+  document.getElementById('nave-mover-diseno').value='';
+  document.getElementById('nave-mover-origen').value='';
+  document.getElementById('nave-mover-destino').value='';
 }
 
 // Busca un artículo (por código o medida) en TODAS las zonas físicas —
