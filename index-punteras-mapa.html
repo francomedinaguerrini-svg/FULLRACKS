@@ -10716,6 +10716,30 @@ function guardarCapacidadBloqueSimple(key){
   showToast('✅ Capacidad de '+key+' guardada');
 }
 
+// Mover un artículo de un bloque a otro a mano — para cuando en el día a
+// día se mueve mercadería físicamente (ej: "la AT52 la movimos al 4").
+// Actualiza el bloque del artículo y refresca el Plano de Nave.
+function moverArticuloBloque(art, bloqueActual){
+  var da = DATA.find(function(d){ return String(d.art)===String(art); });
+  if(!da){ showToast('❌ Artículo no encontrado'); return; }
+  var nuevo = prompt('Mover "'+da.med+' — '+da.diseno+'" — hoy está en bloque "'+bloqueActual+'". ¿A qué bloque lo movés?', bloqueActual);
+  if(nuevo===null) return; // canceló
+  nuevo = nuevo.trim();
+  if(!nuevo){ showToast('❌ Bloque vacío — no se movió'); return; }
+  if(nuevo===bloqueActual){ showToast('Sigue en el mismo bloque'); return; }
+  da.bloque = nuevo;
+  saveDataStock();
+  showToast('✅ '+da.art+' movido de '+bloqueActual+' a '+nuevo);
+  if(typeof renderNave==='function') renderNave();
+
+  var siguenArts = DATA.some(function(r){
+    if(!r.bloque) return false;
+    var bs = r.bloque.includes('/')?r.bloque.split('/'):[r.bloque];
+    return bs.map(function(b){return b.trim();}).indexOf(bloqueActual)>=0;
+  });
+  if(siguenArts) clickBloque(bloqueActual); else closeModalDirect();
+}
+
 function clickBloque(key){
   function getLlanta(med){ try{return parseFloat(med.trim().split(' ').pop())}catch{return 0} }
   // Get articles in this bloque
@@ -10763,9 +10787,10 @@ function clickBloque(key){
               <div style="font-size:10px;color:#86868b">${(r.stock||0).toLocaleString('es-AR')} un.</div>
             </div>
           </div>
-          <div style="display:flex;gap:6px;margin-top:4px">
+          <div style="display:flex;gap:6px;margin-top:4px;align-items:center">
             <span class="badge ${r.cond==='bajo stock'?'bajo':'sobre'}">${r.cond}</span>
             <span style="font-size:10px;color:#86868b">rot: ${r.rot}/mes</span>
+            <button onclick="moverArticuloBloque('${r.art}','${key}')" style="margin-left:auto;font-size:10px;padding:3px 8px;background:#eef4ff;color:#0071e3;border:none;border-radius:6px;cursor:pointer;font-weight:600">🔄 Mover</button>
           </div>
         </div>`).join('')}
       ${arts.length>30?`<div style="text-align:center;padding:8px;font-size:12px;color:#86868b">...y ${arts.length-30} más</div>`:''}
