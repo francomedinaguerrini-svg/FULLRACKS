@@ -12706,7 +12706,13 @@ function cydConfirmarTransitoDesc(){
     hora:  ahora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
     fechaISO: ahora.toISOString().split('T')[0],
     estado: 'transito',
-    items: _cydItems.slice()
+    items: (function(){
+      var loteUsadas = new Set();
+      return _cydItems.map(function(r){
+        var sug = transitoPosicionSugerida(r.art, r.cant, loteUsadas);
+        return Object.assign({}, r, {sugerencia: sug});
+      });
+    })()
   };
 
   var lista = transitoGetAll();
