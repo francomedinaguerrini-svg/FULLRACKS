@@ -10371,42 +10371,49 @@ function renderNave(){
     bloqueStats[k].pctRot = rotTotalNave>0 ? Math.round((bloqueStats[k].rot/rotTotalNave)*100) : 0;
   });
 
-  function mkBloque(key, label, filaLabel, lado){
+  function dibujarBloquePlano(key, label, film){
     const s = bloqueStats[key] || bloqueStats[label] || null;
-    const capKey = filaLabel ? (String(filaLabel).match(/^\d+/)||[])[0] : null;
-    const capBloque = capKey ? getCapacidadBloques()[capKey] : null;
-    const capLado = (capBloque && lado) ? capBloque[lado] : null;
-    const capLine = capLado ? `<div style="font-size:10px;color:#0071e3;margin-top:2px">📐 ${capLado.pallets||0}p + ${capLado.auto||0} autoap.${capBloque.obs?' — '+capBloque.obs:''}</div>` : '';
-    if(!s) return `<div class="bloque-card vacio"><div class="bloque-name">${label}</div><div class="bloque-arts">Sin datos</div>${capLine}</div>`;
-    const pct = Math.round((s.pall/maxPall)*100);
-    const picking = s.picking || key.includes('PICKING');
-    return `<div class="bloque-card${picking?' bloque-picking':''}" onclick="clickBloque('${key}')">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div class="bloque-name">${label}${picking?' 🟠':''}</div>
-        <button onclick="event.stopPropagation();vaciarBloque('${key}','${label}')" title="Sacar el bloque de todos los artículos que figuran acá, para relevar de cero" style="border:none;background:#fff0f0;color:#d70015;font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;cursor:pointer;white-space:nowrap">🗑️ Vaciar</button>
-      </div>
-      <div class="bloque-pall">${s.pall.toLocaleString('es-AR')} <span style="font-size:10px;font-weight:400;color:#86868b">pallets</span></div>
-      <div class="bloque-arts">${s.art} arts · ${s.stock.toLocaleString('es-AR')} un.</div>
-      <div style="font-size:11px;color:#0071e3;font-weight:500">🔄 ${s.pctRot}% de la rotación</div>
-      ${s.bajo>0?`<div style="font-size:10px;color:#d70015;margin-top:2px">⚠️ ${s.bajo} bajo stock</div>`:''}
-      ${capLine}
-      <div class="bloque-bar"><div class="bloque-bar-fill" style="width:${pct}%"></div></div>
-    </div>`;
+    const pct = s ? Math.round((s.pall/maxPall)*100) : 0;
+    const color = !s ? '#c7c7cc' : pct>=90 ? '#d70015' : pct>=65 ? '#ff9500' : '#34c759';
+    const capS = getCapacidadBloqueSimple()[key];
+    const capSTxt = capS && (capS.racks||capS.pallets||capS.picking) ? ' — 📐 '+capS.racks+' racks, '+capS.pallets+' pallets, '+capS.picking+' picking' : '';
+    const pallTxt = s ? s.pall.toLocaleString('es-AR')+' pall.' : 'sin datos';
+    return '<div onclick="clickBloque(\''+key+'\')" title="'+label+capSTxt+'" '+
+      'style="position:relative;flex:1;height:46px;background:'+(s?color+'1f':'#f7f7f8')+';background-image:repeating-linear-gradient(90deg,transparent,transparent 23px,rgba(0,0,0,0.08) 23px,rgba(0,0,0,0.08) 24px);border:1px solid '+color+';cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;overflow:hidden">'+
+      '<div style="font-size:10px;font-weight:700;color:#1d1d1f">'+label+'</div>'+
+      '<div style="font-size:9px;font-weight:600;color:'+color+'">'+pallTxt+'</div>'+
+      (film ? '<div style="position:absolute;top:2px;left:2px;background:#fff;border:1px solid #34c759;color:#1d7a3c;font-size:7px;font-weight:700;padding:1px 3px;border-radius:3px;white-space:nowrap">FILM+TABLAS</div>' : '')+
+    '</div>';
   }
 
-  // Layout de la nave: filas de bloques
+  function dibujarRacksPlano(){
+    const asign = Object.values(ASIGN);
+    const posOcupadas = asign.length;
+    const artUnicos = new Set(asign.map(a=>a.art)).size;
+    const totalUnid = asign.reduce((s,a)=>s+(a.unidades||0),0);
+    const pct = Math.round((posOcupadas/448)*100);
+    return '<div onclick="switchTab(\'mapa\',document.querySelectorAll(\'.tab\')[2])" title="Mapa de Racks — '+artUnicos+' arts, '+totalUnid.toLocaleString('es-AR')+' un." '+
+      'style="position:relative;flex:1;height:46px;background:repeating-linear-gradient(45deg,#0071e330,#0071e330 6px,#e8f0fe 6px,#e8f0fe 12px);border:1px solid #0071e3;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;overflow:hidden">'+
+      '<div style="font-size:10px;font-weight:700;color:#0071e3">🗄️ RACKS</div>'+
+      '<div style="font-size:9px;font-weight:700;color:#0071e3">'+posOcupadas+'/448 · '+pct+'%</div>'+
+    '</div>';
+  }
+
+  // Layout de la nave, calcado del plano real: Bloque 10 arriba → Bloque 1
+  // abajo, Portón entre cada bloque, Pasillo Central de un solo tramo
+  // continuo, Canales al final. FILM+TABLAS son zonas físicas fijas.
   const filas = [
-    { label: '10', norte: '10',   sur: '10',   compartido: true },
-    { label: '9',  norte: '9N',   sur: '9S' },
-    { label: '8',  norte: null,   sur: '8S' },
-    { label: '7',  norte: '7N',   sur: '7S' },
-    { label: '6',  norte: '6N',   sur: '6S' },
-    { label: '5',  norte: '5N',   sur: '5S' },
-    { label: '4',  norte: '4N',   sur: '4S' },
-    { label: '3',  norte: null,   sur: '3S' },
-    { label: '2/3 Norte', compartido: true, key: '2N/3N' },
-    { label: '2 Sur/Norte', compartido: true, key: '2S/2N' },
-    { label: '1',  norte: 'RACKS', sur: null },
+    { n:'10', sur: '10',    norte: '10',   full:true },
+    { n:'9',  sur: '9S',    norte: '9N' },
+    { n:'8',  sur: '8S',    norte: null },
+    { n:'7',  sur: '7S',    norte: '7N',   film:'sur' },
+    { n:'6',  sur: '6S',    norte: '6N' },
+    { n:'5',  sur: '5S',    norte: '5N',   film:'sur' },
+    { n:'4',  sur: '4S',    norte: '4N' },
+    { n:'3',  sur: '3S',    norte: null },
+    { n:'2/3 Norte',   full:true, key:'2N/3N', film:true },
+    { n:'2 Sur/Norte',  full:true, key:'2S/2N', portonLabel:'2' },
+    { n:'1',  sur: '1S',    norte: 'RACKS' },
   ];
 
   // Total stats
@@ -10414,51 +10421,52 @@ function renderNave(){
   const totStock = DATA.reduce((s,r)=>s+(r.stock||0),0);
   document.getElementById('nave-total').textContent = `${totPall.toLocaleString('es-AR')} pallets · ${totStock.toLocaleString('es-AR')} unidades`;
 
-  let html2 = '<div class="nave-grid">';
-  html2 += '<div class="nave-pasillo">🚛 MUELLES DE DESCARGA</div>';
+  let html2 = '<div style="font-size:11px;color:#86868b;margin-bottom:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">'+
+    '<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#34c759;border-radius:2px;display:inline-block"></span>OK</span>'+
+    '<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#ff9500;border-radius:2px;display:inline-block"></span>65%+</span>'+
+    '<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#d70015;border-radius:2px;display:inline-block"></span>90%+</span>'+
+    '<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#0071e3;border-radius:2px;display:inline-block"></span>Racks</span>'+
+    '</div>';
+
+  // Wrapper con posición relativa para superponer la barra de Pasillo Central
+  html2 += '<div style="position:relative">';
+  html2 += '<div style="display:flex;align-items:stretch">';
+  html2 += '<div style="width:16px;flex-shrink:0;writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#6e6e73;letter-spacing:1px">SUR</div>';
+  html2 += '<div style="flex:1;display:flex;flex-direction:column;gap:1px">';
 
   filas.forEach(fila=>{
-    if(fila.pasillo){ return; }
-
-    // Bloque compartido full width (key explícito)
-    if(fila.key){
-      html2 += '<div class="nave-row">';
-      html2 += mkBloque(fila.key, `Bloque ${fila.label}`, fila.label, null);
-      html2 += '</div>';
-      return;
-    }
-
-    // Bloque 10 compartido (mismo key norte y sur)
-    if(fila.compartido && fila.norte === fila.sur){
-      html2 += '<div class="nave-row">';
-      html2 += mkBloque(fila.norte, `Bloque ${fila.label}`, fila.label, null);
-      html2 += '</div>';
-      return;
-    }
-
-    // Fila normal Sur + Norte
-    html2 += '<div class="nave-row">';
-    html2 += `<div class="nave-side-label">S</div>`;
-    html2 += fila.sur ? mkBloque(fila.sur, `Bloque ${fila.label} Sur`, fila.label, 'sur') : `<div class="bloque-card vacio"><div class="bloque-name">—</div></div>`;
-    html2 += `<div class="nave-side-label">N</div>`;
-    if(fila.norte === 'RACKS'){
-      const asign = Object.values(ASIGN);
-      const posOcupadas = asign.length;
-      const artUnicos = new Set(asign.map(a=>a.art)).size;
-      const totalUnid = asign.reduce((s,a)=>s+(a.unidades||0),0);
-      const pctOcup = Math.round((posOcupadas/448)*100);
-      html2 += `<div class="bloque-card" style="border:2px solid #0071e3;background:linear-gradient(135deg,#f0f6ff 0%,#e8f0fe 100%);cursor:pointer" onclick="switchTab('mapa',document.querySelectorAll('.tab')[2])">
-        <div class="bloque-name" style="color:#0071e3">🗄️ Racks — Pasillos 4 al 7</div>
-        <div class="bloque-pall" style="color:#0071e3">${posOcupadas} <span style="font-size:10px;font-weight:400;color:#86868b">pos. ocupadas de 448</span></div>
-        <div class="bloque-arts">${artUnicos} arts · ${totalUnid.toLocaleString('es-AR')} un.</div>
-        <div style="font-size:11px;color:#0071e3;font-weight:500;margin-top:4px">→ Ir al Mapa de Racks</div>
-        <div class="bloque-bar"><div class="bloque-bar-fill" style="width:${pctOcup}%;background:#0071e3"></div></div>
-      </div>`;
+    if(fila.full){
+      html2 += '<div style="display:flex;gap:26px">'+
+        dibujarBloquePlano(fila.key, 'Bloque '+fila.n, fila.film)+
+      '</div>';
     } else {
-      html2 += fila.norte ? mkBloque(fila.norte, `Bloque ${fila.label} Norte`, fila.label, 'norte') : `<div class="bloque-card vacio"><div class="bloque-name">—</div></div>`;
+      html2 += '<div style="display:flex;gap:26px">';
+      html2 += fila.sur ? dibujarBloquePlano(fila.sur, 'Bloque '+fila.n, fila.film==='sur') : '<div style="flex:1"></div>';
+      html2 += fila.norte==='RACKS' ? dibujarRacksPlano() : (fila.norte ? dibujarBloquePlano(fila.norte, 'Bloque '+fila.n, fila.film==='norte') : '<div style="flex:1"></div>');
+      html2 += '</div>';
     }
-    html2 += '</div>';
+    const portonLabel = fila.portonLabel || (/^\d+$/.test(fila.n) ? fila.n : null);
+    if(portonLabel){
+      html2 += '<div style="display:flex;gap:26px">'+
+        '<div style="flex:1;background:#5a5a5e;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:2px 0;letter-spacing:0.5px">PORTÓN '+portonLabel+'</div>'+
+        '<div style="flex:1;background:#5a5a5e;color:#fff;font-size:8px;font-weight:700;text-align:center;padding:2px 0;letter-spacing:0.5px">PORTÓN '+portonLabel+'</div>'+
+      '</div>';
+    }
   });
+
+  html2 += '</div>'; // fin columna bloques
+  html2 += '<div style="width:16px;flex-shrink:0;writing-mode:vertical-rl;text-orientation:mixed;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#6e6e73;letter-spacing:1px">NORTE</div>';
+  html2 += '</div>'; // fin fila SUR|bloques|NORTE
+
+  // Pasillo Central: barra continua superpuesta, centrada entre Sur y Norte
+  html2 += '<div style="position:absolute;top:0;bottom:0;left:calc(16px + (100% - 32px)/2 - 13px);width:26px;background:#8e8e93;display:flex;align-items:center;justify-content:center;pointer-events:none">'+
+    '<span style="writing-mode:vertical-rl;color:#fff;font-size:10px;font-weight:700;letter-spacing:1px">PASILLO CENTRAL</span>'+
+  '</div>';
+  html2 += '</div>'; // fin wrapper relative
+
+  // Canales, debajo de todo (como en el plano real)
+  html2 += '<div style="text-align:center;font-size:10px;font-weight:700;color:#fff;background:#3a3a3c;padding:5px;border-radius:6px;margin-top:4px">CANALES</div>';
+  html2 += '<div style="text-align:center;font-size:10px;font-weight:700;color:#6e6e73;padding:4px;background:#f5f5f7;border-radius:6px;margin-top:2px">🚛 MUELLES DE DESCARGA</div>';
 
   // ── PUNTERAS — 5 zonas (fin de pasillo), resumen por zona ──
   const punterasData = getPunteras();
@@ -10691,6 +10699,23 @@ function vaciarBloque(key, label){
   showToast('🗑️ '+label+' vaciado — '+afectados.length+' artículo(s) quedaron sin bloque');
 }
 
+function getCapacidadBloqueSimple(){
+  return JSON.parse(localStorage.getItem('wms_cap_bloque_simple')||'{}');
+}
+function saveCapacidadBloqueSimple(cap){
+  localStorage.setItem('wms_cap_bloque_simple', JSON.stringify(cap));
+}
+function guardarCapacidadBloqueSimple(key){
+  var bid = key.replace(/[^A-Za-z0-9]/g,'_');
+  var racks = parseInt(document.getElementById('cbs-racks-'+bid).value)||0;
+  var pallets = parseInt(document.getElementById('cbs-pallets-'+bid).value)||0;
+  var picking = parseInt(document.getElementById('cbs-picking-'+bid).value)||0;
+  var cap = getCapacidadBloqueSimple();
+  cap[key] = {racks:racks, pallets:pallets, picking:picking};
+  saveCapacidadBloqueSimple(cap);
+  showToast('✅ Capacidad de '+key+' guardada');
+}
+
 function clickBloque(key){
   function getLlanta(med){ try{return parseFloat(med.trim().split(' ').pop())}catch{return 0} }
   // Get articles in this bloque
@@ -10705,13 +10730,27 @@ function clickBloque(key){
   const bajo = arts.filter(r=>r.cond==='bajo stock');
   const totalPall = arts.reduce((s,r)=>s+(r.pall||0),0);
   const totalStock = arts.reduce((s,r)=>s+(r.stock||0),0);
+  const bid = key.replace(/[^A-Za-z0-9]/g,'_');
+  const capS = getCapacidadBloqueSimple()[key] || {racks:0,pallets:0,picking:0};
 
   document.getElementById('modal-content').innerHTML = `
     <div class="modal-pos">🏭 ${key.replace('/',' / ')}</div>
     <div class="modal-medida" style="font-size:18px">${key}</div>
     <div class="modal-sub">${arts.length} artículos · ${totalPall.toLocaleString('es-AR')} pallets · ${totalStock.toLocaleString('es-AR')} unidades</div>
     ${bajo.length>0?`<div style="background:#ffd6d9;border-radius:8px;padding:8px;margin:8px 0;font-size:12px;color:#d70015">⚠️ ${bajo.length} artículos bajo stock</div>`:''}
-    <div style="max-height:350px;overflow-y:auto;margin-top:10px">
+    <div style="background:#f5f5f7;border-radius:10px;padding:10px 12px;margin:8px 0">
+      <div style="font-size:12px;font-weight:700;color:#6e6e73;margin-bottom:8px">📐 Capacidad de este bloque</div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1"><label style="font-size:10px;color:#86868b">Racks</label>
+          <input type="number" min="0" id="cbs-racks-${bid}" value="${capS.racks}" style="width:100%;padding:6px 7px;margin-top:2px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+        <div style="flex:1"><label style="font-size:10px;color:#86868b">Pallets</label>
+          <input type="number" min="0" id="cbs-pallets-${bid}" value="${capS.pallets}" style="width:100%;padding:6px 7px;margin-top:2px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+        <div style="flex:1"><label style="font-size:10px;color:#86868b">Picking</label>
+          <input type="number" min="0" id="cbs-picking-${bid}" value="${capS.picking}" style="width:100%;padding:6px 7px;margin-top:2px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"></div>
+      </div>
+      <button onclick="guardarCapacidadBloqueSimple('${key}')" style="width:100%;margin-top:8px;padding:7px;background:#0071e3;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Guardar capacidad</button>
+    </div>
+    <div style="max-height:280px;overflow-y:auto;margin-top:10px">
       ${arts.slice(0,30).map(r=>`
         <div style="padding:8px 0;border-bottom:1px solid #f0f0f0">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
