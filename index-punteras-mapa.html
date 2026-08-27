@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="WMS Depósito">
-<title>WMS · Punteras y Mapa Racks</title>
+<title>WMS Depósito</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -586,15 +586,11 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 }">
 
 </head>
-<style>
-/* === Vista reducida: solo Punteras + Mapa de Racks, asociado a Pedidos y Carga/Descarga === */
-#maintab-prod, #tab-bar-row2, #tab-more-btn, .bottom-nav { display:none !important; }
-</style>
 <body>
 
 <header>
   <button id="back-home-btn" onclick="showHome()" style="display:none;background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;margin-right:4px">←</button>
-  <h1>WMS · Punteras/Racks</h1>
+  <h1>WMS Depósito</h1>
   <span id="sug-activa-badge" style="font-size:10px;background:#ff9500;color:#fff;padding:3px 8px;border-radius:10px;font-weight:600;white-space:nowrap">⚠️ Stock Bajo</span>
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
     <span class="tag" id="fechahoy" onclick="toggleUpdate()"></span>
@@ -606,10 +602,9 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 
 <div class="tab-bar">
   <div class="tab-bar-row1">
-    <div class="tab" id="maintab-stock" onclick="switchTab('stock',this)">📦 Stock</div>
-    <div class="tab active" id="maintab-pedidos" onclick="switchTab('pedidos',this)">📋 Pedidos</div>
+    <div class="tab active" id="maintab-stock" onclick="switchTab('stock',this)">📦 Stock</div>
+    <div class="tab" id="maintab-pedidos" onclick="switchTab('pedidos',this)">📋 Pedidos</div>
     <div class="tab" id="maintab-mapa" onclick="switchTab('mapa',this)">🗺️ Mapa Racks</div>
-    <div class="tab" id="maintab-punteras" onclick="switchTab('punteras',this)">🔚 Punteras</div>
     <div class="tab" id="maintab-cydesc" onclick="switchTab('cydesc',this)">🚚 Carga/Desc.</div>
     <div class="tab" id="maintab-prod" onclick="switchTab('prod',this)">⚡ Productividad</div>
     <button class="tab-more-btn" id="tab-more-btn" onclick="toggleTabMore()">▾ Más</button>
@@ -647,7 +642,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 <div class="home-screen show" id="home-screen">
   <div class="home-header">
     <div class="home-logo">WMS Depósito</div>
-    <div class="home-sub">Halpern Neumáticos · Mendoza · Vista Punteras/Racks</div>
+    <div class="home-sub">Halpern Neumáticos · Mendoza</div>
     <div class="home-date" id="home-date"></div>
   </div>
 
@@ -686,12 +681,102 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       <div class="home-btn-sub">448 posiciones</div>
     </button>
 
-    <button class="home-btn accent-blue" onclick="goHome('punteras'); renderPunteras();">
+    <button class="home-btn accent-gray" onclick="goHome('nave')">
       <div class="home-btn-icon">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="3" y="11" width="22" height="7" rx="2" fill="#0071e3" opacity=".15" stroke="#0071e3" stroke-width="1.8"/><path d="M6 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3" stroke="#0071e3" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M2 22 L14 6 L26 22 Z" fill="#86868b" opacity=".15" stroke="#86868b" stroke-width="1.8" stroke-linejoin="round"/><rect x="8" y="14" width="4" height="8" rx="1" fill="#86868b" opacity=".4"/><rect x="16" y="14" width="4" height="8" rx="1" fill="#86868b" opacity=".4"/><path d="M2 22h24" stroke="#86868b" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
-      <div class="home-btn-label">Punteras</div>
-      <div class="home-btn-sub">Fin de pasillo</div>
+      <div class="home-btn-label">Nave</div>
+      <div class="home-btn-sub">10 bloques</div>
+    </button>
+
+    <button class="home-btn accent-purple" onclick="goHome('rot')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M6 20 C6 20 8 10 14 10 C20 10 22 20 22 20" stroke="#af52de" stroke-width="1.8" stroke-linecap="round" fill="none"/><circle cx="14" cy="10" r="3" fill="#af52de" opacity=".2" stroke="#af52de" stroke-width="1.6"/><path d="M5 16l1 4 4-1" stroke="#af52de" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M23 16l-1 4-4-1" stroke="#af52de" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="home-btn-label">Rotación</div>
+      <div class="home-btn-sub">Remitos + Usos</div>
+    </button>
+
+  </div>
+
+  <div class="home-section-title" style="margin-top:8px">Control & Análisis</div>
+  <div class="home-grid" style="grid-template-columns:repeat(3,1fr)">
+
+    <button class="home-btn accent-orange" onclick="goHome('repo')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="10" fill="#ff9500" opacity=".12" stroke="#ff9500" stroke-width="1.8"/><path d="M14 9v5l3 3" stroke="#ff9500" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 4.5A10 10 0 0 1 24 14" stroke="#ff9500" stroke-width="1.5" stroke-linecap="round"/><path d="M24 10v4h-4" stroke="#ff9500" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="home-btn-label">Reposición</div>
+      <div class="home-btn-sub">Alertas</div>
+    </button>
+
+    <button class="home-btn accent-green" onclick="goHome('dash')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="3" y="16" width="5" height="8" rx="1" fill="#34c759" opacity=".3" stroke="#34c759" stroke-width="1.6"/><rect x="11" y="11" width="5" height="13" rx="1" fill="#34c759" opacity=".3" stroke="#34c759" stroke-width="1.6"/><rect x="19" y="6" width="5" height="18" rx="1" fill="#34c759" opacity=".3" stroke="#34c759" stroke-width="1.6"/><path d="M3 24h22" stroke="#34c759" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="home-btn-label">Dashboard</div>
+      <div class="home-btn-sub">Resumen</div>
+    </button>
+
+    <button class="home-btn accent-yellow" onclick="goHome('inv')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="4" width="20" height="20" rx="2" fill="#ffcc00" opacity=".15" stroke="#c9a000" stroke-width="1.8"/><path d="M9 10h10M9 14h10M9 18h5" stroke="#c9a000" stroke-width="1.5" stroke-linecap="round"/><circle cx="21" cy="19" r="4" fill="#ffcc00" stroke="#c9a000" stroke-width="1.4"/><path d="M19.5 19l1 1 2-2" stroke="#c9a000" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="home-btn-label">Inventario</div>
+      <div class="home-btn-sub">Conteo</div>
+    </button>
+
+    <button class="home-btn accent-red" onclick="goHome('dif')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="10" fill="#d70015" opacity=".1" stroke="#d70015" stroke-width="1.8"/><path d="M14 9v6" stroke="#d70015" stroke-width="2" stroke-linecap="round"/><circle cx="14" cy="19" r="1.2" fill="#d70015"/></svg>
+      </div>
+      <div class="home-btn-label">Diferencias</div>
+      <div class="home-btn-sub">Despachos</div>
+    </button>
+
+    <button class="home-btn accent-teal" onclick="goHome('dot')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="4" y="5" width="20" height="20" rx="2" fill="#00c7be" opacity=".12" stroke="#00c7be" stroke-width="1.8"/><path d="M4 10h20" stroke="#00c7be" stroke-width="1.5"/><path d="M9 3v4M19 3v4" stroke="#00c7be" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="16" r="1.5" fill="#00c7be"/><circle cx="14" cy="16" r="1.5" fill="#00c7be"/><circle cx="18" cy="16" r="1.5" fill="#00c7be"/><circle cx="10" cy="20" r="1.5" fill="#00c7be"/><circle cx="14" cy="20" r="1.5" fill="#00c7be"/></svg>
+      </div>
+      <div class="home-btn-label">DOTs</div>
+      <div class="home-btn-sub">Elaboración</div>
+    </button>
+
+    <button class="home-btn accent-blue" onclick="goHome('termometro')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="11" y="5" width="6" height="14" rx="3" fill="#0071e3" opacity=".15" stroke="#0071e3" stroke-width="1.8"/><circle cx="14" cy="20" r="4" fill="#0071e3" opacity=".2" stroke="#0071e3" stroke-width="1.8"/><rect x="13" y="10" width="2" height="8" rx="1" fill="#0071e3"/></svg>
+      </div>
+      <div class="home-btn-label">Termómetro</div>
+      <div class="home-btn-sub">Análisis</div>
+    </button>
+
+  </div>
+
+  <div class="home-section-title" style="margin-top:8px">RRHH & Herramientas</div>
+  <div class="home-grid" style="grid-template-columns:repeat(3,1fr)">
+
+    <button class="home-btn accent-purple" onclick="goHome('grupos')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="10" cy="10" r="4" fill="#af52de" opacity=".2" stroke="#af52de" stroke-width="1.6"/><circle cx="20" cy="10" r="3" fill="#af52de" opacity=".2" stroke="#af52de" stroke-width="1.4"/><path d="M3 23c0-4 3-6 7-6s7 2 7 6" stroke="#af52de" stroke-width="1.6" stroke-linecap="round"/><path d="M20 17c2.5.5 5 2 5 6" stroke="#af52de" stroke-width="1.4" stroke-linecap="round"/></svg>
+      </div>
+      <div class="home-btn-label">Grupos</div>
+      <div class="home-btn-sub">Asistencia</div>
+    </button>
+
+    <button class="home-btn accent-purple" onclick="goHome('prod')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M4 20 L9 13 L14 16 L20 8 L24 12" stroke="#af52de" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="24" cy="12" r="2" fill="#af52de"/><path d="M4 24h20" stroke="#af52de" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="home-btn-label">Productividad</div>
+      <div class="home-btn-sub">Movimientos</div>
+    </button>
+
+    <button class="home-btn accent-teal" onclick="goHome('pall')">
+      <div class="home-btn-icon">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="5" y="14" width="18" height="4" rx="1" fill="#00c7be" opacity=".2" stroke="#00c7be" stroke-width="1.6"/><rect x="8" y="8" width="5" height="6" rx="1" fill="#00c7be" opacity=".2" stroke="#00c7be" stroke-width="1.4"/><rect x="15" y="8" width="5" height="6" rx="1" fill="#00c7be" opacity=".2" stroke="#00c7be" stroke-width="1.4"/><path d="M7 18v4M14 18v4M21 18v4" stroke="#00c7be" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="home-btn-label">Palletizado</div>
+      <div class="home-btn-sub">Capacidad</div>
     </button>
 
   </div>
@@ -724,7 +809,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 <div class="toast" id="toast"></div>
 
 <!-- STOCK -->
-<div class="view" id="view-stock">
+<div class="view active" id="view-stock">
   <div class="metrics">
     <div class="metric"><div class="metric-label">Bajo stock</div><div class="metric-value rojo" id="m-bajo">—</div></div>
     <div class="metric"><div class="metric-label">Pallets en FP</div><div class="metric-value" id="m-pall">—</div></div>
@@ -778,34 +863,34 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   <div class="mapa-wrap">
     <div class="cobertura-bar" id="cob-bar">
       <div class="cob-header">
-        <span class="cob-title">📊 Cobertura de rotación en racks</span>
+        <span class="cob-title">🔻 Baja rotación vs. Rotación</span>
         <span class="cob-pct" id="cob-pct">—</span>
       </div>
       <div class="cob-track"><div class="cob-fill" id="cob-fill" style="width:0%"></div></div>
       <div class="cob-detail">
-        <span id="cob-en-rack">— rot. cubierta en rack</span>
-        <span id="cob-fuera">— rot. fuera de rack</span>
+        <span id="cob-en-rack">— art. baja rotación</span>
+        <span id="cob-fuera">— art. rotación normal</span>
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
         <div class="cob-header">
-          <span class="cob-title">📦 Cobertura de stock en racks</span>
+          <span class="cob-title">🏭 Espacio libre en la nave</span>
           <span class="cob-pct" id="cob-stock-pct">—</span>
         </div>
         <div class="cob-track"><div class="cob-fill" id="cob-stock-fill" style="width:0%"></div></div>
         <div class="cob-detail">
-          <span id="cob-stock-en-rack">— unidades en rack</span>
-          <span id="cob-stock-fuera">— unidades fuera de rack</span>
+          <span id="cob-stock-en-rack">— un. libres (de 140.000)</span>
+          <span id="cob-stock-fuera">— un. ocupadas en total</span>
         </div>
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
         <div class="cob-header">
-          <span class="cob-title">🏭 Ocupación física de racks</span>
-          <span class="cob-pct" id="cob-ocup-pct">—</span>
+          <span class="cob-title">🗄️ Ocupación de racks</span>
+          <span class="cob-pct" id="cob-rackocup-pct">—</span>
         </div>
-        <div class="cob-track"><div class="cob-fill" id="cob-ocup-fill" style="width:0%"></div></div>
+        <div class="cob-track"><div class="cob-fill" id="cob-rackocup-fill" style="width:0%"></div></div>
         <div class="cob-detail">
-          <span id="cob-ocup-en">— posiciones ocupadas</span>
-          <span id="cob-ocup-libres">— posiciones libres</span>
+          <span id="cob-rackocup-en">— un. en rack</span>
+          <span id="cob-rackocup-total">— del total guardado</span>
         </div>
       </div>
     </div>
@@ -877,9 +962,18 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 <div class="view" id="view-nave">
   <div class="nave-wrap">
     <div class="nave-header">
-      <span class="nave-title">🏭 Plano de Nave — Bloques 1 al 10</span>
+      <span class="nave-title">🏭 Plano de Nave — Bloques, Punteras y Muelles</span>
+      <button onclick="toggleNaveConfig()" id="nave-config-btn" style="padding:7px 14px;border-radius:20px;border:2px solid #0071e3;background:#fff;color:#0071e3;font-size:12px;font-weight:700;cursor:pointer">⚙️ Configurar capacidad de bloques</button>
       <span id="nave-total" style="font-size:12px;color:#86868b"></span>
     </div>
+    <div id="nave-config" style="display:none"></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="nave-buscar-input" type="text" placeholder="Buscar artículo (código o medida) para ver dónde está..."
+        style="flex:1;padding:11px 14px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px"
+        onkeydown="if(event.key==='Enter') buscarUbicacionArticulo()">
+      <button onclick="buscarUbicacionArticulo()" style="padding:11px 18px;background:#0071e3;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">🔎 Buscar</button>
+    </div>
+    <div id="nave-buscar-resultado"></div>
     <div id="nave-grid"></div>
   </div>
 </div>
@@ -911,7 +1005,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   </div>
 </div>
 <!-- PEDIDOS -->
-<div class="view active" id="view-pedidos">
+<div class="view" id="view-pedidos">
   <div class="ped-wrap">
     <div class="ped-header-card">
       <div class="ped-title-row">
@@ -1838,7 +1932,7 @@ function renderDash(){
 }
 
 // Tabs fila 1 (visibles siempre)
-const _tabsFila1 = ['stock','pedidos','mapa','punteras','cydesc','prod'];
+const _tabsFila1 = ['stock','pedidos','mapa','cydesc','prod'];
 
 function toggleTabMore(){
   var row2 = document.getElementById('tab-bar-row2');
@@ -2517,69 +2611,60 @@ function renderCobertura(){
     var uso = (r.uso||'').trim();
     if(['TT','TL','TLSB'].indexOf(uso)>=0) return false;
     if(r.wms === '#DIV/0!' || r.wms === '') return false;
-    if((r.rot||0) <= 0) return false;
     return true;
   });
-  const rotTotal = universo.reduce((s,r)=>s+(r.rot||0),0);
-  if(!rotTotal){ return; }
+  if(!universo.length){ return; }
 
-  // Artículos asignados en cualquier nivel del rack
-  const artsEnRack = new Set();
-  Object.entries(ASIGN).forEach(([pos,v])=>{
-    if(v) artsEnRack.add(v.art);
-  });
-  // Cobertura = rotación de artículos en rack / rotación total universo
-  const rotRack = universo.filter(r=>artsEnRack.has(r.art)).reduce((s,r)=>s+(r.rot||0),0);
-  const rotFuera = rotTotal - rotRack;
-  const pct = Math.round((rotRack/rotTotal)*100);
+  // Baja rotación vs Rotación normal — por cantidad de artículos, mismo
+  // umbral que ya usa el motor de rack (nivelSegunRot): rot_sem < 1.25
+  // agrupa los "muertos" (N4) + "casi muertos" (N3) como baja rotación.
+  const artsBaja = universo.filter(r => (r.rot_sem||0) < 1.25).length;
+  const artsNormal = universo.length - artsBaja;
+  const pct = Math.round((artsBaja/universo.length)*100);
 
   const pctEl = document.getElementById('cob-pct');
   const fillEl = document.getElementById('cob-fill');
   const enEl = document.getElementById('cob-en-rack');
   const fEl = document.getElementById('cob-fuera');
   if(pctEl) pctEl.textContent = pct+'%';
-  if(pctEl) pctEl.style.color = pct>=90?'#34c759':pct>=70?'#ff9500':'#d70015';
+  if(pctEl) pctEl.style.color = pct>=40?'#d70015':pct>=20?'#ff9500':'#34c759';
   if(fillEl) fillEl.style.width = pct+'%';
-  if(enEl) enEl.textContent = rotRack.toLocaleString('es-AR')+' rot. cubierta en rack';
-  if(fEl) fEl.textContent = rotFuera.toLocaleString('es-AR')+' rot. fuera de rack';
+  if(enEl) enEl.textContent = artsBaja.toLocaleString('es-AR')+' art. baja rotación';
+  if(fEl) fEl.textContent = artsNormal.toLocaleString('es-AR')+' art. rotación normal';
 
-  // Stock coverage — usar unidades reales asignadas al rack, no el stock total del artículo
-  // Stock total = todo el DATA (incluyendo excluidos del rack)
+  // Espacio libre en la nave — capacidad total 140.000 un. (rack + bloques +
+  // punteras), comparado contra TODO lo que hay guardado (stock total).
+  const CAP_NAVE = 140000;
   const stockTotal = DATA.reduce((s,r)=>s+(r.stock||0),0);
-  // Sumar unidades efectivamente asignadas al rack
   var stockEnRack = 0;
   Object.values(ASIGN).forEach(function(v){
     if(v) stockEnRack += (v.unidades||0);
   });
-  const stockFuera = stockTotal - stockEnRack;
-  const pctStock = stockTotal>0?Math.round((stockEnRack/stockTotal)*100):0;
+  const libre = Math.max(0, CAP_NAVE - stockTotal);
+  const pctStock = Math.round((libre/CAP_NAVE)*100);
 
   const spctEl = document.getElementById('cob-stock-pct');
   const sfillEl = document.getElementById('cob-stock-fill');
   const senEl = document.getElementById('cob-stock-en-rack');
   const sfEl = document.getElementById('cob-stock-fuera');
   if(spctEl) spctEl.textContent = pctStock+'%';
-  if(spctEl) spctEl.style.color = pctStock>=80?'#34c759':pctStock>=60?'#ff9500':'#d70015';
+  if(spctEl) spctEl.style.color = pctStock>=40?'#34c759':pctStock>=20?'#ff9500':'#d70015';
   if(sfillEl) sfillEl.style.width = pctStock+'%';
-  if(senEl) senEl.textContent = stockEnRack.toLocaleString('es-AR')+' unidades en rack';
-  if(sfEl) sfEl.textContent = stockFuera.toLocaleString('es-AR')+' unidades fuera de rack';
+  if(senEl) senEl.textContent = libre.toLocaleString('es-AR')+' un. libres (de '+CAP_NAVE.toLocaleString('es-AR')+')';
+  if(sfEl) sfEl.textContent = stockTotal.toLocaleString('es-AR')+' un. ocupadas en total';
 
-  // Ocupación física de racks: posiciones realmente cargadas vs. las 448 posiciones totales del rack
-  const totalPosicionesRack = FRENTES.reduce((s,f)=>s+f.niveles.length*f.modulos,0);
-  let posicionesOcupadas = 0;
-  Object.values(ASIGN).forEach(function(v){ if(v && (v.unidades||0)>0) posicionesOcupadas++; });
-  const posicionesLibres = totalPosicionesRack - posicionesOcupadas;
-  const pctOcup = totalPosicionesRack>0 ? Math.round((posicionesOcupadas/totalPosicionesRack)*100) : 0;
-
-  const opctEl = document.getElementById('cob-ocup-pct');
-  const ofillEl = document.getElementById('cob-ocup-fill');
-  const oenEl = document.getElementById('cob-ocup-en');
-  const olibEl = document.getElementById('cob-ocup-libres');
-  if(opctEl) opctEl.textContent = pctOcup+'%';
-  if(opctEl) opctEl.style.color = pctOcup>=80?'#34c759':pctOcup>=60?'#ff9500':'#d70015';
-  if(ofillEl) ofillEl.style.width = pctOcup+'%';
-  if(oenEl) oenEl.textContent = posicionesOcupadas.toLocaleString('es-AR')+' posiciones ocupadas';
-  if(olibEl) olibEl.textContent = posicionesLibres.toLocaleString('es-AR')+' posiciones libres (de '+totalPosicionesRack+')';
+  // Ocupación de racks — del total guardado (stockTotal), qué % está
+  // efectivamente puesto en rack (vs. suelto en bloques/punteras)
+  const pctRackOcup = stockTotal>0 ? Math.round((stockEnRack/stockTotal)*100) : 0;
+  const rpctEl = document.getElementById('cob-rackocup-pct');
+  const rfillEl = document.getElementById('cob-rackocup-fill');
+  const renEl = document.getElementById('cob-rackocup-en');
+  const rtEl = document.getElementById('cob-rackocup-total');
+  if(rpctEl) rpctEl.textContent = pctRackOcup+'%';
+  if(rpctEl) rpctEl.style.color = pctRackOcup>=60?'#34c759':pctRackOcup>=30?'#ff9500':'#d70015';
+  if(rfillEl) rfillEl.style.width = pctRackOcup+'%';
+  if(renEl) renEl.textContent = stockEnRack.toLocaleString('es-AR')+' un. en rack';
+  if(rtEl) rtEl.textContent = 'de '+stockTotal.toLocaleString('es-AR')+' un. guardadas en total';
 }
 
 function toggleFrente(id){
@@ -4857,6 +4942,17 @@ function cydConfirmarSalidaDesdeTransito(id){
   var tr = lista.find(function(t){return t.id===id;});
   if(!tr){ showToast('❌ Tránsito no encontrado'); return; }
 
+  // Obligatorio: todo artículo con destino rack necesita posición
+  // confirmada (sugerida tal cual, o modificada) antes de despachar
+  var faltantesSal = tr.items.filter(function(r){
+    var tipoSal = r.tipo || (r.posRack?'rack':(r.bloque?'bloque':''));
+    return tipoSal==='rack' && !(r.posRack && parsearPosicionesInput(r.posRack).length);
+  });
+  if(faltantesSal.length){
+    showToast('❌ Completá la posición de rack para: '+faltantesSal.map(function(r){return r.art;}).join(', '));
+    return;
+  }
+
   // Armar opciones de grupos presentes hoy
   var personal = getGruposHoy();
   var gruposHoy = [];
@@ -4969,9 +5065,32 @@ function cydEjecutarDespacho(id){
   var hora  = new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
   var repoSugerido = [];
   var diferencias  = [];
+  var huboSobranteDesp = false;
 
   tr.items.forEach(function(r){
     var cantReal = r.cantReal||r.cant;
+    var da0 = DATA.find(function(d){return d.art===r.art;});
+
+    // Descontar del Mapa de Racks la posición que el operador confirmó/editó
+    var tipoSal = r.tipo || (r.posRack?'rack':(r.bloque?'bloque':''));
+    if(tipoSal==='rack' && r.posRack){
+      var posArrS = parsearPosicionesInput(r.posRack);
+      if(posArrS.length){
+        var resPosS = aplicarPosicionesSalida(r.art, posArrS, cantReal);
+        if(resPosS.sobrante>0){
+          huboSobranteDesp = true;
+          showToast('⚠️ Art '+r.art+': no había '+resPosS.sobrante+' un. en '+r.posRack+' — revisar Mapa Racks');
+        }
+      }
+    }
+    // "cantSistema" = stock real que tenía que haber, ANTES de que se
+    // mandara este pedido — no el pedido en sí. Si el tránsito ya venía
+    // con el stock descontado (tr.descontado, el caso normal), el stock
+    // actual en DATA ya es "stock previo − pedido", así que hay que
+    // sumarle el pedido de vuelta para recuperar el stock real de
+    // referencia. Si nunca se descontó (flujo viejo), el stock actual ya
+    // ES el de referencia tal cual.
+    var cantSistema = da0 ? (tr.descontado ? (da0.stock||0) + r.cant : (da0.stock||0)) : r.cant;
 
     if(!tr.descontado){
       // Flujo viejo: nunca se descontó, descontar el stock general ahora
@@ -5011,11 +5130,11 @@ function cydEjecutarDespacho(id){
       }
     }
 
-    if(cantReal !== r.cant){
+    if(cantReal !== cantSistema){
       diferencias.push({
         art:r.art, med:r.med, diseno:r.diseno, prov:r.prov,
         posRack:r.posRack||'', bloque:r.bloque||'',
-        cantPedida:r.cant, cantReal:cantReal, diff:cantReal-r.cant
+        cantPedida:cantSistema, cantReal:cantReal, diff:cantReal-cantSistema
       });
     }
   });
@@ -5083,10 +5202,10 @@ function cydEjecutarDespacho(id){
     localStorage.setItem(histKey, JSON.stringify(hist));
   } catch(e){ console.warn('registrarMovProd error', e); }
 
-  var msg = '✅ Despacho confirmado';
+  var msg = '✅ Despacho confirmado — Mapa de Racks actualizado';
   if(diferencias.length)  msg += ' · '+diferencias.length+' diferencias';
   if(repoSugerido.length) msg += ' · ⚠️ '+repoSugerido.length+' arts. para reponer';
-  showToast(msg);
+  if(!huboSobranteDesp) showToast(msg);
 }
 
 // ── Planilla de DESPACHO — para el controlador, línea por línea como el pedido original
@@ -5374,12 +5493,6 @@ function cydPlanillaPicking(id){
     'tr:nth-child(even) td{background:#f8f8f8}'+
     'tfoot td{font-weight:700;border-top:2px solid #1d1d1f;background:#f0f0f0}'+
     '.pie{margin-top:8px;font-size:8.5px;color:#999;border-top:1px solid #eee;padding-top:4px}'+
-    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:8px 0}'+
-    '.firma-box{border:1px solid #ccc;border-radius:6px;padding:6px 10px}'+
-    '.firma-label{font-size:8.5px;color:#86868b;margin-bottom:2px}'+
-    '.firma-val{font-weight:700;font-size:11px}'+
-    '.firma-line{border-top:1px solid #bbb;margin-top:14px;padding-top:3px;font-size:8px;color:#999;text-align:center}'+
-    '.hora-linea{border-bottom:1px solid #999;display:inline-block;min-width:70px}'+
     '</style></head><body>'+
     '<h2>📋 Planilla de picking — '+tr.tipoIcon+' '+(tr.destino||tr.tipoLabel)+'</h2>'+
     '<div class="meta">'+
@@ -5389,24 +5502,6 @@ function cydPlanillaPicking(id){
       '<span>Arts: <b>'+tr.items.length+'</b></span>'+
       '<span>Unidades: <b>'+totalCant+'</b></span>'+
       '<span style="margin-left:auto;color:#bbb">ID: '+tr.id+'</span>'+
-    '</div>'+
-    '<div class="firmas">'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Responsable de preparado</div>'+
-        '<div class="firma-val">&nbsp;</div>'+
-        '<div class="firma-line">Firma responsable</div>'+
-      '</div>'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Muelle</div>'+
-        '<div class="firma-val">&nbsp;</div>'+
-        '<div class="firma-line">Completar a mano</div>'+
-      '</div>'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Horario de preparado</div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400">Inicio: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400;margin-top:6px">Fin: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-line">Completar a mano</div>'+
-      '</div>'+
     '</div>'+
     (enPuntera.length?
       '<div class="sec sec-puntera">🔚 PUNTERA — preparar primero ('+enPuntera.length+' arts)</div>'+
@@ -5516,8 +5611,9 @@ function confirmarDespacho(){
     // NUEVO: Descontar de DATA (stock real) — Mapa Racks/Punteras se
     // cargan a mano, no se tocan automáticamente al confirmar despacho
     const dataArt = DATA.find(r=>r.art===item.art);
+    let stockAntesDespacho = item.cant; // fallback si el art no está en DATA
     if(dataArt){
-      const stockAntesDespacho = dataArt.stock||0;
+      stockAntesDespacho = dataArt.stock||0;
       dataArt.stock = Math.max(0, (dataArt.stock||0) - item.cantReal);
       dataArt.pall = Math.floor(dataArt.stock / (dataArt.max_pos||32));
       recalcularCond(dataArt);
@@ -5539,8 +5635,9 @@ function confirmarDespacho(){
       }
     }
 
-    // Registrar diferencia si hay
-    if(item.cantReal !== item.cant){
+    // Registrar diferencia contra el STOCK real del sistema (no contra el
+    // pedido) — es una diferencia de inventario, no una variación de despacho
+    if(item.cantReal !== stockAntesDespacho){
       diferencias.push({
         art: item.art,
         med: item.med,
@@ -5548,9 +5645,9 @@ function confirmarDespacho(){
         prov: item.prov,
         posRack: item.posRack||'',
         bloque: item.bloque||'',
-        cantPedida: item.cant,
+        cantPedida: stockAntesDespacho,
         cantReal: item.cantReal,
-        diff: item.cantReal - item.cant,
+        diff: item.cantReal - stockAntesDespacho,
       });
     }
   });
@@ -8908,7 +9005,7 @@ function closeSubMenu(){
 }
 
 // === CONTRASEÑA (desactivada) ===
-const LIBRE = ['mapa','nave','stock','pedidos','repo','dot','dash','inv','dif','grupos','prod','cydesc','termometro','rot','pall','punteras'];
+const LIBRE = ['mapa','nave','stock','pedidos','repo','dot','dash','inv','dif','grupos','prod','cydesc','termometro','rot','pall'];
 const PWD = 'deposito';
 let _pendingView = null;
 let _pwaUnlocked = true;
@@ -10274,17 +10371,25 @@ function renderNave(){
     bloqueStats[k].pctRot = rotTotalNave>0 ? Math.round((bloqueStats[k].rot/rotTotalNave)*100) : 0;
   });
 
-  function mkBloque(key, label){
+  function mkBloque(key, label, filaLabel, lado){
     const s = bloqueStats[key] || bloqueStats[label] || null;
-    if(!s) return `<div class="bloque-card vacio"><div class="bloque-name">${label}</div><div class="bloque-arts">Sin datos</div></div>`;
+    const capKey = filaLabel ? (String(filaLabel).match(/^\d+/)||[])[0] : null;
+    const capBloque = capKey ? getCapacidadBloques()[capKey] : null;
+    const capLado = (capBloque && lado) ? capBloque[lado] : null;
+    const capLine = capLado ? `<div style="font-size:10px;color:#0071e3;margin-top:2px">📐 ${capLado.pallets||0}p + ${capLado.auto||0} autoap.${capBloque.obs?' — '+capBloque.obs:''}</div>` : '';
+    if(!s) return `<div class="bloque-card vacio"><div class="bloque-name">${label}</div><div class="bloque-arts">Sin datos</div>${capLine}</div>`;
     const pct = Math.round((s.pall/maxPall)*100);
     const picking = s.picking || key.includes('PICKING');
     return `<div class="bloque-card${picking?' bloque-picking':''}" onclick="clickBloque('${key}')">
-      <div class="bloque-name">${label}${picking?' 🟠':''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div class="bloque-name">${label}${picking?' 🟠':''}</div>
+        <button onclick="event.stopPropagation();vaciarBloque('${key}','${label}')" title="Sacar el bloque de todos los artículos que figuran acá, para relevar de cero" style="border:none;background:#fff0f0;color:#d70015;font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;cursor:pointer;white-space:nowrap">🗑️ Vaciar</button>
+      </div>
       <div class="bloque-pall">${s.pall.toLocaleString('es-AR')} <span style="font-size:10px;font-weight:400;color:#86868b">pallets</span></div>
       <div class="bloque-arts">${s.art} arts · ${s.stock.toLocaleString('es-AR')} un.</div>
       <div style="font-size:11px;color:#0071e3;font-weight:500">🔄 ${s.pctRot}% de la rotación</div>
       ${s.bajo>0?`<div style="font-size:10px;color:#d70015;margin-top:2px">⚠️ ${s.bajo} bajo stock</div>`:''}
+      ${capLine}
       <div class="bloque-bar"><div class="bloque-bar-fill" style="width:${pct}%"></div></div>
     </div>`;
   }
@@ -10318,7 +10423,7 @@ function renderNave(){
     // Bloque compartido full width (key explícito)
     if(fila.key){
       html2 += '<div class="nave-row">';
-      html2 += mkBloque(fila.key, `Bloque ${fila.label}`);
+      html2 += mkBloque(fila.key, `Bloque ${fila.label}`, fila.label, null);
       html2 += '</div>';
       return;
     }
@@ -10326,7 +10431,7 @@ function renderNave(){
     // Bloque 10 compartido (mismo key norte y sur)
     if(fila.compartido && fila.norte === fila.sur){
       html2 += '<div class="nave-row">';
-      html2 += mkBloque(fila.norte, `Bloque ${fila.label}`);
+      html2 += mkBloque(fila.norte, `Bloque ${fila.label}`, fila.label, null);
       html2 += '</div>';
       return;
     }
@@ -10334,7 +10439,7 @@ function renderNave(){
     // Fila normal Sur + Norte
     html2 += '<div class="nave-row">';
     html2 += `<div class="nave-side-label">S</div>`;
-    html2 += fila.sur ? mkBloque(fila.sur, `Bloque ${fila.label} Sur`) : `<div class="bloque-card vacio"><div class="bloque-name">—</div></div>`;
+    html2 += fila.sur ? mkBloque(fila.sur, `Bloque ${fila.label} Sur`, fila.label, 'sur') : `<div class="bloque-card vacio"><div class="bloque-name">—</div></div>`;
     html2 += `<div class="nave-side-label">N</div>`;
     if(fila.norte === 'RACKS'){
       const asign = Object.values(ASIGN);
@@ -10350,13 +10455,240 @@ function renderNave(){
         <div class="bloque-bar"><div class="bloque-bar-fill" style="width:${pctOcup}%;background:#0071e3"></div></div>
       </div>`;
     } else {
-      html2 += fila.norte ? mkBloque(fila.norte, `Bloque ${fila.label} Norte`) : `<div class="bloque-card vacio"><div class="bloque-name">—</div></div>`;
+      html2 += fila.norte ? mkBloque(fila.norte, `Bloque ${fila.label} Norte`, fila.label, 'norte') : `<div class="bloque-card vacio"><div class="bloque-name">—</div></div>`;
     }
     html2 += '</div>';
   });
 
+  // ── PUNTERAS — 5 zonas (fin de pasillo), resumen por zona ──
+  const punterasData = getPunteras();
+  html2 += '<div class="nave-pasillo">🔚 PUNTERAS — Fin de pasillo</div>';
+  html2 += '<div class="nave-row" style="flex-wrap:wrap">';
+  PUNTERA_ZONAS.forEach(function(z){
+    var arts = 0, unidades = 0, parrillasUsadas = 0;
+    for(var i=1;i<=PARRILLAS_X_ZONA;i++){
+      var items = punterasData['P'+z+'-'+i] || [];
+      if(items.length) parrillasUsadas++;
+      arts += items.length;
+      unidades += items.reduce(function(s,it){return s+(it.unidades||0);},0);
+    }
+    var pctP = Math.round((parrillasUsadas/PARRILLAS_X_ZONA)*100);
+    html2 += '<div class="bloque-card" style="border:2px solid #7a3fb0;background:linear-gradient(135deg,#f8f0ff 0%,#f0e6fa 100%);cursor:pointer" onclick="switchTab(\'punteras\',document.getElementById(\'row2tab-punteras\'))">'+
+      '<div class="bloque-name" style="color:#7a3fb0">🔚 Puntera Pasillo '+z+'</div>'+
+      '<div class="bloque-pall" style="color:#7a3fb0">'+parrillasUsadas+' <span style="font-size:10px;font-weight:400;color:#86868b">de '+PARRILLAS_X_ZONA+' parrillas usadas</span></div>'+
+      '<div class="bloque-arts">'+arts+' arts · '+unidades.toLocaleString('es-AR')+' un.</div>'+
+      '<div class="bloque-bar"><div class="bloque-bar-fill" style="width:'+pctP+'%;background:#7a3fb0"></div></div>'+
+    '</div>';
+  });
+  html2 += '</div>';
+
   html2 += '</div>';
   document.getElementById('nave-grid').innerHTML = html2;
+}
+
+// Busca un artículo (por código o medida) en TODAS las zonas físicas —
+// bloques, punteras y rack — y muestra dónde está.
+function buscarUbicacionArticulo(){
+  var q = (document.getElementById('nave-buscar-input').value||'').trim().toLowerCase();
+  var out = document.getElementById('nave-buscar-resultado');
+  if(!q){ out.innerHTML = ''; return; }
+
+  var arts = DATA.filter(function(r){
+    return String(r.art).toLowerCase().indexOf(q)>=0 || (r.med||'').toLowerCase().indexOf(q)>=0;
+  }).slice(0, 15);
+
+  if(!arts.length){
+    out.innerHTML = '<div style="padding:14px;background:#fff3f3;border-radius:10px;margin-bottom:14px;color:#d70015">No se encontró ningún artículo con "'+q+'"</div>';
+    return;
+  }
+
+  var punterasData = getPunteras();
+  var html = '<div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06)">';
+  arts.forEach(function(a){
+    var ubic = [];
+    if(a.bloque) ubic.push('🟠 Bloque '+a.bloque);
+
+    Object.keys(punterasData).forEach(function(pid){
+      var it = (punterasData[pid]||[]).find(function(x){return String(x.art)===String(a.art);});
+      if(it) ubic.push('🔚 Puntera '+pid+' ('+it.unidades+' un.)');
+    });
+
+    Object.keys(ASIGN).forEach(function(posId){
+      var v = ASIGN[posId];
+      if(!v) return;
+      if(v.art==a.art) ubic.push('🗄️ Rack '+posId+' ('+(v.unidades||0)+' un.)');
+      (v.compartidos||[]).forEach(function(c){
+        if(c.art==a.art) ubic.push('🗄️ Rack '+posId+' compartido ('+(c.unidades||0)+' un.)');
+      });
+    });
+
+    html += '<div style="padding:10px 0;border-bottom:1px solid #f0f0f0">'+
+      '<div style="font-weight:700">'+a.art+' — '+(a.med||'')+' '+(a.diseno||'')+'</div>'+
+      '<div style="font-size:12px;color:#86868b;margin:2px 0 6px">Stock total: '+(a.stock||0).toLocaleString('es-AR')+' un.</div>'+
+      (ubic.length
+        ? '<div style="font-size:13px;line-height:1.7">'+ubic.join('<br>')+'</div>'
+        : '<div style="font-size:13px;color:#d70015">Sin ubicación física asignada todavía</div>')+
+      '</div>';
+  });
+  html += '</div>';
+  out.innerHTML = html;
+}
+
+// ── CAPACIDAD DE BLOQUES (config manual, solo referencia visual) ──
+// El usuario define a mano cuánto entra en cada bloque (ej: "10 pallets +
+// 5 autoapilables"). No se calcula de ningún dato existente, no se usa
+// para nada automático — es solo la referencia que el usuario carga.
+var BLOQUES_TODOS = ['1','2','3','4','5','6','7','8','9','10'];
+
+function getCapacidadBloques(){
+  return JSON.parse(localStorage.getItem('wms_cap_bloques')||'{}');
+}
+function saveCapacidadBloques(cap){
+  localStorage.setItem('wms_cap_bloques', JSON.stringify(cap));
+}
+
+function toggleNaveConfig(){
+  var cfg = document.getElementById('nave-config');
+  var grid = document.getElementById('nave-grid');
+  var btn = document.getElementById('nave-config-btn');
+  var abierto = cfg.style.display !== 'none';
+  if(abierto){
+    cfg.style.display = 'none';
+    grid.style.display = '';
+    btn.textContent = '⚙️ Configurar capacidad de bloques';
+  } else {
+    grid.style.display = 'none';
+    btn.textContent = '← Volver al plano';
+    renderNaveConfig();
+    cfg.style.display = '';
+  }
+}
+
+// Dibuja a escala cuántos bloquecitos autoapilables (2.5 x 1.5 m cada uno)
+// entran en un bloque de anchoM x largoM, acomodados solos en fila/grilla
+// (sin rotar, sin arrastre manual — el usuario solo carga la cantidad).
+function dibujarAutoapilables(anchoM, largoM, cantidad){
+  var BLOQ_L = 2.5, BLOQ_A = 1.5; // medidas de cada autoapilable
+  if(!anchoM || !largoM){
+    return '<div style="font-size:12px;color:#86868b;padding:20px;text-align:center;background:#f5f5f7;border-radius:10px">Cargá ancho y largo del bloque para ver el dibujo a escala</div>';
+  }
+  var porFila = Math.max(0, Math.floor(anchoM / BLOQ_L));
+  var filas = Math.max(0, Math.floor(largoM / BLOQ_A));
+  var capacidadMax = porFila * filas;
+  var cant = cantidad || 0;
+  var excede = cant > capacidadMax;
+
+  // Escala para que el dibujo entre cómodo en la card (máx 260x180 px)
+  var escala = Math.min(260/anchoM, 180/largoM, 22);
+  var wPx = anchoM*escala, hPx = largoM*escala;
+  var bloqWPx = BLOQ_L*escala, bloqHPx = BLOQ_A*escala;
+
+  var celdas = '';
+  for(var f=0; f<filas && (f*porFila)<Math.min(cant,capacidadMax); f++){
+    for(var c=0; c<porFila; c++){
+      var idx = f*porFila + c;
+      if(idx >= Math.min(cant,capacidadMax)) break;
+      celdas += '<div style="position:absolute;left:'+(c*bloqWPx)+'px;top:'+(f*bloqHPx)+'px;width:'+(bloqWPx-2)+'px;height:'+(bloqHPx-2)+'px;background:#ff9500;border:1px solid #cc7a00;border-radius:2px"></div>';
+    }
+  }
+
+  return '<div style="font-size:11px;color:#86868b;margin-bottom:4px">Escala '+anchoM+'m × '+largoM+'m — entran '+capacidadMax+' bloquecitos (2.5×1.5m c/u)</div>'+
+    '<div style="position:relative;width:'+wPx+'px;height:'+hPx+'px;background:#f5f5f7;border:2px solid #d2d2d7;border-radius:4px">'+celdas+'</div>'+
+    (excede ? '<div style="font-size:12px;color:#d70015;margin-top:6px;font-weight:600">⚠️ Cargaste '+cant+', pero solo entran '+capacidadMax+' — no van a entrar todos</div>' : '');
+}
+
+function renderNaveConfig(){
+  var cap = getCapacidadBloques();
+  var html = '<div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#664d03">'+
+    'Cargá acá cuánto entra en cada bloque — es solo de referencia, no afecta ninguna sugerencia del sistema. Precargado con Norte 8×22m y Sur 15×22m por defecto — ajustalo bloque por bloque según el pasillo central real.'+
+    '</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:14px">';
+
+  function ladoForm(b, bid, lado, ladoLabel, defAncho, defLargo){
+    var c = (cap[b] && cap[b][lado]) || {anchoM: defAncho, largoM: defLargo, pallets:'', auto:''};
+    return '<div style="flex:1;min-width:230px;border-left:3px solid '+(lado==='norte'?'#0071e3':'#ff9500')+';padding-left:10px">'+
+      '<div style="font-weight:600;font-size:13px;margin-bottom:6px;color:'+(lado==='norte'?'#0071e3':'#ff9500')+'">Lado '+ladoLabel+'</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<div style="flex:1"><label style="font-size:11px;color:#86868b">Ancho (m)</label>'+
+        '<input type="number" min="0" step="0.1" id="cap-'+lado+'-ancho-'+bid+'" value="'+c.anchoM+'" '+
+          'style="width:100%;padding:7px 8px;margin:2px 0 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:14px"></div>'+
+        '<div style="flex:1"><label style="font-size:11px;color:#86868b">Largo (m)</label>'+
+        '<input type="number" min="0" step="0.1" id="cap-'+lado+'-largo-'+bid+'" value="'+c.largoM+'" '+
+          'style="width:100%;padding:7px 8px;margin:2px 0 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:14px"></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<div style="flex:1"><label style="font-size:11px;color:#86868b">Pallets</label>'+
+        '<input type="number" min="0" id="cap-'+lado+'-pall-'+bid+'" value="'+c.pallets+'" placeholder="—" '+
+          'style="width:100%;padding:7px 8px;margin:2px 0 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:14px"></div>'+
+        '<div style="flex:1"><label style="font-size:11px;color:#86868b">Autoapilables</label>'+
+        '<input type="number" min="0" id="cap-'+lado+'-auto-'+bid+'" value="'+c.auto+'" placeholder="—" '+
+          'style="width:100%;padding:7px 8px;margin:2px 0 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:14px"></div>'+
+      '</div>'+
+      dibujarAutoapilables(parseFloat(c.anchoM)||0, parseFloat(c.largoM)||0, parseInt(c.auto)||0)+
+    '</div>';
+  }
+
+  BLOQUES_TODOS.forEach(function(b){
+    var c = cap[b] || {obs:''};
+    var bid = b.replace(/[^A-Za-z0-9]/g,'_');
+    html += '<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:14px">'+
+      '<div style="font-weight:700;margin-bottom:10px">Bloque '+b+'</div>'+
+      '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px">'+
+        ladoForm(b, bid, 'norte', 'Norte', 8, 22)+
+        ladoForm(b, bid, 'sur', 'Sur', 15, 22)+
+      '</div>'+
+      '<label style="font-size:11px;color:#86868b">Observaciones (aplica a todo el bloque)</label>'+
+      '<input type="text" id="cap-obs-'+bid+'" value="'+(c.obs||'')+'" placeholder="ej: menos lugar, comparte con Mapa Racks" '+
+        'style="width:100%;padding:7px 8px;margin:2px 0 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px">'+
+      '<button onclick="guardarCapacidadBloque(\''+b+'\')" style="width:100%;padding:8px;background:#0071e3;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">Guardar Bloque '+b+'</button>'+
+    '</div>';
+  });
+  html += '</div>';
+  document.getElementById('nave-config').innerHTML = html;
+}
+
+function guardarCapacidadBloque(b){
+  var bid = b.replace(/[^A-Za-z0-9]/g,'_');
+  function leerLado(lado){
+    var ancho = document.getElementById('cap-'+lado+'-ancho-'+bid).value;
+    var largo = document.getElementById('cap-'+lado+'-largo-'+bid).value;
+    var pall = document.getElementById('cap-'+lado+'-pall-'+bid).value;
+    var auto = document.getElementById('cap-'+lado+'-auto-'+bid).value;
+    return {
+      anchoM: ancho===''?'':parseFloat(ancho),
+      largoM: largo===''?'':parseFloat(largo),
+      pallets: pall===''?0:parseInt(pall),
+      auto: auto===''?0:parseInt(auto),
+    };
+  }
+  var obs = document.getElementById('cap-obs-'+bid).value;
+  var cap = getCapacidadBloques();
+  cap[b] = { obs: obs||'', norte: leerLado('norte'), sur: leerLado('sur') };
+  saveCapacidadBloques(cap);
+  renderNaveConfig(); // re-renderiza para actualizar los dibujos a escala
+  showToast('✅ Capacidad de Bloque '+b+' guardada');
+}
+
+// Saca el bloque asignado de TODOS los artículos que hoy figuran en ese
+// bloque (quedan sin bloque) — para relevar de cero. Respeta bloques
+// compartidos tipo "2N/3N": si un artículo tiene ese valor combinado y
+// vaciás "2N", ese artículo se limpia igual (no queda a medio asignar).
+function vaciarBloque(key, label){
+  var afectados = DATA.filter(function(r){
+    if(!r.bloque) return false;
+    var bs = r.bloque.includes('/') ? r.bloque.split('/').map(function(x){return x.trim();}) : [r.bloque.trim()];
+    return bs.indexOf(key) >= 0;
+  });
+  if(!afectados.length){
+    showToast('No hay artículos cargados en '+label);
+    return;
+  }
+  if(!confirm('¿Vaciar '+label+'? Se le va a sacar el bloque asignado a '+afectados.length+' artículo(s) — van a quedar sin bloque hasta que los relevés de nuevo. No se puede deshacer.')) return;
+
+  afectados.forEach(function(r){ r.bloque = ''; });
+  saveDataStock();
+  renderNave();
+  showToast('🗑️ '+label+' vaciado — '+afectados.length+' artículo(s) quedaron sin bloque');
 }
 
 function clickBloque(key){
@@ -10759,6 +11091,92 @@ function transitoBadge(){
 }
 
 // Calcula posición sugerida para un artículo dado el stock ACTUAL (sin sumar el ingreso)
+// ─── Confirmación de posición al recibir/despachar tránsito ───────────────
+// Convierte lo que tipeó el operador en el campo editable de posición en
+// una lista limpia de IDs de rack válidos (formato "4S-N4-P01"). Acepta
+// separadores por coma, espacio, "/" o "+", y descarta cualquier token que
+// no tenga forma de posición real (evita basura si escriben mal).
+function parsearPosicionesInput(str){
+  return String(str||'')
+    .split(/[,+\s\/]+/)
+    .map(function(s){ return s.replace(/[★🆕]/g,'').trim().toUpperCase(); })
+    .filter(function(s){ return /^[A-Z0-9]+-N\d+-P\d+$/.test(s); });
+}
+
+// Aplica al Mapa de Racks (ASIGN + rack_stock) las posiciones que el
+// operador confirmó/editó al recibir un tránsito de ENTRADA. Reparte
+// cantEntra (lo que está entrando ahora) sumándolo a lo que ya hubiera en
+// cada posición, respetando la capacidad de pallet (max_pos). Si sobran
+// unidades sin dónde entrar (posiciones puestas a mano no alcanzan),
+// devuelve el sobrante para avisar al operador — no se pierde, solo no
+// queda reflejado en el mapa hasta que se corrija.
+function aplicarPosicionesEntrada(artId, posiciones, cantEntra){
+  var da = DATA.find(function(d){ return d.art===artId; });
+  var mp = (da && da.max_pos) || 32;
+  var rackSt = loadRackStock();
+  var restante = cantEntra;
+  posiciones.forEach(function(pos){
+    if(restante<=0) return;
+    var esMismoArt = ASIGN[pos] && String(ASIGN[pos].art)===String(artId);
+    var existente = esMismoArt ? (ASIGN[pos].unidades||0) : 0;
+    var capacidad = ASIGN[pos] && !esMismoArt ? 0 : Math.max(0, mp - existente); // posición ocupada por otro art: no pisar
+    var toma = Math.min(restante, capacidad);
+    if(toma<=0) return;
+    var nuevasUnidades = existente + toma;
+    var prevCompartidos = esMismoArt ? (ASIGN[pos].compartidos||[]) : [];
+    ASIGN[pos] = {art:artId, unidades:nuevasUnidades, compartidos:prevCompartidos, confirmadoAvance:true};
+    rackSt[pos] = {art:artId, stock:nuevasUnidades, min_u:(rackSt[pos]&&rackSt[pos].min_u)||1, compartidos:prevCompartidos};
+    restante -= toma;
+    registrarMovimiento(pos, artId, 'ajustar', nuevasUnidades);
+  });
+  saveAsign();
+  saveRackStock(rackSt);
+  return {sobrante: Math.max(0, restante)};
+}
+
+// Aplica al Mapa de Racks lo que efectivamente salió en una SALIDA/despacho:
+// descuenta cantSale de las posiciones que el operador confirmó/editó, en
+// orden, sin bajar de 0. Si las posiciones puestas no tenían tanto stock
+// como para cubrir todo, devuelve el sobrante para avisar.
+function aplicarPosicionesSalida(artId, posiciones, cantSale){
+  var rackSt = loadRackStock();
+  var restante = cantSale;
+  posiciones.forEach(function(pos){
+    if(restante<=0) return;
+    if(!ASIGN[pos] || String(ASIGN[pos].art)!==String(artId)) return;
+    var existente = ASIGN[pos].unidades||0;
+    var saca = Math.min(restante, existente);
+    var nuevasUnidades = existente - saca;
+    ASIGN[pos].unidades = nuevasUnidades;
+    if(rackSt[pos]) rackSt[pos].stock = nuevasUnidades;
+    restante -= saca;
+    registrarMovimiento(pos, artId, 'ajustar', nuevasUnidades);
+  });
+  saveAsign();
+  saveRackStock(rackSt);
+  return {sobrante: Math.max(0, restante)};
+}
+
+function cydSetPosConfirmadaEntrada(id, idx, value){
+  var lista = transitoGetAll();
+  var tr = lista.find(function(t){ return t.id===id; });
+  if(!tr) return;
+  var r = tr.items[idx];
+  if(!r) return;
+  r.posConfirmada = parsearPosicionesInput(value).join(' + ');
+  transitoSave(lista);
+}
+
+function cydSetPosConfirmadaSalida(id, idx, value){
+  var lista = transitoGetAll();
+  var tr = lista.find(function(t){ return t.id===id; });
+  if(!tr) return;
+  var r = tr.items[idx];
+  if(!r) return;
+  r.posRack = parsearPosicionesInput(value).join(' + ');
+  transitoSave(lista);
+}
+
 function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
   // loteUsadas: Set compartido entre TODAS las filas de un mismo lote
   // (planilla/tránsito) — evita que dos artículos distintos del mismo
@@ -11082,6 +11500,18 @@ function abrirModalTiempoRecepcion(id){
   var tr = lista.find(function(t){return t.id===id;});
   if(!tr){ showToast('❌ Tránsito no encontrado'); return; }
 
+  // Obligatorio: todo artículo cuyo destino sugerido sea rack necesita
+  // posición confirmada (sugerida tal cual, o modificada) antes de recibir
+  var faltantes = tr.items.filter(function(r){
+    var sug = r.sugerencia||{};
+    var requierePos = sug.tipo==='rack' || sug.tipo==='rack_lleno';
+    return requierePos && !(r.posConfirmada && parsearPosicionesInput(r.posConfirmada).length);
+  });
+  if(faltantes.length){
+    showToast('❌ Completá la posición de rack para: '+faltantes.map(function(r){return r.art;}).join(', '));
+    return;
+  }
+
   _cydTransitoIdPendiente = id;
   _cydTiempoGrupo = null;
 
@@ -11146,9 +11576,10 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
   var fecha = new Date().toLocaleDateString('es-AR');
   var fechaISO = new Date().toISOString().split('T')[0];
 
-  // Sumar stock general únicamente. El Mapa de Racks (ASIGN/rack_stock) NO
-  // se toca automáticamente acá — la carga sigue siendo manual (Avance o
-  // modal de celda); esto solo deja la sugerencia (r.sugerencia) informativa
+  // Sumar stock general, y además escribir al Mapa de Racks (ASIGN/rack_stock)
+  // la posición que el operador confirmó/editó en la pantalla de tránsito —
+  // ya no queda solo como sugerencia informativa, se aplica acá al recibir
+  var huboRack = false, huboSobrante = false;
   tr.items.forEach(function(r){
     var da = DATA.find(function(d){return d.art===r.art;});
     if(da){
@@ -11156,8 +11587,22 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
       da.pall  = Math.floor(da.stock / (da.max_pos||32));
       recalcularCond(da);
     }
+    var sug = r.sugerencia||{};
+    var requierePos = sug.tipo==='rack' || sug.tipo==='rack_lleno';
+    if(requierePos && r.posConfirmada){
+      var posArr = parsearPosicionesInput(r.posConfirmada);
+      if(posArr.length){
+        huboRack = true;
+        var resPos = aplicarPosicionesEntrada(r.art, posArr, r.cant);
+        if(resPos.sobrante>0){
+          huboSobrante = true;
+          showToast('⚠️ Art '+r.art+': '+resPos.sobrante+' un. no entraron en '+r.posConfirmada+' — revisar Mapa Racks');
+        }
+      }
+    }
   });
   saveDataStock();
+  if(huboRack && typeof renderMapa==='function') renderMapa();
 
   // Guardar en historial carga
   var rems = {};
@@ -11184,7 +11629,11 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
   if(typeof renderProdResumen==='function') renderProdResumen();
   if(typeof renderProdLista==='function') renderProdLista();
   if(typeof renderResumenProd==='function') renderResumenProd();
-  showToast('✅ Recepción confirmada — '+totalUn+' un. sumadas al stock · cargar rack a mano');
+  if(!huboSobrante){
+    showToast(huboRack
+      ? '✅ Recepción confirmada — '+totalUn+' un. sumadas al stock y al Mapa de Racks'
+      : '✅ Recepción confirmada — '+totalUn+' un. sumadas al stock · cargar rack a mano');
+  }
 }
 
 function cydEliminarTransito(id){
@@ -11225,8 +11674,8 @@ function formatPalletizado(total, maxPos){
   var completos = Math.floor(total / maxPos);
   var resto = total % maxPos;
   var partes = [];
-  if(completos>0) partes.push(completos+'×'+maxPos);
-  if(resto>0) partes.push('1×'+resto);
+  if(completos>0) partes.push(completos+'p x '+maxPos);
+  if(resto>0) partes.push('1p x '+resto);
   if(!partes.length) return '0';
   return partes.join(' + ');
 }
@@ -11263,15 +11712,10 @@ function cydExportarPlanilla(id){
     var rango = (typeof RANGOS !== 'undefined' && RANGOS[String(r.art)]) ? RANGOS[String(r.art)] : '—';
     var dataArtRow = DATA.find(function(x){ return x.art===r.art; });
     var maxPosRow = dataArtRow ? (dataArtRow.max_pos||32) : 32;
-    var paletizadoStr = formatPalletizado(stockNuevo, maxPosRow);
-    var dot = (function(){
-      try{
-        var dots = JSON.parse(localStorage.getItem('wms_dots')||'{}');
-        var artDots = dots[String(r.art)];
-        if(!artDots||!artDots.length) return '—';
-        return artDots.map(function(d){return d.anio||d;}).join(' / ');
-      }catch(e){return '—';}
-    })();
+    // Paletizado de GUARDADO: cómo se arma lo que está entrando ahora
+    // (r.cant), no el stock total acumulado — es la mercadería que hay
+    // que palletizar en este momento, no una recalculación de todo el stock
+    var paletizadoStr = formatPalletizado(r.cant, maxPosRow);
 
     return '<tr>'+
       '<td style="font-weight:700">'+r.art+'</td>'+
@@ -11279,7 +11723,7 @@ function cydExportarPlanilla(id){
       '<td>'+(r.diseno||'')+'</td>'+
       '<td style="color:#555">'+(r.prov||'')+'</td>'+
       '<td style="text-align:center;font-weight:700;color:#0071e3">'+rango+'</td>'+
-      '<td style="text-align:center;color:#555">'+dot+'</td>'+
+      '<td style="border:2px solid #bbb;min-width:60px">&nbsp;</td>'+
       '<td style="text-align:right">'+(r.stockActual||0)+'</td>'+
       '<td style="text-align:right;font-weight:700;color:'+cantColor+'">'+cantStr+'</td>'+
       '<td style="text-align:right;font-weight:700">'+stockNuevo+'</td>'+
@@ -11300,12 +11744,11 @@ function cydExportarPlanilla(id){
     'h2{font-size:13px;margin:0 0 3px;font-weight:700}'+
     '.meta{display:flex;gap:20px;flex-wrap:wrap;font-size:10px;color:#555;margin-bottom:6px;border-bottom:1px solid #ddd;padding-bottom:6px}'+
     '.meta b{color:#1d1d1f}'+
-    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px;margin:10px 0 8px;font-size:9.5px}'+
+    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:10px 0 8px;font-size:9.5px}'+
     '.firma-box{border:1px solid #ccc;border-radius:6px;padding:6px 10px}'+
     '.firma-label{font-size:8.5px;color:#86868b;margin-bottom:2px}'+
     '.firma-val{font-weight:700;font-size:11px}'+
     '.firma-line{border-top:1px solid #bbb;margin-top:14px;padding-top:3px;font-size:8px;color:#999;text-align:center}'+
-    '.hora-linea{border-bottom:1px solid #999;display:inline-block;min-width:70px}'+
     'table{width:100%;border-collapse:collapse;font-size:9.5px}'+
     'th{background:#1d1d1f;color:#fff;padding:4px 6px;text-align:left;font-size:9px;white-space:nowrap;border-right:1px solid #444}'+
     'td{padding:3px 6px;border-bottom:1px solid #e8e8e8;vertical-align:middle;border-right:1px solid #f0f0f0}'+
@@ -11339,12 +11782,6 @@ function cydExportarPlanilla(id){
         '<div class="firma-label">Equipo de descarga</div>'+
         '<div class="firma-val">'+(equipo||'&nbsp;')+'</div>'+
         '<div class="firma-line">Firma equipo</div>'+
-      '</div>'+
-      '<div class="firma-box">'+
-        '<div class="firma-label">Horario de '+(esCarga?'carga':'descarga')+'</div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400">Inicio: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-val" style="font-size:9.5px;font-weight:400;margin-top:6px">Fin: <span class="hora-linea">&nbsp;</span></div>'+
-        '<div class="firma-line">Completar a mano</div>'+
       '</div>'+
     '</div>'+
     '<table><thead><tr>'+
@@ -11461,11 +11898,19 @@ function cydRenderTransito(){
         // SALIDA: mostrar posición, cant pedida vs real editable
         var cantReal = r.cantReal||r.cant;
         var diff = cantReal - r.cant;
-        var ubic = r.posRack
-          ? '<span style="color:#0071e3;font-weight:700">'+r.posRack+'</span>'
-          : r.bloque
-          ? '<span style="color:#ff9500;font-weight:700">'+r.bloque+'</span>'
-          : '<span style="color:#d70015">—</span>';
+        var tipoSal = r.tipo || (r.posRack?'rack':(r.bloque?'bloque':''));
+        var ubic;
+        if(esPend && tipoSal==='rack'){
+          ubic = '<input type="text" value="'+String(r.posRack||'').replace(/"/g,'&quot;')+'" placeholder="Posición(es), ej: 4S-N4-P01"'+
+            ' onchange="cydSetPosConfirmadaSalida(&quot;'+tr.id+'&quot;,'+i+',this.value)"'+
+            ' style="width:100%;min-width:130px;padding:4px 6px;border:1.5px solid #0071e3;border-radius:6px;font-size:11px;font-weight:600;color:#0071e3;box-sizing:border-box">';
+        } else {
+          ubic = r.posRack
+            ? '<span style="color:#0071e3;font-weight:700">'+r.posRack+'</span>'
+            : r.bloque
+            ? '<span style="color:#ff9500;font-weight:700">'+r.bloque+'</span>'
+            : '<span style="color:#d70015">—</span>';
+        }
         html += '<tr style="'+bg+'">';
         html += '<td style="padding:4px 8px;font-weight:600">'+r.art+'</td>';
         html += '<td style="padding:4px 8px">'+r.med+'</td>';
@@ -11493,9 +11938,10 @@ function cydRenderTransito(){
         }
         html += '</tr>';
       } else {
-        // INGRESO: igual que antes
+        // INGRESO
         var sug = r.sugerencia||{};
         var colorDest = sug.tipo==='rack'?'#0071e3':sug.tipo==='puntera'?'#7a3fb0':'#ff9500';
+        var requierePos = esPend && (sug.tipo==='rack' || sug.tipo==='rack_lleno');
         html += '<tr style="'+bg+'">';
         html += '<td style="padding:4px 8px;font-weight:600">'+r.art+'</td>';
         html += '<td style="padding:4px 8px">'+r.med+'</td>';
@@ -11504,7 +11950,15 @@ function cydRenderTransito(){
         html += '<td style="padding:4px 8px;text-align:right;font-weight:700;color:#34c759">+'+r.cant+'</td>';
         html += '<td style="padding:4px 8px;text-align:right;font-weight:700">'+(r.stockActual+r.cant)+'</td>';
         html += '<td style="padding:4px 8px;text-align:right">'+(sug.pallets||'—')+'</td>';
-        html += '<td style="padding:4px 8px;font-weight:600;color:'+colorDest+'">'+( sug.detalle||'—')+'</td>';
+        html += '<td style="padding:4px 8px;font-weight:600;color:'+colorDest+'">';
+        html += '<div style="font-size:10px;color:#86868b;font-weight:400;margin-bottom:2px">'+(sug.detalle||'—')+'</div>';
+        if(requierePos){
+          var valorDefault = r.posConfirmada!==undefined ? r.posConfirmada : String(sug.pos||'').replace(/[★🆕]/g,'').trim();
+          html += '<input type="text" value="'+valorDefault.replace(/"/g,'&quot;')+'" placeholder="Posición(es), ej: 4S-N4-P01"'+
+            ' onchange="cydSetPosConfirmadaEntrada(&quot;'+tr.id+'&quot;,'+i+',this.value)"'+
+            ' style="width:100%;min-width:140px;padding:4px 6px;border:1.5px solid #0071e3;border-radius:6px;font-size:11px;font-weight:600;color:#0071e3;box-sizing:border-box">';
+        }
+        html += '</td>';
         html += '</tr>';
       }
     });
