@@ -10349,6 +10349,8 @@ function termoClickZona(zid){
   det.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
+var _naveResaltados = new Set(); // bloques a marcar en el plano tras una búsqueda
+
 function renderNave(){
 
 
@@ -10383,15 +10385,17 @@ function renderNave(){
   function dibujarBloquePlano(key, label, film){
     const s = bloqueStats[key] || bloqueStats[label] || null;
     const pct = s ? Math.round((s.pall/maxPall)*100) : 0;
-    const color = !s ? '#c7c7cc' : pct>=90 ? '#d70015' : pct>=65 ? '#ff9500' : '#34c759';
+    const resaltado = _naveResaltados.has(key);
+    const color = resaltado ? '#af52de' : !s ? '#c7c7cc' : pct>=90 ? '#d70015' : pct>=65 ? '#ff9500' : '#34c759';
     const capS = getCapacidadBloqueSimple()[key];
     const capSTxt = capS && (capS.racks||capS.pallets||capS.picking) ? ' — 📐 '+capS.racks+' racks, '+capS.pallets+' pallets, '+capS.picking+' picking' : '';
     const pallTxt = s ? s.pall.toLocaleString('es-AR')+' pall.' : 'sin datos';
-    return '<div onclick="clickBloque(\''+key+'\')" title="'+label+capSTxt+'" '+
-      'style="position:relative;flex:1;height:46px;background:'+(s?color+'1f':'#f7f7f8')+';background-image:repeating-linear-gradient(90deg,transparent,transparent 23px,rgba(0,0,0,0.08) 23px,rgba(0,0,0,0.08) 24px);border:1px solid '+color+';cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;overflow:hidden">'+
+    return '<div id="nave-bloque-'+key.replace(/[^A-Za-z0-9]/g,'_')+'" onclick="clickBloque(\''+key+'\')" title="'+label+capSTxt+'" '+
+      'style="position:relative;flex:1;height:46px;background:'+(resaltado?'#af52de26':s?color+'1f':'#f7f7f8')+';background-image:repeating-linear-gradient(90deg,transparent,transparent 23px,rgba(0,0,0,0.08) 23px,rgba(0,0,0,0.08) 24px);border:'+(resaltado?'3px solid #af52de':'1px solid '+color)+';cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;overflow:hidden'+(resaltado?';box-shadow:0 0 0 3px #af52de40':'')+'">'+
       '<div style="font-size:10px;font-weight:700;color:#1d1d1f">'+label+'</div>'+
       '<div style="font-size:9px;font-weight:600;color:'+color+'">'+pallTxt+'</div>'+
       (film ? '<div style="position:absolute;top:2px;left:2px;background:#fff;border:1px solid #34c759;color:#1d7a3c;font-size:7px;font-weight:700;padding:1px 3px;border-radius:3px;white-space:nowrap">FILM+TABLAS</div>' : '')+
+      (resaltado ? '<div style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#af52de;box-shadow:0 0 0 2px #fff" title="Coincide con la búsqueda"></div>' : '')+
     '</div>';
   }
 
@@ -10401,10 +10405,12 @@ function renderNave(){
     const artUnicos = new Set(asign.map(a=>a.art)).size;
     const totalUnid = asign.reduce((s,a)=>s+(a.unidades||0),0);
     const pct = Math.round((posOcupadas/448)*100);
-    return '<div onclick="switchTab(\'mapa\',document.querySelectorAll(\'.tab\')[2])" title="Mapa de Racks — '+artUnicos+' arts, '+totalUnid.toLocaleString('es-AR')+' un." '+
-      'style="position:relative;flex:1;height:46px;background:repeating-linear-gradient(45deg,#0071e330,#0071e330 6px,#e8f0fe 6px,#e8f0fe 12px);border:1px solid #0071e3;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;overflow:hidden">'+
+    const resaltado = _naveResaltados.has('RACKS');
+    return '<div id="nave-bloque-RACKS" onclick="switchTab(\'mapa\',document.querySelectorAll(\'.tab\')[2])" title="Mapa de Racks — '+artUnicos+' arts, '+totalUnid.toLocaleString('es-AR')+' un." '+
+      'style="position:relative;flex:1;height:46px;background:repeating-linear-gradient(45deg,#0071e330,#0071e330 6px,#e8f0fe 6px,#e8f0fe 12px);border:'+(resaltado?'3px solid #af52de':'1px solid #0071e3')+';cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;overflow:hidden'+(resaltado?';box-shadow:0 0 0 3px #af52de40':'')+'">'+
       '<div style="font-size:10px;font-weight:700;color:#0071e3">🗄️ RACKS</div>'+
       '<div style="font-size:9px;font-weight:700;color:#0071e3">'+posOcupadas+'/448 · '+pct+'%</div>'+
+      (resaltado ? '<div style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:50%;background:#af52de;box-shadow:0 0 0 2px #fff" title="Coincide con la búsqueda"></div>' : '')+
     '</div>';
   }
 
@@ -10538,11 +10544,28 @@ function moverDisenoEntreBloques(){
 function buscarUbicacionArticulo(){
   var q = (document.getElementById('nave-buscar-input').value||'').trim().toLowerCase();
   var out = document.getElementById('nave-buscar-resultado');
-  if(!q){ out.innerHTML = ''; return; }
+  if(!q){
+    out.innerHTML = '';
+    _naveResaltados = new Set();
+    renderNave();
+    return;
+  }
 
   var arts = DATA.filter(function(r){
-    return String(r.art).toLowerCase().indexOf(q)>=0 || (r.med||'').toLowerCase().indexOf(q)>=0;
-  }).slice(0, 15);
+    return String(r.art).toLowerCase().indexOf(q)>=0 ||
+      (r.med||'').toLowerCase().indexOf(q)>=0 ||
+      (r.diseno||'').toLowerCase().indexOf(q)>=0;
+  }).slice(0, 30);
+
+  // Bloques a marcar en el plano con un punto violeta, para verlos de un vistazo
+  var bloquesMatch = new Set();
+  arts.forEach(function(a){
+    if(!a.bloque) return;
+    var bs = a.bloque.includes('/')?a.bloque.split('/'):[a.bloque];
+    bs.forEach(function(b){ bloquesMatch.add(b.trim()); });
+  });
+  _naveResaltados = bloquesMatch;
+  renderNave();
 
   if(!arts.length){
     out.innerHTML = '<div style="padding:14px;background:#fff3f3;border-radius:10px;margin-bottom:14px;color:#d70015">No se encontró ningún artículo con "'+q+'"</div>';
@@ -10550,8 +10573,9 @@ function buscarUbicacionArticulo(){
   }
 
   var punterasData = getPunteras();
-  var html = '<div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06)">';
-  arts.forEach(function(a){
+  var html = '<div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,0.06)">'+
+    '<div style="font-size:11px;color:#af52de;font-weight:700;margin-bottom:8px">🟣 '+bloquesMatch.size+' bloque(s) marcado(s) en el plano de abajo</div>';
+  arts.slice(0,15).forEach(function(a){
     var ubic = [];
     if(a.bloque) ubic.push('🟠 Bloque '+a.bloque);
 
@@ -10577,8 +10601,16 @@ function buscarUbicacionArticulo(){
         : '<div style="font-size:13px;color:#d70015">Sin ubicación física asignada todavía</div>')+
       '</div>';
   });
+  if(arts.length>15) html += '<div style="text-align:center;padding:8px;font-size:12px;color:#86868b">...y '+(arts.length-15)+' más</div>';
   html += '</div>';
   out.innerHTML = html;
+
+  // Ir directo al primer bloque marcado en el plano
+  var primerKey = bloquesMatch.values().next().value;
+  if(primerKey){
+    var el = document.getElementById('nave-bloque-'+primerKey.replace(/[^A-Za-z0-9]/g,'_'));
+    if(el) setTimeout(function(){ el.scrollIntoView({behavior:'smooth', block:'center'}); }, 100);
+  }
 }
 
 // ── CAPACIDAD DE BLOQUES (config manual, solo referencia visual) ──
