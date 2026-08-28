@@ -968,7 +968,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
     </div>
     <div id="nave-config" style="display:none"></div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input id="nave-buscar-input" type="text" placeholder="Buscar artículo (código o medida) para ver dónde está..."
+      <input id="nave-buscar-input" type="text" placeholder="Buscar por código, medida, diseño o proveedor (ej: KUMHO, 295 80 22.5, KL21)..."
         style="flex:1;padding:11px 14px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px"
         onkeydown="if(event.key==='Enter') buscarUbicacionArticulo()">
       <button onclick="buscarUbicacionArticulo()" style="padding:11px 18px;background:#0071e3;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">🔎 Buscar</button>
@@ -10593,8 +10593,9 @@ function buscarUbicacionArticulo(){
   var arts = DATA.filter(function(r){
     return String(r.art).toLowerCase().indexOf(q)>=0 ||
       (r.med||'').toLowerCase().indexOf(q)>=0 ||
-      (r.diseno||'').toLowerCase().indexOf(q)>=0;
-  }).slice(0, 30);
+      (r.diseno||'').toLowerCase().indexOf(q)>=0 ||
+      (r.prov||'').toLowerCase().indexOf(q)>=0;
+  }).slice(0, 60);
 
   // Bloques a marcar en el plano con un punto violeta, para verlos de un vistazo
   var bloquesMatch = new Set();
