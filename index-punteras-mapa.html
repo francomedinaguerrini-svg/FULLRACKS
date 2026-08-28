@@ -5277,6 +5277,13 @@ function cydPlanillaDespacho(id){
     'th{background:#1d1d1f;color:#fff;padding:5px 7px;text-align:left;font-size:9px;white-space:nowrap}'+
     'td{padding:4px 7px;border-bottom:1px solid #e8e8e8;vertical-align:middle}'+
     '.pie{margin-top:10px;font-size:8px;color:#aaa;border-top:1px solid #eee;padding-top:4px;display:flex;justify-content:space-between}'+
+    '.horario-box{border:1.5px solid #1d1d1f;border-radius:5px;padding:5px 10px;margin:6px 0;display:flex;align-items:center;gap:18px;font-size:9.5px}'+
+    '.horario-campo{display:flex;align-items:center;gap:6px}'+
+    '.horario-linea{display:inline-block;min-width:70px;border-bottom:1px solid #666;height:12px}'+
+    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:6px 0 8px;font-size:8.5px}'+
+    '.firma-box{border:1px solid #ccc;border-radius:5px;padding:4px 7px}'+
+    '.firma-label{font-size:7.5px;color:#86868b;margin-bottom:1px}'+
+    '.firma-line{border-top:1px solid #bbb;margin-top:9px;padding-top:2px;font-size:7px;color:#999;text-align:center}'+
     '</style></head><body>'+
     '<h2>📦 Hoja de despacho — '+tr.tipoIcon+' '+(tr.destino||tr.tipoLabel)+'&nbsp;'+
       (tr.estado==='confirmado'?'<span class="badge">✅ CONFIRMADO '+tr.fechaConfirmacion+'</span>':'')+
@@ -5288,6 +5295,25 @@ function cydPlanillaDespacho(id){
       '<span>Fecha: <b>'+tr.fecha+' '+tr.hora+'</b></span>'+
       '<span>Arts: <b>'+totalArts+'</b></span>'+
       '<span>Unidades: <b>'+totalCant+'</b></span>'+
+    '</div>'+
+    '<div class="horario-box">'+
+      '<b>🕐 Horario de despacho</b>'+
+      '<span class="horario-campo">Inicio: <span class="horario-linea"></span></span>'+
+      '<span class="horario-campo">Fin: <span class="horario-linea"></span></span>'+
+    '</div>'+
+    '<div class="firmas">'+
+      '<div class="firma-box">'+
+        '<div class="firma-label">Muelle / andén de carga</div>'+
+        '<div class="firma-line">Muelle</div>'+
+      '</div>'+
+      '<div class="firma-box">'+
+        '<div class="firma-label">Responsable de despacho</div>'+
+        '<div class="firma-line">Firma responsable</div>'+
+      '</div>'+
+      '<div class="firma-box">'+
+        '<div class="firma-label">Chofer / transporte</div>'+
+        '<div class="firma-line">Firma chofer</div>'+
+      '</div>'+
     '</div>'+
     '<table>'+
       '<thead><tr>'+
