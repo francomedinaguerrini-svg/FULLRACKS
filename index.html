@@ -11879,11 +11879,14 @@ function cydExportarPlanilla(id){
     'h2{font-size:13px;margin:0 0 3px;font-weight:700}'+
     '.meta{display:flex;gap:20px;flex-wrap:wrap;font-size:10px;color:#555;margin-bottom:6px;border-bottom:1px solid #ddd;padding-bottom:6px}'+
     '.meta b{color:#1d1d1f}'+
-    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:10px 0 8px;font-size:9.5px}'+
-    '.firma-box{border:1px solid #ccc;border-radius:6px;padding:6px 10px}'+
-    '.firma-label{font-size:8.5px;color:#86868b;margin-bottom:2px}'+
-    '.firma-val{font-weight:700;font-size:11px}'+
-    '.firma-line{border-top:1px solid #bbb;margin-top:14px;padding-top:3px;font-size:8px;color:#999;text-align:center}'+
+    '.firmas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:8px 0 6px;font-size:8.5px}'+
+    '.firma-box{border:1px solid #ccc;border-radius:5px;padding:4px 7px}'+
+    '.firma-label{font-size:7.5px;color:#86868b;margin-bottom:1px}'+
+    '.firma-val{font-weight:700;font-size:9.5px}'+
+    '.firma-line{border-top:1px solid #bbb;margin-top:9px;padding-top:2px;font-size:7px;color:#999;text-align:center}'+
+    '.horario-box{border:1.5px solid #1d1d1f;border-radius:5px;padding:5px 10px;margin:6px 0;display:flex;align-items:center;gap:18px;font-size:9.5px}'+
+    '.horario-campo{display:flex;align-items:center;gap:6px}'+
+    '.horario-linea{display:inline-block;min-width:70px;border-bottom:1px solid #666;height:12px}'+
     'table{width:100%;border-collapse:collapse;font-size:9.5px}'+
     'th{background:#1d1d1f;color:#fff;padding:4px 6px;text-align:left;font-size:9px;white-space:nowrap;border-right:1px solid #444}'+
     'td{padding:3px 6px;border-bottom:1px solid #e8e8e8;vertical-align:middle;border-right:1px solid #f0f0f0}'+
@@ -11901,6 +11904,11 @@ function cydExportarPlanilla(id){
       '<span>Arts: <b>'+tr.items.length+'</b></span>'+
       '<span>Unidades: <b>'+totalCant+'</b></span>'+
       '<span style="margin-left:auto;color:#bbb">ID: '+tr.id+'</span>'+
+    '</div>'+
+    '<div class="horario-box">'+
+      '<b>🕐 Horario de descarga</b>'+
+      '<span class="horario-campo">Inicio: <span class="horario-linea"></span></span>'+
+      '<span class="horario-campo">Fin: <span class="horario-linea"></span></span>'+
     '</div>'+
     '<div class="firmas">'+
       '<div class="firma-box">'+
