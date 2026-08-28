@@ -863,13 +863,13 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   <div class="mapa-wrap">
     <div class="cobertura-bar" id="cob-bar">
       <div class="cob-header">
-        <span class="cob-title">🔻 Artículos sin rotación</span>
+        <span class="cob-title">📍 Ubicación declarada</span>
         <span class="cob-pct" id="cob-pct">—</span>
       </div>
       <div class="cob-track"><div class="cob-fill" id="cob-fill" style="width:0%"></div></div>
       <div class="cob-detail">
-        <span id="cob-en-rack">— art. sin rotación</span>
-        <span id="cob-fuera">— art. con rotación</span>
+        <span id="cob-en-rack">— art. sin declarar en el sistema</span>
+        <span id="cob-fuera">— art. con ubicación declarada</span>
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
         <div class="cob-header">
@@ -891,6 +891,17 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
         <div class="cob-detail">
           <span id="cob-rackocup-en">— un. en rack</span>
           <span id="cob-rackocup-total">— del total guardado</span>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
+        <div class="cob-header">
+          <span class="cob-title">📊 Concentración de stock</span>
+          <span class="cob-pct" id="cob-pareto-pct">—</span>
+        </div>
+        <div class="cob-track"><div class="cob-fill" id="cob-pareto-fill" style="width:0%"></div></div>
+        <div class="cob-detail">
+          <span id="cob-pareto-en">— códigos concentran el 80% del stock</span>
+          <span id="cob-pareto-total">— códigos · — unidades en total</span>
         </div>
       </div>
     </div>
@@ -2624,21 +2635,36 @@ function renderCobertura(){
   });
   if(!universo.length){ return; }
 
-  // Artículos sin rotación vs. con rotación — por cantidad de artículos:
-  // "sin rotación" = 0 movimiento real en el período, no solo "bajo"
-  const artsBaja = universo.filter(r => (r.rot_sem||0) === 0).length;
-  const artsNormal = universo.length - artsBaja;
-  const pct = Math.round((artsBaja/universo.length)*100);
+  // % de artículos con ubicación DECLARADA en el sistema (bloque, rack o
+  // puntera) — la ubicación física siempre existe, esto mide qué tan al
+  // día está el sistema respecto a dónde está cada cosa realmente
+  var artsEnRack = new Set();
+  Object.values(ASIGN).forEach(function(v){
+    if(!v) return;
+    if(v.art) artsEnRack.add(String(v.art));
+    (v.compartidos||[]).forEach(function(c){ if(c.art) artsEnRack.add(String(c.art)); });
+  });
+  var artsEnPuntera = new Set();
+  var punterasData = getPunteras();
+  Object.keys(punterasData).forEach(function(pid){
+    (punterasData[pid]||[]).forEach(function(it){ if(it.art) artsEnPuntera.add(String(it.art)); });
+  });
+
+  const artsConUbic = universo.filter(r =>
+    (r.bloque && r.bloque.trim()) || artsEnRack.has(String(r.art)) || artsEnPuntera.has(String(r.art))
+  ).length;
+  const artsSinUbic = universo.length - artsConUbic;
+  const pct = Math.round((artsConUbic/universo.length)*100);
 
   const pctEl = document.getElementById('cob-pct');
   const fillEl = document.getElementById('cob-fill');
   const enEl = document.getElementById('cob-en-rack');
   const fEl = document.getElementById('cob-fuera');
   if(pctEl) pctEl.textContent = pct+'%';
-  if(pctEl) pctEl.style.color = pct>=40?'#d70015':pct>=20?'#ff9500':'#34c759';
+  if(pctEl) pctEl.style.color = pct>=80?'#34c759':pct>=50?'#ff9500':'#d70015';
   if(fillEl) fillEl.style.width = pct+'%';
-  if(enEl) enEl.textContent = artsBaja.toLocaleString('es-AR')+' art. sin rotación';
-  if(fEl) fEl.textContent = artsNormal.toLocaleString('es-AR')+' art. con rotación';
+  if(enEl) enEl.textContent = artsSinUbic.toLocaleString('es-AR')+' art. sin declarar en el sistema';
+  if(fEl) fEl.textContent = artsConUbic.toLocaleString('es-AR')+' art. con ubicación declarada';
 
   // Espacio libre en la nave — capacidad total 140.000 un. (rack + bloques +
   // punteras), comparado contra TODO lo que hay guardado (stock total).
@@ -2672,6 +2698,34 @@ function renderCobertura(){
   if(rfillEl) rfillEl.style.width = pctRackOcup+'%';
   if(renEl) renEl.textContent = posOcupadas.toLocaleString('es-AR')+' posiciones ocupadas';
   if(rtEl) rtEl.textContent = 'de '+CAP_RACKS.toLocaleString('es-AR')+' posiciones totales';
+
+  // Concentración de stock (Pareto 80/20) — cuántos códigos distintos
+  // explican el 80% de las unidades guardadas. Ordenamos por stock
+  // descendente y vamos sumando hasta llegar al 80% del total.
+  const artsConStock = DATA.filter(r => (r.stock||0) > 0);
+  const totalCodigos = artsConStock.length;
+  const totalUnidStock = artsConStock.reduce((s,r)=>s+(r.stock||0),0);
+  let codigosPareto = 0;
+  if(totalCodigos>0 && totalUnidStock>0){
+    const ordenado = artsConStock.slice().sort((a,b)=>(b.stock||0)-(a.stock||0));
+    let acumulado = 0;
+    const objetivo = totalUnidStock*0.8;
+    for(let i=0;i<ordenado.length;i++){
+      acumulado += ordenado[i].stock||0;
+      codigosPareto = i+1;
+      if(acumulado>=objetivo) break;
+    }
+  }
+  const pctPareto = totalCodigos>0 ? Math.round((codigosPareto/totalCodigos)*100) : 0;
+  const ppctEl = document.getElementById('cob-pareto-pct');
+  const pfillEl = document.getElementById('cob-pareto-fill');
+  const penEl = document.getElementById('cob-pareto-en');
+  const ptEl = document.getElementById('cob-pareto-total');
+  if(ppctEl) ppctEl.textContent = pctPareto+'%';
+  if(ppctEl) ppctEl.style.color = pctPareto<=20?'#d70015':pctPareto<=40?'#ff9500':'#34c759';
+  if(pfillEl) pfillEl.style.width = pctPareto+'%';
+  if(penEl) penEl.textContent = codigosPareto.toLocaleString('es-AR')+' códigos concentran el 80% del stock';
+  if(ptEl) ptEl.textContent = totalCodigos.toLocaleString('es-AR')+' códigos · '+totalUnidStock.toLocaleString('es-AR')+' unidades en total';
 }
 
 function toggleFrente(id){
