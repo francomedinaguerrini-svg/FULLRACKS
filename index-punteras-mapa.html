@@ -10377,6 +10377,15 @@ function termoClickZona(zid){
 
 var _naveResaltados = new Set(); // bloques a marcar en el plano tras una búsqueda
 
+// El Bloque 2 en la práctica se tagea con distintas variantes ("2", "2N",
+// "2S", "2N/3N", "2S/2N") — las unificamos todas bajo un único bloque "2"
+// para que aparezca en el plano sea cual sea la forma en que se cargó.
+const CANON_BLOQUE2 = new Set(['2','2N','2S','2N/3N','2S/2N']);
+function canonicalizarBloque(b){
+  const t = b.trim();
+  return CANON_BLOQUE2.has(t) ? '2' : t;
+}
+
 function renderNave(){
 
 
@@ -10396,7 +10405,7 @@ function renderNave(){
       ? r.bloque.split('/')
       : [ r.bloque ];
     bs.forEach(b=>{
-      const key = b.trim();
+      const key = canonicalizarBloque(b);
       if(!bloqueStats[key]) bloqueStats[key]={art:0,pall:0,stock:0,rot:0,bajo:0,picking:false};
       bloqueStats[key].art++;
       bloqueStats[key].pall += r.pall||0;
@@ -10457,8 +10466,7 @@ function renderNave(){
     { n:'5',  sur: '5S',    norte: '5N',   film:'sur' },
     { n:'4',  sur: '4S',    norte: '4N' },
     { n:'3',  sur: '3S',    norte: null },
-    { n:'2/3 Norte',   full:true, key:'2N/3N', film:true },
-    { n:'2 Sur/Norte',  full:true, key:'2S/2N', portonLabel:'2' },
+    { n:'2',  full:true, key:'2', film:true },
     { n:'1',  sur: '1S',    norte: 'RACKS' },
   ];
 
@@ -10852,7 +10860,7 @@ function clickBloque(key){
     const bs = (r.bloque.includes('/') && BLOQUES_COMPARTIDOS_NO_SPLIT.indexOf(r.bloque.trim())===-1)
       ? r.bloque.split('/')
       : [ r.bloque ];
-    return bs.map(b=>b.trim()).includes(key);
+    return bs.map(b=>canonicalizarBloque(b)).includes(key);
   }).sort((a,b)=>b.rot-a.rot);
 
   if(!arts.length){ showToast('Sin artículos en este bloque'); return; }
