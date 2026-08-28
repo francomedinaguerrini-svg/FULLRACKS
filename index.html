@@ -863,13 +863,13 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   <div class="mapa-wrap">
     <div class="cobertura-bar" id="cob-bar">
       <div class="cob-header">
-        <span class="cob-title">🔻 Baja rotación vs. Rotación</span>
+        <span class="cob-title">🔻 Artículos sin rotación</span>
         <span class="cob-pct" id="cob-pct">—</span>
       </div>
       <div class="cob-track"><div class="cob-fill" id="cob-fill" style="width:0%"></div></div>
       <div class="cob-detail">
-        <span id="cob-en-rack">— art. baja rotación</span>
-        <span id="cob-fuera">— art. rotación normal</span>
+        <span id="cob-en-rack">— art. sin rotación</span>
+        <span id="cob-fuera">— art. con rotación</span>
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e5ea">
         <div class="cob-header">
@@ -2624,10 +2624,9 @@ function renderCobertura(){
   });
   if(!universo.length){ return; }
 
-  // Baja rotación vs Rotación normal — por cantidad de artículos, mismo
-  // umbral que ya usa el motor de rack (nivelSegunRot): rot_sem < 1.25
-  // agrupa los "muertos" (N4) + "casi muertos" (N3) como baja rotación.
-  const artsBaja = universo.filter(r => (r.rot_sem||0) < 1.25).length;
+  // Artículos sin rotación vs. con rotación — por cantidad de artículos:
+  // "sin rotación" = 0 movimiento real en el período, no solo "bajo"
+  const artsBaja = universo.filter(r => (r.rot_sem||0) === 0).length;
   const artsNormal = universo.length - artsBaja;
   const pct = Math.round((artsBaja/universo.length)*100);
 
@@ -2638,17 +2637,13 @@ function renderCobertura(){
   if(pctEl) pctEl.textContent = pct+'%';
   if(pctEl) pctEl.style.color = pct>=40?'#d70015':pct>=20?'#ff9500':'#34c759';
   if(fillEl) fillEl.style.width = pct+'%';
-  if(enEl) enEl.textContent = artsBaja.toLocaleString('es-AR')+' art. baja rotación';
-  if(fEl) fEl.textContent = artsNormal.toLocaleString('es-AR')+' art. rotación normal';
+  if(enEl) enEl.textContent = artsBaja.toLocaleString('es-AR')+' art. sin rotación';
+  if(fEl) fEl.textContent = artsNormal.toLocaleString('es-AR')+' art. con rotación';
 
   // Espacio libre en la nave — capacidad total 140.000 un. (rack + bloques +
   // punteras), comparado contra TODO lo que hay guardado (stock total).
   const CAP_NAVE = 140000;
   const stockTotal = DATA.reduce((s,r)=>s+(r.stock||0),0);
-  var stockEnRack = 0;
-  Object.values(ASIGN).forEach(function(v){
-    if(v) stockEnRack += (v.unidades||0);
-  });
   const libre = Math.max(0, CAP_NAVE - stockTotal);
   const pctStock = Math.round((libre/CAP_NAVE)*100);
 
@@ -2662,18 +2657,21 @@ function renderCobertura(){
   if(senEl) senEl.textContent = libre.toLocaleString('es-AR')+' un. libres (de '+CAP_NAVE.toLocaleString('es-AR')+')';
   if(sfEl) sfEl.textContent = stockTotal.toLocaleString('es-AR')+' un. ocupadas en total';
 
-  // Ocupación de racks — del total guardado (stockTotal), qué % está
-  // efectivamente puesto en rack (vs. suelto en bloques/punteras)
-  const pctRackOcup = stockTotal>0 ? Math.round((stockEnRack/stockTotal)*100) : 0;
+  // Ocupación de racks — contra su propia capacidad (448 posiciones),
+  // no contra el stock total del depósito
+  var posOcupadas = 0;
+  Object.values(ASIGN).forEach(function(v){ if(v && v.art) posOcupadas++; });
+  const CAP_RACKS = 448;
+  const pctRackOcup = Math.round((posOcupadas/CAP_RACKS)*100);
   const rpctEl = document.getElementById('cob-rackocup-pct');
   const rfillEl = document.getElementById('cob-rackocup-fill');
   const renEl = document.getElementById('cob-rackocup-en');
   const rtEl = document.getElementById('cob-rackocup-total');
   if(rpctEl) rpctEl.textContent = pctRackOcup+'%';
-  if(rpctEl) rpctEl.style.color = pctRackOcup>=60?'#34c759':pctRackOcup>=30?'#ff9500':'#d70015';
+  if(rpctEl) rpctEl.style.color = pctRackOcup>=90?'#d70015':pctRackOcup>=65?'#ff9500':'#34c759';
   if(rfillEl) rfillEl.style.width = pctRackOcup+'%';
-  if(renEl) renEl.textContent = stockEnRack.toLocaleString('es-AR')+' un. en rack';
-  if(rtEl) rtEl.textContent = 'de '+stockTotal.toLocaleString('es-AR')+' un. guardadas en total';
+  if(renEl) renEl.textContent = posOcupadas.toLocaleString('es-AR')+' posiciones ocupadas';
+  if(rtEl) rtEl.textContent = 'de '+CAP_RACKS.toLocaleString('es-AR')+' posiciones totales';
 }
 
 function toggleFrente(id){
