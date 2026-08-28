@@ -10386,10 +10386,15 @@ function renderNave(){
 
   // Calcular stats por bloque
   const bloqueStats = {};
+  const BLOQUES_COMPARTIDOS_NO_SPLIT = ['2N/3N','2S/2N']; // son el nombre de UN bloque, no dos
   DATA.forEach(r=>{
     if(!r.bloque) return;
-    // Normalizar bloques compartidos
-    const bs = r.bloque.includes('/')?r.bloque.split('/'):[ r.bloque ];
+    // Normalizar bloques compartidos: solo separar por "/" cuando el "/"
+    // realmente lista dos ubicaciones distintas del mismo artículo — no
+    // cuando "/" es parte del nombre propio de un bloque compartido
+    const bs = (r.bloque.includes('/') && BLOQUES_COMPARTIDOS_NO_SPLIT.indexOf(r.bloque.trim())===-1)
+      ? r.bloque.split('/')
+      : [ r.bloque ];
     bs.forEach(b=>{
       const key = b.trim();
       if(!bloqueStats[key]) bloqueStats[key]={art:0,pall:0,stock:0,rot:0,bajo:0,picking:false};
@@ -10837,12 +10842,16 @@ function moverArticuloBloque(art, bloqueActual){
   if(siguenArts) clickBloque(bloqueActual); else closeModalDirect();
 }
 
+const BLOQUES_COMPARTIDOS_NO_SPLIT = ['2N/3N','2S/2N']; // nombre propio de un bloque, no dos ubicaciones
+
 function clickBloque(key){
   function getLlanta(med){ try{return parseFloat(med.trim().split(' ').pop())}catch{return 0} }
   // Get articles in this bloque
   const arts = DATA.filter(r=>{
     if(!r.bloque) return false;
-    const bs = r.bloque.includes('/')?r.bloque.split('/'):[ r.bloque ];
+    const bs = (r.bloque.includes('/') && BLOQUES_COMPARTIDOS_NO_SPLIT.indexOf(r.bloque.trim())===-1)
+      ? r.bloque.split('/')
+      : [ r.bloque ];
     return bs.map(b=>b.trim()).includes(key);
   }).sort((a,b)=>b.rot-a.rot);
 
@@ -11324,7 +11333,10 @@ function cydSetPosConfirmadaEntrada(id, idx, value){
   if(!tr) return;
   var r = tr.items[idx];
   if(!r) return;
-  r.posConfirmada = parsearPosicionesInput(value).join(' + ');
+  // No forzamos formato de posición de rack acá: si el destino es un
+  // bloque (ej "2S/2N"), guardamos tal cual — la validación de formato de
+  // rack se aplica más adelante solo cuando corresponde (tipo==='rack')
+  r.posConfirmada = String(value||'').replace(/[★🆕]/g,'').trim();
   transitoSave(lista);
 }
 
@@ -11661,12 +11673,17 @@ function abrirModalTiempoRecepcion(id){
   var tr = lista.find(function(t){return t.id===id;});
   if(!tr){ showToast('❌ Tránsito no encontrado'); return; }
 
-  // Obligatorio: todo artículo cuyo destino sugerido sea rack necesita
-  // posición confirmada (sugerida tal cual, o modificada) antes de recibir
+  // Obligatorio: todo artículo cuyo destino sugerido sea rack o bloque
+  // necesita posición/bloque confirmado (sugerido tal cual, o modificado)
   var faltantes = tr.items.filter(function(r){
     var sug = r.sugerencia||{};
-    var requierePos = sug.tipo==='rack' || sug.tipo==='rack_lleno';
-    return requierePos && !(r.posConfirmada && parsearPosicionesInput(r.posConfirmada).length);
+    if(sug.tipo==='rack' || sug.tipo==='rack_lleno'){
+      return !(r.posConfirmada && parsearPosicionesInput(r.posConfirmada).length);
+    }
+    if(sug.tipo==='bloque'){
+      return !(r.posConfirmada && r.posConfirmada.trim().length);
+    }
+    return false;
   });
   if(faltantes.length){
     showToast('❌ Completá la posición de rack para: '+faltantes.map(function(r){return r.art;}).join(', '));
@@ -11749,8 +11766,7 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
       recalcularCond(da);
     }
     var sug = r.sugerencia||{};
-    var requierePos = sug.tipo==='rack' || sug.tipo==='rack_lleno';
-    if(requierePos && r.posConfirmada){
+    if((sug.tipo==='rack' || sug.tipo==='rack_lleno') && r.posConfirmada){
       var posArr = parsearPosicionesInput(r.posConfirmada);
       if(posArr.length){
         huboRack = true;
@@ -11760,6 +11776,9 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
           showToast('⚠️ Art '+r.art+': '+resPos.sobrante+' un. no entraron en '+r.posConfirmada+' — revisar Mapa Racks');
         }
       }
+    } else if(sug.tipo==='bloque' && da && r.posConfirmada && r.posConfirmada.trim()){
+      da.bloque = r.posConfirmada.trim();
+      huboRack = true;
     }
   });
   saveDataStock();
@@ -12110,7 +12129,7 @@ function cydRenderTransito(){
         // INGRESO
         var sug = r.sugerencia||{};
         var colorDest = sug.tipo==='rack'?'#0071e3':sug.tipo==='puntera'?'#7a3fb0':'#ff9500';
-        var requierePos = esPend && (sug.tipo==='rack' || sug.tipo==='rack_lleno');
+        var requierePos = esPend && (sug.tipo==='rack' || sug.tipo==='rack_lleno' || sug.tipo==='bloque');
         html += '<tr style="'+bg+'">';
         html += '<td style="padding:4px 8px;font-weight:600">'+r.art+'</td>';
         html += '<td style="padding:4px 8px">'+r.med+'</td>';
@@ -12123,7 +12142,8 @@ function cydRenderTransito(){
         html += '<div style="font-size:10px;color:#86868b;font-weight:400;margin-bottom:2px">'+(sug.detalle||'—')+'</div>';
         if(requierePos){
           var valorDefault = r.posConfirmada!==undefined ? r.posConfirmada : String(sug.pos||'').replace(/[★🆕]/g,'').trim();
-          html += '<input type="text" value="'+valorDefault.replace(/"/g,'&quot;')+'" placeholder="Posición(es), ej: 4S-N4-P01"'+
+          var placeholderPos = sug.tipo==='bloque' ? 'Bloque destino, ej: 2S/2N' : 'Posición(es), ej: 4S-N4-P01';
+          html += '<input type="text" value="'+valorDefault.replace(/"/g,'&quot;')+'" placeholder="'+placeholderPos+'"'+
             ' onchange="cydSetPosConfirmadaEntrada(&quot;'+tr.id+'&quot;,'+i+',this.value)"'+
             ' style="width:100%;min-width:140px;padding:4px 6px;border:1.5px solid #0071e3;border-radius:6px;font-size:11px;font-weight:600;color:#0071e3;box-sizing:border-box">';
         }
