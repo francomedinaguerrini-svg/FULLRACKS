@@ -4229,19 +4229,38 @@ function procesarPaste(){
   const primeraCols = lineas[0].split('\t');
   let headerMap = detectarHeaderPedido(primeraCols);
   let dataLineas = headerMap ? lineas.slice(1) : lineas;
+  let reconstruido = false;
 
-  // Si no vino la fila de encabezados (el operador pegó solo los datos, sin
-  // copiar la primera fila), pero la primera línea de datos tiene EXACTAMENTE
-  // 26 columnas — la firma del formato nuevo (confirmada contra un pegado
-  // real: Articulo, Proveedor, Diametro, Seccion, Tipo, Llanta, Diseno,
-  // FechaFac, Nombre, Suc, Factura, Calle, Nro, Localidad, PROVINCIA, ART,
-  // Sal.BA, Sal.CC, Pend., Posible Entrega, Entrega, Valorizado, Sald Aut.,
-  // VOLUMEN, VENDEDOR, VIAJE) — usamos esas mismas posiciones fijas en vez
-  // de caer en los formatos viejos A/B (que necesitan 37+ columnas y por
-  // eso no encontraban nada).
-  if(!headerMap && primeraCols.length===26){
-    headerMap = {art:0, prov:1, diam:2, secc:3, tipo:4, llan:5, diseno:6, cliente:8, cant:20, volumen:23, nroPed:25};
-    dataLineas = lineas; // acá la primera línea SÍ es un artículo, no la incluimos aparte
+  // Si no vino la fila de encabezados, reconstruimos las filas usando el
+  // VIAJE (ej "010926-1.2") como ancla — es un patrón bien distintivo
+  // (dígitos-guion-dígitos) que SIEMPRE es el último campo de cada
+  // artículo. Esto resuelve dos problemas de una: (1) el Drive a veces
+  // mete un salto de línea real en medio de una fila (celda con "ajustar
+  // texto" activado en Sheets) partiéndola en 2-3 líneas físicas, y (2)
+  // no hace falta que la fila tenga una cantidad fija de columnas — un
+  // artículo con muchas celdas vacías en el medio (como uno sin domicilio
+  // cargado) igual cierra bien apenas aparece su VIAJE.
+  // Los campos del INICIO de la fila (Articulo, Proveedor, Diametro,
+  // Seccion, Tipo, Llanta, Diseno, Nombre) casi nunca vienen vacíos, así
+  // que se leen por posición desde el principio; los del FINAL (Entrega,
+  // VOLUMEN, VIAJE) se leen por posición desde el final — así no importa
+  // si a la fila le faltó algún tab suelto en el medio.
+  if(!headerMap){
+    const VIAJE_RE = /^\d{5,6}-\d+(\.\d+)?$/;
+    const tokens = [];
+    lineas.forEach(function(l){ tokens.push.apply(tokens, l.split('\t')); });
+    const registros = [];
+    let buf = [], sueltos = 0;
+    tokens.forEach(function(t){
+      buf.push(t);
+      if(VIAJE_RE.test(String(t).trim())){ registros.push(buf); buf=[]; }
+    });
+    sueltos = buf.length;
+    if(registros.length){
+      dataLineas = registros.filter(function(r){return r.length>=9;}).map(function(r){return r.join('\t');});
+      reconstruido = true;
+      if(sueltos) showToast('⚠️ Quedaron '+sueltos+' columnas sueltas al final sin VIAJE — revisá que no falte pegar una fila');
+    }
   }
 
   dataLineas.forEach(linea=>{
@@ -4263,6 +4282,21 @@ function procesarPaste(){
       llan = String(cols[headerMap.llan]||'').trim();
       diseno = String(cols[headerMap.diseno]||'').trim();
       volumen = headerMap.volumen!==undefined ? cleanVol(cols[headerMap.volumen]) : 0;
+    } else if(reconstruido){
+      // Reconstruido por VIAJE: inicio por posición absoluta, final por
+      // posición relativa al final (ver comentario arriba)
+      art = parseInt(String(cols[0]).replace(/,/g,''));
+      if(!art) return;
+      prov = String(cols[1]||'').trim();
+      diam = String(cols[2]||'').trim();
+      secc = String(cols[3]||'').trim();
+      tipo = String(cols[4]||'').trim();
+      llan = String(cols[5]||'').trim();
+      diseno = String(cols[6]||'').trim();
+      cliente = String(cols[8]||'').trim();
+      cant = Math.round(cleanNum(cols[cols.length-6]));
+      volumen = cleanVol(cols[cols.length-3]);
+      nroPed = String(cols[cols.length-1]||'').trim();
     } else {
       art = parseInt(String(cols[0]).replace(/,/g,''));
       if(!art) return;
@@ -4325,13 +4359,12 @@ function procesarPaste(){
   });
 
   if(!pedido.length){
-    // Mensaje específico si esto pinta ser "formato nuevo sin encabezado y
-    // con columnas ocultas" (no matcheó por nombre NI por la posición fija
-    // de 26 columnas) — la salida es siempre la misma: pegar con el
-    // encabezado incluido, porque ese matchea por NOMBRE sin importar
-    // cuántas columnas estén ocultas en el Drive.
-    if(!headerMap && primeraCols.length!==26 && primeraCols.length>=10){
-      showToast('❌ No reconocí las columnas — pegá también la fila de encabezados (Articulo, Proveedor, Diametro...) arriba de los datos');
+    // Si no hay encabezado Y tampoco pudimos reconstruir ningún registro
+    // por VIAJE (ni un solo token con pinta de "010926-1.2" en todo lo
+    // pegado), lo más probable es que falte pegar la columna VIAJE o
+    // directamente la fila de encabezados.
+    if(!headerMap && !reconstruido){
+      showToast('❌ No reconocí las columnas — pegá también la fila de encabezados (Articulo, Proveedor, Diametro...) arriba de los datos, o revisá que esté la columna VIAJE');
     } else {
       showToast('❌ No se encontraron artículos. Verificá el formato.');
     }
