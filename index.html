@@ -945,6 +945,8 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
         oninput="buscarEnMapa(this.value)"
         style="width:100%;padding:9px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px;background:#fff;color:#1d1d1f;outline:none">
       <div id="mapa-buscar-resultado" style="margin-top:6px"></div>
+      <button onclick="detectarPosicionesFantasma()" style="margin-top:8px;padding:6px 12px;background:#fff3cd;color:#856404;border:1px solid #ffe4a0;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">🩺 Detectar posiciones fantasma</button>
+      <div id="mapa-fantasma-resultado" style="margin-top:6px"></div>
     </div>
     <div id="mapa-container"></div>
   </div>
@@ -4851,6 +4853,53 @@ function buscarEnMapa(q){
   </div>`;
 }
 
+// Escanea ASIGN buscando claves "fantasma": posiciones cuyo formato no
+// coincide con el que usa la grilla real del plano (típicamente un P sin
+// cero adelante, ej "P6" en vez de "P06" — se cuelan al tipear a mano o al
+// importar un Excel que se comió el cero). Esas claves quedan invisibles en
+// el mapa visual pero el artículo figura "ubicado" ahí en las búsquedas.
+function detectarPosicionesFantasma(){
+  const res = document.getElementById('mapa-fantasma-resultado');
+  const fantasmas = Object.keys(ASIGN).filter(function(pos){
+    return ASIGN[pos] && normalizarPosId(pos) !== pos && /^[A-Z0-9]+-N\d+-P\d+$/.test(pos);
+  });
+  if(!fantasmas.length){
+    res.innerHTML = '<div style="font-size:12px;color:#248a3d;padding:6px">✅ No se encontraron posiciones fantasma</div>';
+    return;
+  }
+  res.innerHTML = `<div style="background:#fff;border-radius:10px;border:1px solid #ffe4a0;overflow:hidden">
+    <div style="padding:8px 12px;background:#fff3cd;font-size:12px;font-weight:600;color:#856404">⚠️ ${fantasmas.length} posición(es) fantasma encontrada(s)</div>
+    ${fantasmas.map(function(pos){
+      const v = ASIGN[pos];
+      const art = DATA.find(function(r){return r.art==v.art;});
+      const canon = normalizarPosId(pos);
+      const ocupCanon = ASIGN[canon];
+      const artOcup = ocupCanon ? DATA.find(function(r){return r.art==ocupCanon.art;}) : null;
+      const libre = !ocupCanon;
+      return `<div style="padding:10px 12px;border-bottom:1px solid #f5f5f7">
+        <div style="font-size:12px;font-weight:600">${art?art.med+' '+art.diseno:'Art '+v.art} · ${v.unidades||0} un.</div>
+        <div style="font-size:11px;color:#86868b;margin:2px 0">Clave fantasma: <strong style="color:#d70015">${pos}</strong> → posición real: <strong style="color:#0071e3">${canon}</strong></div>
+        ${libre
+          ? `<button onclick="fusionarPosicionFantasma('${pos}','${canon}')" style="margin-top:4px;padding:5px 10px;background:#34c759;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">✅ Mover a ${canon} (está libre)</button>`
+          : `<div style="font-size:11px;color:#d70015;margin-top:4px">⚠️ ${canon} ya tiene ocupante: ${artOcup?artOcup.med+' '+artOcup.diseno:'Art '+ocupCanon.art} (${ocupCanon.unidades||0} un.) — resolver a mano en Mapa Racks (contar físicamente y decidir)</div>`}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function fusionarPosicionFantasma(posFantasma, posReal){
+  if(!ASIGN[posFantasma]) return;
+  if(ASIGN[posReal]){ showToast('⚠️ '+posReal+' ya no está libre — cancelado'); detectarPosicionesFantasma(); return; }
+  ASIGN[posReal] = ASIGN[posFantasma];
+  delete ASIGN[posFantasma];
+  const rackSt = loadRackStock();
+  if(rackSt[posFantasma]){ rackSt[posReal] = rackSt[posFantasma]; delete rackSt[posFantasma]; saveRackStock(rackSt); }
+  saveAsign();
+  showToast('✅ Movido de '+posFantasma+' a '+posReal);
+  detectarPosicionesFantasma();
+  renderMapa();
+}
+
 function irAPosicion(posId){
   // Extraer frente del posId (ej: B2N-N1-P03 → B2N)
   const frente = posId.split('-')[0];
@@ -6560,7 +6609,7 @@ function importarMapaRacksArchivo(file){
       dataRows.forEach(function(r, i){
         const rowNum = headerRowIdx + i + 2;
         const get = function(key){ return colMap[key]!==undefined ? r[colMap[key]] : ''; };
-        const pos = String(get('POSICION')||'').trim();
+        const pos = normalizarPosId(String(get('POSICION')||'').trim());
         const artCod = String(get('ART')||'').trim();
         const cantRaw = get('UNIDADES');
         if(!pos && !artCod && cantRaw==='') return; // fila vacía, se ignora en silencio
@@ -11331,11 +11380,23 @@ function transitoBadge(){
 // una lista limpia de IDs de rack válidos (formato "4S-N4-P01"). Acepta
 // separadores por coma, espacio, "/" o "+", y descarta cualquier token que
 // no tenga forma de posición real (evita basura si escriben mal).
+// Normaliza una posición de rack al formato canónico que usa la grilla del
+// plano (P con 2 dígitos, ej "P6"→"P06"). Excel suele comerse el cero
+// adelante en columnas que parecen numéricas — sin esto, la posición
+// importada queda como clave "fantasma": existe en ASIGN pero no coincide
+// con ninguna celda real del mapa, así que el artículo desaparece del plano
+// aunque las búsquedas lo sigan mostrando como "ubicado" ahí.
+function normalizarPosId(s){
+  s = String(s||'').replace(/[★🆕]/g,'').trim().toUpperCase();
+  var m = s.match(/^([A-Z0-9]+-N\d+)-P(\d+)$/);
+  return m ? (m[1]+'-P'+m[2].padStart(2,'0')) : s;
+}
+
 function parsearPosicionesInput(str){
   return String(str||'')
     .split(/[,+\s\/]+/)
-    .map(function(s){ return s.replace(/[★🆕]/g,'').trim().toUpperCase(); })
-    .filter(function(s){ return /^[A-Z0-9]+-N\d+-P\d+$/.test(s); });
+    .map(function(s){ return normalizarPosId(s); })
+    .filter(function(s){ return /^[A-Z0-9]+-N\d+-P\d{2,}$/.test(s); });
 }
 
 // Aplica al Mapa de Racks (ASIGN + rack_stock) las posiciones que el
