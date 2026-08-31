@@ -5792,7 +5792,7 @@ function cydPlanillaPicking(id){
     '<div class="meta">'+
       '<span>Nro.: <b>'+tr.nroContenedor+'</b></span>'+
       '<span>TTE: <b>'+(tr.tte||'—')+'</b></span>'+
-      '<span>Dársena: <b>'+(tr.darsena||'—')+'</b></span>'+
+      '<span>Dársena: '+(tr.darsena?'<b>'+tr.darsena+'</b>':'<span class="horario-linea" style="min-width:60px"></span>')+'</span>'+
       '<span>Fecha: <b>'+tr.fecha+' '+tr.hora+'</b></span>'+
       '<span>Arts: <b>'+tr.items.length+'</b></span>'+
       '<span>Unidades: <b>'+totalCant+'</b></span>'+
