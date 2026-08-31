@@ -4225,11 +4225,24 @@ function procesarPaste(){
   // Formato NUEVO: primera línea es un encabezado real (Articulo, Proveedor,
   // Diametro, Seccion, Tipo, Llanta, Diseno, ..., Entrega, VOLUMEN, VIAJE...)
   // — leemos por NOMBRE de columna, así no se rompe si el Drive reordena o
-  // agrega columnas. Si no hay encabezado reconocible, cae a los formatos
-  // viejos A/B (posición fija) por compatibilidad con pegados anteriores.
+  // agrega columnas.
   const primeraCols = lineas[0].split('\t');
-  const headerMap = detectarHeaderPedido(primeraCols);
-  const dataLineas = headerMap ? lineas.slice(1) : lineas;
+  let headerMap = detectarHeaderPedido(primeraCols);
+  let dataLineas = headerMap ? lineas.slice(1) : lineas;
+
+  // Si no vino la fila de encabezados (el operador pegó solo los datos, sin
+  // copiar la primera fila), pero la primera línea de datos tiene EXACTAMENTE
+  // 26 columnas — la firma del formato nuevo (confirmada contra un pegado
+  // real: Articulo, Proveedor, Diametro, Seccion, Tipo, Llanta, Diseno,
+  // FechaFac, Nombre, Suc, Factura, Calle, Nro, Localidad, PROVINCIA, ART,
+  // Sal.BA, Sal.CC, Pend., Posible Entrega, Entrega, Valorizado, Sald Aut.,
+  // VOLUMEN, VENDEDOR, VIAJE) — usamos esas mismas posiciones fijas en vez
+  // de caer en los formatos viejos A/B (que necesitan 37+ columnas y por
+  // eso no encontraban nada).
+  if(!headerMap && primeraCols.length===26){
+    headerMap = {art:0, prov:1, diam:2, secc:3, tipo:4, llan:5, diseno:6, cliente:8, cant:20, volumen:23, nroPed:25};
+    dataLineas = lineas; // acá la primera línea SÍ es un artículo, no la incluimos aparte
+  }
 
   dataLineas.forEach(linea=>{
     const cols = linea.split('\t');
