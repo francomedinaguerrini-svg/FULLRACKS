@@ -5796,14 +5796,16 @@ function renderDiferencias(){
         <span class="diff-fecha">${d.fecha} ${d.hora}</span>
         <span class="diff-cliente">${d.destino} · ${d.items.length} dif.</span>
       </div>
-      ${d.items.map((r,ii)=>renderDiffLinea(r,bi,ii)).join('')}
+      ${d.items.map((r,ii)=>renderDiffLinea(r,bi,ii,d.fecha)).join('')}
     </div>`).join('');
 }
 
-function renderDiffLinea(r,bi,ii){
+function renderDiffLinea(r,bi,ii,fechaPedido){
   const key = bi+'-'+ii;
   const editando = _diffEditing===key;
   const resuelto = r.estado==='resuelto';
+  const artStock = DATA.find(function(d){return d.art===r.art;});
+  const stockActual = artStock ? (artStock.stock||0) : null;
 
   if(editando){
     return `<div class="diff-row" style="flex-direction:column;align-items:stretch;gap:8px">
@@ -5811,11 +5813,11 @@ function renderDiffLinea(r,bi,ii){
       <div style="font-size:11px;color:#86868b">${r.prov} · ${r.posRack||r.bloque||'—'}</div>
       <div style="display:flex;gap:14px;align-items:flex-end">
         <div>
-          <div style="font-size:10px;color:#86868b">Sistema/Pedido</div>
+          <div style="font-size:10px;color:#86868b">Pedidas</div>
           <div style="font-size:14px;font-weight:600">${r.cantPedida}</div>
         </div>
         <div>
-          <div style="font-size:10px;color:#86868b">Real (editable)</div>
+          <div style="font-size:10px;color:#86868b">Preparadas (editable)</div>
           <input type="number" id="diffedit-real-${key}" value="${r.cantReal}" style="width:80px;padding:6px 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px">
         </div>
       </div>
@@ -5840,13 +5842,15 @@ function renderDiffLinea(r,bi,ii){
     <div style="flex:1;min-width:0">
       <div style="font-size:12px;font-weight:600">${r.med} ${r.diseno}${resuelto?' <span style="color:#248a3d;font-weight:700;font-size:10px">· ✔ Resuelto</span>':''}</div>
       <div style="font-size:11px;color:#86868b">${r.prov} · ${r.posRack||r.bloque||'—'}</div>
+      ${fechaPedido?`<div style="font-size:10px;color:#86868b">📅 Pedido del ${fechaPedido}</div>`:''}
       ${r.tipo?`<span class="pensa-tag" style="margin-top:4px;display:inline-block;background:${r.tipo==='Cruce'?'#fff3cd':r.tipo==='Sobrante'?'#e8f8ee':'#fdeaea'};color:${r.tipo==='Cruce'?'#a8710a':r.tipo==='Sobrante'?'#248a3d':'#d70015'}">${r.tipo==='Cruce'?'🔀':r.tipo==='Sobrante'?'📈':'📉'} ${r.tipo}</span>`:''}
       ${r.nota?`<div style="font-size:11px;color:#48484a;margin-top:4px;font-style:italic">📝 ${r.nota.replace(/</g,'&lt;')}</div>`:''}
+      ${stockActual!==null?`<div style="margin-top:6px"><div style="font-size:9px;color:#86868b;text-transform:uppercase;letter-spacing:.3px">Stock actual</div><div style="font-size:22px;font-weight:800;color:#1d1d1f;line-height:1.1">${stockActual}</div></div>`:''}
     </div>
     <div style="text-align:right;flex-shrink:0">
-      <div style="font-size:12px">Pedido: <strong>${r.cantPedida}</strong></div>
-      <div style="font-size:12px">Real: <strong>${r.cantReal}</strong></div>
-      <div style="font-size:12px;font-weight:700;color:${r.diff<0?'#d70015':'#1c7c2c'}">${r.diff>0?'+':''}${r.diff}</div>
+      <div style="font-size:12px">Pedidas: <strong>${r.cantPedida}</strong></div>
+      <div style="font-size:12px">Preparadas: <strong>${r.cantReal}</strong></div>
+      <div style="font-size:12px;font-weight:700;color:${r.diff<0?'#d70015':'#1c7c2c'}">Dif: ${r.diff>0?'+':''}${r.diff}</div>
       <button onclick="editarLineaDiff('${key}')" style="margin-top:4px;border:none;background:none;color:#0071e3;font-size:11px;font-weight:600;cursor:pointer">✎ Editar</button>
     </div>
   </div>`;
