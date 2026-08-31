@@ -4324,7 +4324,19 @@ function procesarPaste(){
     pedido.push(item);
   });
 
-  if(!pedido.length){ showToast('❌ No se encontraron artículos. Verificá el formato.'); return; }
+  if(!pedido.length){
+    // Mensaje específico si esto pinta ser "formato nuevo sin encabezado y
+    // con columnas ocultas" (no matcheó por nombre NI por la posición fija
+    // de 26 columnas) — la salida es siempre la misma: pegar con el
+    // encabezado incluido, porque ese matchea por NOMBRE sin importar
+    // cuántas columnas estén ocultas en el Drive.
+    if(!headerMap && primeraCols.length!==26 && primeraCols.length>=10){
+      showToast('❌ No reconocí las columnas — pegá también la fila de encabezados (Articulo, Proveedor, Diametro...) arriba de los datos');
+    } else {
+      showToast('❌ No se encontraron artículos. Verificá el formato.');
+    }
+    return;
+  }
 
   // Auto-completar destino y nro pedido si están vacíos
   const dest = document.getElementById('ped-destino');
