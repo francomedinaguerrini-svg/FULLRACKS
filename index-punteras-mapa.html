@@ -4864,7 +4864,7 @@ function detectarPosicionesFantasma(){
     return ASIGN[pos] && normalizarPosId(pos) !== pos && /^[A-Z0-9]+-N\d+-P\d+$/.test(pos);
   });
   if(!fantasmas.length){
-    res.innerHTML = '<div style="font-size:12px;color:#248a3d;padding:6px">✅ No se encontraron posiciones fantasma</div>';
+    res.innerHTML = '<div style="font-size:12px;color:#248a3d;padding:6px;font-weight:600">✅ Resuelto — no quedan posiciones fantasma</div>';
     return;
   }
   res.innerHTML = `<div style="background:#fff;border-radius:10px;border:1px solid #ffe4a0;overflow:hidden">
@@ -4876,26 +4876,50 @@ function detectarPosicionesFantasma(){
       const ocupCanon = ASIGN[canon];
       const artOcup = ocupCanon ? DATA.find(function(r){return r.art==ocupCanon.art;}) : null;
       const libre = !ocupCanon;
+      const mismoArt = ocupCanon && String(ocupCanon.art)===String(v.art);
+      let accion;
+      if(libre){
+        accion = `<button onclick="fusionarPosicionFantasma('${pos}','${canon}')" style="margin-top:4px;padding:5px 10px;background:#34c759;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">✅ Mover a ${canon} (está libre)</button>`;
+      } else if(mismoArt){
+        const total = (v.unidades||0)+(ocupCanon.unidades||0);
+        accion = `<div style="font-size:11px;color:#856404;margin-top:4px">ℹ️ Es el mismo artículo partido en dos registros — no hay conflicto real, solo hay que sumarlos</div>
+          <button onclick="fusionarPosicionFantasma('${pos}','${canon}')" style="margin-top:4px;padding:5px 10px;background:#34c759;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">✅ Sumar y resolver (${v.unidades||0} + ${ocupCanon.unidades||0} = ${total} un. en ${canon})</button>`;
+      } else {
+        accion = `<div style="font-size:11px;color:#d70015;margin-top:4px">⚠️ ${canon} ya tiene ocupante distinto: ${artOcup?artOcup.med+' '+artOcup.diseno:'Art '+ocupCanon.art} (${ocupCanon.unidades||0} un.) — resolver a mano en Mapa Racks (contar físicamente y decidir)</div>`;
+      }
       return `<div style="padding:10px 12px;border-bottom:1px solid #f5f5f7">
         <div style="font-size:12px;font-weight:600">${art?art.med+' '+art.diseno:'Art '+v.art} · ${v.unidades||0} un.</div>
         <div style="font-size:11px;color:#86868b;margin:2px 0">Clave fantasma: <strong style="color:#d70015">${pos}</strong> → posición real: <strong style="color:#0071e3">${canon}</strong></div>
-        ${libre
-          ? `<button onclick="fusionarPosicionFantasma('${pos}','${canon}')" style="margin-top:4px;padding:5px 10px;background:#34c759;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">✅ Mover a ${canon} (está libre)</button>`
-          : `<div style="font-size:11px;color:#d70015;margin-top:4px">⚠️ ${canon} ya tiene ocupante: ${artOcup?artOcup.med+' '+artOcup.diseno:'Art '+ocupCanon.art} (${ocupCanon.unidades||0} un.) — resolver a mano en Mapa Racks (contar físicamente y decidir)</div>`}
+        ${accion}
       </div>`;
     }).join('')}
   </div>`;
 }
 
+// Fusiona la clave fantasma a la posición real. Si la posición real está
+// libre, mueve tal cual. Si ya tiene el MISMO artículo (registro duplicado
+// por el mismo bug de formato), suma las unidades de ambos registros en la
+// posición real en vez de pisar. Si tiene un artículo DISTINTO, no se toca
+// (ver detectarPosicionesFantasma — ese caso se resuelve a mano).
 function fusionarPosicionFantasma(posFantasma, posReal){
   if(!ASIGN[posFantasma]) return;
-  if(ASIGN[posReal]){ showToast('⚠️ '+posReal+' ya no está libre — cancelado'); detectarPosicionesFantasma(); return; }
-  ASIGN[posReal] = ASIGN[posFantasma];
-  delete ASIGN[posFantasma];
+  const fant = ASIGN[posFantasma];
   const rackSt = loadRackStock();
-  if(rackSt[posFantasma]){ rackSt[posReal] = rackSt[posFantasma]; delete rackSt[posFantasma]; saveRackStock(rackSt); }
+  if(ASIGN[posReal]){
+    if(String(ASIGN[posReal].art)!==String(fant.art)){
+      showToast('⚠️ '+posReal+' tiene otro artículo — cancelado'); detectarPosicionesFantasma(); return;
+    }
+    ASIGN[posReal].unidades = (ASIGN[posReal].unidades||0) + (fant.unidades||0);
+    if(rackSt[posReal]) rackSt[posReal].stock = ASIGN[posReal].unidades;
+  } else {
+    ASIGN[posReal] = fant;
+    if(rackSt[posFantasma]){ rackSt[posReal] = rackSt[posFantasma]; }
+  }
+  delete ASIGN[posFantasma];
+  delete rackSt[posFantasma];
+  saveRackStock(rackSt);
   saveAsign();
-  showToast('✅ Movido de '+posFantasma+' a '+posReal);
+  showToast('✅ Resuelto — '+posReal+' ahora tiene '+(ASIGN[posReal].unidades||0)+' un.');
   detectarPosicionesFantasma();
   renderMapa();
 }
