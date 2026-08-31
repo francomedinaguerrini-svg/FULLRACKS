@@ -11742,11 +11742,12 @@ function abrirModalTiempoRecepcion(id){
   // necesita posición/bloque confirmado (sugerido tal cual, o modificado)
   var faltantes = tr.items.filter(function(r){
     var sug = r.sugerencia||{};
+    var val = r.posConfirmada!==undefined ? r.posConfirmada : String(sug.pos||'').replace(/[★🆕]/g,'').trim();
     if(sug.tipo==='rack' || sug.tipo==='rack_lleno'){
-      return !(r.posConfirmada && parsearPosicionesInput(r.posConfirmada).length);
+      return !(val && parsearPosicionesInput(val).length);
     }
     if(sug.tipo==='bloque'){
-      return !(r.posConfirmada && r.posConfirmada.trim().length);
+      return !(val && val.trim().length);
     }
     return false;
   });
@@ -11831,18 +11832,19 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
       recalcularCond(da);
     }
     var sug = r.sugerencia||{};
-    if((sug.tipo==='rack' || sug.tipo==='rack_lleno') && r.posConfirmada){
-      var posArr = parsearPosicionesInput(r.posConfirmada);
+    var posEfectiva = r.posConfirmada!==undefined ? r.posConfirmada : String(sug.pos||'').replace(/[★🆕]/g,'').trim();
+    if((sug.tipo==='rack' || sug.tipo==='rack_lleno') && posEfectiva){
+      var posArr = parsearPosicionesInput(posEfectiva);
       if(posArr.length){
         huboRack = true;
         var resPos = aplicarPosicionesEntrada(r.art, posArr, r.cant);
         if(resPos.sobrante>0){
           huboSobrante = true;
-          showToast('⚠️ Art '+r.art+': '+resPos.sobrante+' un. no entraron en '+r.posConfirmada+' — revisar Mapa Racks');
+          showToast('⚠️ Art '+r.art+': '+resPos.sobrante+' un. no entraron en '+posEfectiva+' — revisar Mapa Racks');
         }
       }
-    } else if(sug.tipo==='bloque' && da && r.posConfirmada && r.posConfirmada.trim()){
-      da.bloque = r.posConfirmada.trim();
+    } else if(sug.tipo==='bloque' && da && posEfectiva && posEfectiva.trim()){
+      da.bloque = posEfectiva.trim();
       huboRack = true;
     }
   });
@@ -12070,6 +12072,7 @@ function cydRenderTransito(){
   var lista = transitoGetAll();
   var pend = lista.filter(function(t){return t.estado==='transito';});
   var conf = lista.filter(function(t){return t.estado==='confirmado';});
+  var _necesitaSave = false;
 
   if(!lista.length){
     cont.innerHTML = '<div style="text-align:center;padding:40px;color:#86868b"><div style="font-size:32px;margin-bottom:8px">🟡</div><div style="font-size:14px;font-weight:600">Sin tránsitos</div><div style="font-size:12px;margin-top:4px">Procesá una carga o descarga y enviala a tránsito</div></div>';
@@ -12207,6 +12210,12 @@ function cydRenderTransito(){
         html += '<div style="font-size:10px;color:#86868b;font-weight:400;margin-bottom:2px">'+(sug.detalle||'—')+'</div>';
         if(requierePos){
           var valorDefault = r.posConfirmada!==undefined ? r.posConfirmada : String(sug.pos||'').replace(/[★🆕]/g,'').trim();
+          // Si el operador nunca tocó el campo pero el destino sugerido ya
+          // viene con un valor válido (el caso normal cuando la sugerencia
+          // es correcta), sincronizamos r.posConfirmada con ese default acá
+          // mismo — si no, la validación de "Recibir" lo bloqueaba porque
+          // posConfirmada solo se seteaba en el evento onchange del input
+          if(r.posConfirmada===undefined && valorDefault){ r.posConfirmada = valorDefault; _necesitaSave = true; }
           var placeholderPos = sug.tipo==='bloque' ? 'Bloque destino, ej: 2S/2N' : 'Posición(es), ej: 4S-N4-P01';
           html += '<input type="text" value="'+valorDefault.replace(/"/g,'&quot;')+'" placeholder="'+placeholderPos+'"'+
             ' onchange="cydSetPosConfirmadaEntrada(&quot;'+tr.id+'&quot;,'+i+',this.value)"'+
@@ -12218,6 +12227,8 @@ function cydRenderTransito(){
     });
     html += '</table></div></div>';
   });
+
+  if(_necesitaSave) transitoSave(lista);
 
   cont.innerHTML = html;
 }
