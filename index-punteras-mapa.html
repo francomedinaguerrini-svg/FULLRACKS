@@ -1075,6 +1075,17 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   </div>
 </div>
 
+<!-- VOLUMEN -->
+<div class="view" id="view-vol">
+  <div class="diff-wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:#86868b;text-transform:uppercase;letter-spacing:.5px">📐 Volumen — Pedido vs Real</span>
+      <button onclick="limpiarVolumenHist()" style="padding:6px 12px;background:#ffd6d9;color:#d70015;border:none;border-radius:8px;font-size:12px;cursor:pointer">🗑️ Limpiar</button>
+    </div>
+    <div id="vol-lista"></div>
+  </div>
+</div>
+
 <!-- INVENTARIO -->
 <div class="view" id="view-inv">
   <div class="inv-wrap">
@@ -1992,6 +2003,7 @@ function switchTab(name,btn){
   if(name==='nave') renderNave();
   if(name==='termometro') renderTermometro();
   if(name==='dif') renderDiferencias();
+  if(name==='vol') renderVolumen();
   if(name==='grupos') { renderGrupos(); renderGruposHoy(); }
   if(name==='dot') renderDOTs();
   if(name==='pall') renderPalletizado();
@@ -4165,6 +4177,39 @@ function initPedidos(){
   document.getElementById('ped-fecha').textContent = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
 }
 
+// Nombres de columna reconocidos → alias posibles (todo en minúscula, sin
+// puntos/tildes) para el formato NUEVO con encabezado real del Drive.
+const PEDIDO_HEADER_ALIASES = {
+  articulo: 'art', art: 'art',
+  proveedor: 'prov',
+  diametro: 'diam',
+  seccion: 'secc',
+  tipo: 'tipo',
+  llanta: 'llan',
+  diseno: 'diseno',
+  nombre: 'cliente',
+  entrega: 'cant',          // cantidad real a entregar de esta línea
+  volumen: 'volumen',
+  viaje: 'nroPed',          // agrupa las líneas de un mismo pedido/reparto
+  valorizado: 'valorizado',
+  vendedor: 'vendedor',
+  localidad: 'localidad',
+  provincia: 'provincia'
+};
+
+function detectarHeaderPedido(cols){
+  const map = {};
+  let hits = 0;
+  cols.forEach(function(c, i){
+    const key = String(c||'').trim().toLowerCase().replace(/\./g,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(PEDIDO_HEADER_ALIASES[key]){ map[PEDIDO_HEADER_ALIASES[key]] = i; hits++; }
+  });
+  // Con "art" + al menos "cant" o "diseno" ya alcanza para confiar en que es
+  // fila de encabezado y no una fila de datos
+  if(map.art!==undefined && hits>=3) return map;
+  return null;
+}
+
 function procesarPaste(){
   const texto = document.getElementById('ped-paste').value.trim();
   if(!texto){ showToast('❌ Pegá el pedido primero'); return; }
@@ -4172,47 +4217,79 @@ function procesarPaste(){
   const lineas = texto.split('\n').filter(l=>l.trim());
   const pedido = [];
   const seen = {};
+  let volumenTotal = 0;
 
   function cleanNum(v){ return parseFloat(String(v||'0').replace(/[$,]/g,'').trim())||0; }
+  function cleanVol(v){ return parseFloat(String(v||'0').replace(/\./g,'').replace(',','.').trim())||0; } // "0,42" (coma decimal) → 0.42
 
-  lineas.forEach(linea=>{
+  // Formato NUEVO: primera línea es un encabezado real (Articulo, Proveedor,
+  // Diametro, Seccion, Tipo, Llanta, Diseno, ..., Entrega, VOLUMEN, VIAJE...)
+  // — leemos por NOMBRE de columna, así no se rompe si el Drive reordena o
+  // agrega columnas. Si no hay encabezado reconocible, cae a los formatos
+  // viejos A/B (posición fija) por compatibilidad con pegados anteriores.
+  const primeraCols = lineas[0].split('\t');
+  const headerMap = detectarHeaderPedido(primeraCols);
+  const dataLineas = headerMap ? lineas.slice(1) : lineas;
+
+  dataLineas.forEach(linea=>{
     const cols = linea.split('\t');
     if(cols.length < 5) return;
 
-    const art = parseInt(String(cols[0]).replace(/,/g,''));
-    if(!art) return;
+    let art, cant, cliente, nroPed, prov, diam, secc, tipo, llan, diseno, volumen=0;
 
-    // Detectar formato automáticamente
-    // Formato A (pedido original): 77 cols, cant en col 63
-    // Formato B (planilla control): ~45 cols, cant en col 37
-    let cant = 0;
-    let cliente = '';
-    let nroPed = '';
-
-    if(cols.length >= 70){
-      // Formato A — nuevo formato largo
-      cant = Math.round(cleanNum(cols[63]||0));
-      cliente = String(cols[71]||'').trim();
-      nroPed = String(cols[70]||'').trim();
+    if(headerMap){
+      art = parseInt(String(cols[headerMap.art]||'').replace(/,/g,''));
+      if(!art) return;
+      cant = Math.round(cleanNum(cols[headerMap.cant]));
+      cliente = String(cols[headerMap.cliente]||'').trim();
+      nroPed = String(cols[headerMap.nroPed]||'').trim();
+      prov = String(cols[headerMap.prov]||'').trim();
+      diam = String(cols[headerMap.diam]||'').trim();
+      secc = String(cols[headerMap.secc]||'').trim();
+      tipo = String(cols[headerMap.tipo]||'').trim();
+      llan = String(cols[headerMap.llan]||'').trim();
+      diseno = String(cols[headerMap.diseno]||'').trim();
+      volumen = headerMap.volumen!==undefined ? cleanVol(cols[headerMap.volumen]) : 0;
     } else {
-      // Formato B — formato original
-      cant = Math.round(cleanNum(cols[37]||cols[36]||0));
-      cliente = String(cols[23]||'').trim();
-      nroPed = String(cols[42]||'').trim();
+      art = parseInt(String(cols[0]).replace(/,/g,''));
+      if(!art) return;
+      // Detectar formato automáticamente (pegados viejos, sin encabezado)
+      // Formato A (pedido original): 77 cols, cant en col 63
+      // Formato B (planilla control): ~45 cols, cant en col 37
+      if(cols.length >= 70){
+        cant = Math.round(cleanNum(cols[63]||0));
+        cliente = String(cols[71]||'').trim();
+        nroPed = String(cols[70]||'').trim();
+      } else {
+        cant = Math.round(cleanNum(cols[37]||cols[36]||0));
+        cliente = String(cols[23]||'').trim();
+        nroPed = String(cols[42]||'').trim();
+      }
+      prov = String(cols[1]||'').trim();
+      diam = String(cols[2]||'').trim();
+      secc = String(cols[3]||'').trim();
+      tipo = String(cols[4]||'').trim();
+      llan = String(cols[5]||'').trim();
+      diseno = String(cols[6]||'').trim();
     }
 
     if(!cant) return;
 
-    // Buscar stock en DATA de la app (más confiable que el texto)
+    // Buscar stock en DATA de la app (más confiable que el texto) — si no
+    // está en DATA, en el formato viejo (sin encabezado) había una columna
+    // fija de stock como respaldo; en el formato nuevo no hay columna fija
+    // equivalente confiable, así que queda en 0 hasta que se cargue en DATA
     const dataArt = DATA.find(r=>r.art==art);
-    const stock = dataArt ? dataArt.stock : Math.round(cleanNum(cols[11]||0));
+    const stock = dataArt ? dataArt.stock : (headerMap ? 0 : Math.round(cleanNum(cols[11]||0)));
+
+    volumenTotal += volumen;
 
     // Capturar datos del rango (columnas que indican desde/hasta/descripción de rango)
-    const rangoDesc = String(cols[8]||cols[7]||'').trim(); // descripción rango si existe
-    const rangoLinea = { cant, rangoDesc };
+    const rangoLinea = { cant, rangoDesc:'', volumen };
 
     if(seen[art]){
       seen[art].cant += cant;
+      seen[art].volumen = (seen[art].volumen||0) + volumen;
       seen[art].rangos = seen[art].rangos || [];
       seen[art].rangos.push(rangoLinea);
       return;
@@ -4220,14 +4297,12 @@ function procesarPaste(){
 
     const item = {
       art: art,
-      prov: String(cols[1]||'').trim() || (dataArt?dataArt.prov:''),
-      diam: String(cols[2]||'').trim(),
-      secc: String(cols[3]||'').trim(),
-      tipo: String(cols[4]||'').trim(),
-      llan: String(cols[5]||'').trim(),
-      diseno: String(cols[6]||'').trim() || (dataArt?dataArt.diseno:''),
+      prov: prov || (dataArt?dataArt.prov:''),
+      diam: diam, secc: secc, tipo: tipo, llan: llan,
+      diseno: diseno || (dataArt?dataArt.diseno:''),
       stock: stock,
       cant: cant,
+      volumen: volumen,
       cliente: cliente,
       nroPed: nroPed,
       rangos: [rangoLinea],
@@ -4247,8 +4322,9 @@ function procesarPaste(){
   // Auto-generar nro pedido
   const nroPedEl = document.getElementById('ped-nropedido');
   if(nroPedEl && !nroPedEl.value) nroPedEl.value = generarNroPedido();
+  window._volumenPedidoActual = volumenTotal;
   procesarPedido(pedido);
-  showToast('✅ '+pedido.length+' artículos procesados');
+  showToast('✅ '+pedido.length+' artículos procesados'+(volumenTotal>0?' · 📐 '+volumenTotal.toFixed(2)+' m³':''));
 }
 
 let _modoPedido = 'pedidos';
@@ -4474,6 +4550,7 @@ function reiniciarPrepPedido(nro){
 function renderPedido(conPuntera, conRack, conBloque, sinUbic, todos){
   const totalArts = todos.length;
   const totalUnid = todos.reduce((s,r)=>s+r.cant,0);
+  const volumenPedido = todos.reduce((s,r)=>s+(r.volumen||0),0) || (window._volumenPedidoActual||0);
   const nroPed = (document.getElementById('ped-nropedido')||{}).value || generarNroPedido();
   const prepState = getPrepPedidoState(nroPed);
   const preparadosCount = Object.values(prepState).filter(Boolean).length;
@@ -4524,6 +4601,7 @@ function renderPedido(conPuntera, conRack, conBloque, sinUbic, todos){
       <div class="ped-sum-card"><div class="ped-sum-val" style="color:#0071e3">${conRack.length}</div><div class="ped-sum-lbl">En rack</div></div>
       <div class="ped-sum-card"><div class="ped-sum-val" style="color:#856404">${conBloque.length}</div><div class="ped-sum-lbl">En bloques</div></div>
       <div class="ped-sum-card"><div class="ped-sum-val">${totalUnid.toLocaleString('es-AR')}</div><div class="ped-sum-lbl">Unidades</div></div>
+      ${volumenPedido>0?`<div class="ped-sum-card"><div class="ped-sum-val" style="color:#0071e3">${volumenPedido.toFixed(2)} m³</div><div class="ped-sum-lbl">Volumen pedido</div></div>`:''}
       <div class="ped-sum-card" id="ped-sum-preparados"><div class="ped-sum-val" style="color:#34c759">${preparadosCount}/${totalArts}</div><div class="ped-sum-lbl">Preparados</div></div>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
@@ -4574,7 +4652,7 @@ function renderPedido(conPuntera, conRack, conBloque, sinUbic, todos){
   `;
 
   // Store for export
-  window._pedidoActual = {puntera:conPuntera, rack:conRack, bloque:conBloque, sin:sinUbic, todos};
+  window._pedidoActual = {puntera:conPuntera, rack:conRack, bloque:conBloque, sin:sinUbic, todos, volumenPedido};
 
   // Add to cola de pedidos automatically
   agregarPedidoCola(window._pedidoActual);
@@ -5038,6 +5116,7 @@ function pedidoEnviarTransito(){
     tte: tte,
     nroContenedor: nroPed,
     destino: destino,
+    volumenPedido: window._pedidoActual.volumenPedido||0,
     fecha: ahora.toLocaleDateString('es-AR'),
     hora:  ahora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
     fechaISO: ahora.toISOString().split('T')[0],
@@ -5143,6 +5222,16 @@ function cydConfirmarSalidaDesdeTransito(id){
       '<textarea id="desp-obs" placeholder="Diferencias, demoras, novedades..." rows="2" style="width:100%;padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;outline:none;resize:none;box-sizing:border-box"></textarea>'+
     '</div>'+
 
+    (tr.volumenPedido ? (
+    '<div style="margin-bottom:12px;background:#f0f6ff;border-radius:8px;padding:8px 10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+        '<div style="font-size:11px;color:#86868b">📐 Volumen pedido</div>'+
+        '<div style="font-size:13px;font-weight:700;color:#0071e3">'+tr.volumenPedido.toFixed(2)+' m³</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#86868b;margin-bottom:3px">Volumen real (cargado en el camión)</div>'+
+      '<input id="desp-volumen-real" type="number" step="0.01" value="'+tr.volumenPedido.toFixed(2)+'" style="width:100%;padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box">'+
+    '</div>') : '')+
+
     '<div style="display:flex;gap:8px">'+
       '<button onclick="document.getElementById(\'cyd-modal-despacho-op\').remove()" style="flex:1;padding:10px;background:#f5f5f7;color:#1d1d1f;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer">Cancelar</button>'+
       '<button onclick="cydEjecutarDespacho(\''+id+'\')" style="flex:2;padding:10px;background:#d70015;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer">✅ Confirmar despacho</button>'+
@@ -5184,6 +5273,8 @@ function cydEjecutarDespacho(id){
   var fin         = (document.getElementById('desp-fin')||{}).value||'';
   var darsena     = (document.getElementById('desp-darsena')||{}).value||'';
   var obs         = (document.getElementById('desp-obs')||{}).value||'';
+  var volReal     = (document.getElementById('desp-volumen-real')||{}).value;
+  volReal = volReal!==undefined && volReal!=='' ? parseFloat(volReal) : null;
 
   var durMin = 0;
   if(inicio && fin){
@@ -5289,6 +5380,16 @@ function cydEjecutarDespacho(id){
     localStorage.setItem('wms_repo_pendiente', JSON.stringify(histRepo.slice(0,200)));
   }
 
+  // Registrar Volumen pedido vs Volumen real (si este tránsito traía volumen calculado)
+  if(tr.volumenPedido && volReal!==null && !isNaN(volReal)){
+    var histVol = JSON.parse(localStorage.getItem('wms_vol_hist')||'[]');
+    histVol.unshift({
+      fecha: fecha, hora: hora, destino: tr.destino||'', nroPed: tr.nroContenedor||'',
+      volumenPedido: tr.volumenPedido, volumenReal: volReal, diff: volReal-tr.volumenPedido
+    });
+    localStorage.setItem('wms_vol_hist', JSON.stringify(histVol.slice(0,100)));
+  }
+
   tr.estado = 'confirmado';
   tr.fechaConfirmacion = fecha;
   tr.horaConfirmacion  = hora;
@@ -5339,6 +5440,7 @@ function cydEjecutarDespacho(id){
   var msg = '✅ Despacho confirmado — Mapa de Racks actualizado';
   if(diferencias.length)  msg += ' · '+diferencias.length+' diferencias';
   if(repoSugerido.length) msg += ' · ⚠️ '+repoSugerido.length+' arts. para reponer';
+  if(tr.volumenPedido && volReal!==null && !isNaN(volReal) && Math.abs(volReal-tr.volumenPedido)>0.01) msg += ' · 📐 dif. volumen '+(volReal-tr.volumenPedido>0?'+':'')+(volReal-tr.volumenPedido).toFixed(2)+' m³';
   if(!huboSobranteDesp) showToast(msg);
 }
 
@@ -5984,6 +6086,70 @@ function limpiarDiferencias(){
   if(!confirm('¿Limpiar historial de diferencias?')) return;
   localStorage.removeItem('wms_dif');
   renderDiferencias();
+  showToast('🗑️ Historial limpiado');
+}
+
+// ── VOLUMEN — pedido vs real, un registro por despacho confirmado (ver
+// cydEjecutarDespacho, que arma tr.volumenPedido a partir de la columna
+// VOLUMEN del pedido pegado y pide "Volumen real" al confirmar)
+function renderVolumen(){
+  const hist = JSON.parse(localStorage.getItem('wms_vol_hist')||'[]');
+  const lista = document.getElementById('vol-lista');
+  if(!lista) return;
+  if(!hist.length){
+    lista.innerHTML = '<div class="diff-empty">Sin registros de volumen todavía</div>';
+    return;
+  }
+  const totalPed = hist.reduce(function(s,h){return s+(h.volumenPedido||0);},0);
+  const totalReal = hist.reduce(function(s,h){return s+(h.volumenReal||0);},0);
+  lista.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;background:#f0f6ff;border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#86868b">Total pedido</div>
+        <div style="font-size:18px;font-weight:700;color:#0071e3">${totalPed.toFixed(2)} m³</div>
+      </div>
+      <div style="flex:1;background:#f5f5f7;border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#86868b">Total real</div>
+        <div style="font-size:18px;font-weight:700">${totalReal.toFixed(2)} m³</div>
+      </div>
+      <div style="flex:1;background:${totalReal-totalPed<0?'#fdeaea':'#e8f8ee'};border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#86868b">Diferencia</div>
+        <div style="font-size:18px;font-weight:700;color:${totalReal-totalPed<0?'#d70015':'#248a3d'}">${(totalReal-totalPed>0?'+':'')}${(totalReal-totalPed).toFixed(2)} m³</div>
+      </div>
+    </div>
+    ${hist.map(function(h,i){
+      const diffColor = h.diff<0?'#d70015':(h.diff>0?'#248a3d':'#86868b');
+      return `<div class="diff-card">
+        <div class="diff-card-header">
+          <span class="diff-fecha">${h.fecha} ${h.hora}</span>
+          <span class="diff-cliente">${h.destino||'—'}${h.nroPed?' · '+h.nroPed:''}</span>
+        </div>
+        <div class="diff-row">
+          <div style="flex:1">
+            <div style="font-size:12px">Pedido: <strong>${(h.volumenPedido||0).toFixed(2)} m³</strong></div>
+            <div style="font-size:12px">Real: <strong>${(h.volumenReal||0).toFixed(2)} m³</strong></div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:14px;font-weight:700;color:${diffColor}">${(h.diff>0?'+':'')}${(h.diff||0).toFixed(2)} m³</div>
+            <button onclick="eliminarLineaVol(${i})" style="margin-top:4px;border:none;background:none;color:#d70015;font-size:11px;font-weight:600;cursor:pointer">🗑 Eliminar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function eliminarLineaVol(i){
+  const hist = JSON.parse(localStorage.getItem('wms_vol_hist')||'[]');
+  hist.splice(i,1);
+  localStorage.setItem('wms_vol_hist', JSON.stringify(hist));
+  renderVolumen();
+}
+
+function limpiarVolumenHist(){
+  if(!confirm('¿Limpiar historial de volumen?')) return;
+  localStorage.removeItem('wms_vol_hist');
+  renderVolumen();
   showToast('🗑️ Historial limpiado');
 }
 
@@ -7503,6 +7669,7 @@ function generarInforme(){
 <div class="nav-submenu" id="sub-control">
   <div class="nav-sub-item" id="sub-inv" onclick="navTo('inv')"><span class="nav-sub-icon">🔢</span><span class="nav-sub-label">Inventario</span></div>
   <div class="nav-sub-item" id="sub-dif" onclick="navTo('dif')"><span class="nav-sub-icon">📊</span><span class="nav-sub-label">Diferencias</span></div>
+  <div class="nav-sub-item" id="sub-vol" onclick="navTo('vol')"><span class="nav-sub-icon">📐</span><span class="nav-sub-label">Volumen</span></div>
   <div class="nav-sub-item" id="sub-dot" onclick="navTo('dot')"><span class="nav-sub-icon">📅</span><span class="nav-sub-label">DOTs</span></div>
   <div class="nav-sub-item" id="sub-pall" onclick="navTo('pall')"><span class="nav-sub-icon">📐</span><span class="nav-sub-label">Palletizado</span></div>
 </div>
@@ -9169,7 +9336,7 @@ function closeSubMenu(){
 }
 
 // === CONTRASEÑA (desactivada) ===
-const LIBRE = ['mapa','nave','stock','pedidos','repo','dot','dash','inv','dif','grupos','prod','cydesc','termometro','rot','pall'];
+const LIBRE = ['mapa','nave','stock','pedidos','repo','dot','dash','inv','dif','vol','grupos','prod','cydesc','termometro','rot','pall'];
 const PWD = 'deposito';
 let _pendingView = null;
 let _pwaUnlocked = true;
@@ -9260,6 +9427,7 @@ function navTo(view){
   if(view==='repo') renderReposicion();
   if(view==='inv') renderInventario();
   if(view==='dif') renderDiferencias();
+  if(view==='vol') renderVolumen();
   if(view==='grupos'){ renderGrupos(); renderGruposHoy(); }
   if(view==='prod') renderProductividad();
   if(view==='dot') renderDOTs();
@@ -11116,6 +11284,7 @@ if('serviceWorker' in navigator){
 <div class="nav-submenu" id="sub-control">
   <div class="nav-sub-item" id="sub-inv" onclick="navTo('inv')"><span class="nav-sub-icon">🔢</span><span class="nav-sub-label">Inventario</span></div>
   <div class="nav-sub-item" id="sub-dif" onclick="navTo('dif')"><span class="nav-sub-icon">📊</span><span class="nav-sub-label">Diferencias</span></div>
+  <div class="nav-sub-item" id="sub-vol" onclick="navTo('vol')"><span class="nav-sub-icon">📐</span><span class="nav-sub-label">Volumen</span></div>
   <div class="nav-sub-item" id="sub-dot" onclick="navTo('dot')"><span class="nav-sub-icon">📅</span><span class="nav-sub-label">DOTs</span></div>
   <div class="nav-sub-item" id="sub-pall" onclick="navTo('pall')"><span class="nav-sub-icon">📐</span><span class="nav-sub-label">Palletizado</span></div>
 </div>
