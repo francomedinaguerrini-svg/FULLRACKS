@@ -5066,6 +5066,8 @@ function pedidoEnviarTransito(){
 
   var tte     = (document.getElementById('ped-tte')||{}).value||'';
   var destino = (document.getElementById('ped-destino')||{}).value||'';
+  var darsena = (document.getElementById('ped-darsena')||{}).value||'';
+  var preparador = (document.getElementById('ped-preparador')||{}).value||'';
   var nroPed  = (document.getElementById('ped-nropedido')||{}).value||generarNroPedido();
   var modo    = typeof _modoPedido!=='undefined' ? _modoPedido : 'pedidos';
 
@@ -5141,6 +5143,8 @@ function pedidoEnviarTransito(){
     tte: tte,
     nroContenedor: nroPed,
     destino: destino,
+    darsena: darsena,
+    preparador: preparador,
     volumenPedido: window._pedidoActual.volumenPedido||0,
     fecha: ahora.toLocaleDateString('es-AR'),
     hora:  ahora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
@@ -5780,15 +5784,25 @@ function cydPlanillaPicking(id){
     'tr:nth-child(even) td{background:#f8f8f8}'+
     'tfoot td{font-weight:700;border-top:2px solid #1d1d1f;background:#f0f0f0}'+
     '.pie{margin-top:8px;font-size:8.5px;color:#999;border-top:1px solid #eee;padding-top:4px}'+
+    '.horario-box{border:1.5px solid #1d1d1f;border-radius:5px;padding:5px 10px;margin:6px 0;display:flex;align-items:center;gap:18px;font-size:9.5px}'+
+    '.horario-campo{display:flex;align-items:center;gap:6px}'+
+    '.horario-linea{display:inline-block;min-width:70px;border-bottom:1px solid #666;height:12px}'+
     '</style></head><body>'+
     '<h2>📋 Planilla de picking — '+tr.tipoIcon+' '+(tr.destino||tr.tipoLabel)+'</h2>'+
     '<div class="meta">'+
       '<span>Nro.: <b>'+tr.nroContenedor+'</b></span>'+
       '<span>TTE: <b>'+(tr.tte||'—')+'</b></span>'+
+      '<span>Dársena: <b>'+(tr.darsena||'—')+'</b></span>'+
+      '<span>Preparador: <b>'+(tr.preparador||'—')+'</b></span>'+
       '<span>Fecha: <b>'+tr.fecha+' '+tr.hora+'</b></span>'+
       '<span>Arts: <b>'+tr.items.length+'</b></span>'+
       '<span>Unidades: <b>'+totalCant+'</b></span>'+
       '<span style="margin-left:auto;color:#bbb">ID: '+tr.id+'</span>'+
+    '</div>'+
+    '<div class="horario-box">'+
+      '<b>🕐 Horario de armado</b>'+
+      '<span class="horario-campo">Inicio: <span class="horario-linea"></span></span>'+
+      '<span class="horario-campo">Fin: <span class="horario-linea"></span></span>'+
     '</div>'+
     (enPuntera.length?
       '<div class="sec sec-puntera">🔚 PUNTERA — preparar primero ('+enPuntera.length+' arts)</div>'+
