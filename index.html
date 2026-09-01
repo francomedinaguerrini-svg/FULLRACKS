@@ -2197,6 +2197,10 @@ function searchFromHistory(q){
 var _DATA_BASE = {};
 (function(){ DATA.forEach(function(r){ _DATA_BASE[r.art] = r.stock||0; }); })();
 
+// Índice del bloque base (valor del Excel, sin movimientos/reasignaciones del día)
+var _DATA_BASE_BLOQUE = {};
+(function(){ DATA.forEach(function(r){ _DATA_BASE_BLOQUE[r.art] = r.bloque||''; }); })();
+
 // ======= PERSISTENCIA DE DATA — movimientos del día =======
 (function(){
   var movs = JSON.parse(localStorage.getItem('wms_movimientos')||'{}');
@@ -2206,6 +2210,17 @@ var _DATA_BASE = {};
       r.stock = Math.max(0, (r.stock||0) + movs[r.art]);
       r.pall = Math.floor(r.stock / (r.max_pos||32));
       recalcularCond(r);
+    }
+  });
+})();
+
+// ======= PERSISTENCIA DE DATA — reasignaciones de bloque =======
+(function(){
+  var blq = JSON.parse(localStorage.getItem('wms_bloque_overrides')||'{}');
+  // Aplicar el último bloque guardado encima del bloque base del Excel
+  DATA.forEach(function(r){
+    if(blq[r.art] !== undefined){
+      r.bloque = blq[r.art];
     }
   });
 })();
@@ -2220,6 +2235,16 @@ function saveDataStock(){
     else delete movs[r.art];
   });
   localStorage.setItem('wms_movimientos', JSON.stringify(movs));
+
+  // Guardar bloque actual si difiere del bloque base del Excel
+  var blq = JSON.parse(localStorage.getItem('wms_bloque_overrides')||'{}');
+  DATA.forEach(function(r){
+    var baseBloque = _DATA_BASE_BLOQUE[r.art] || '';
+    var actual = r.bloque || '';
+    if(actual !== baseBloque) blq[r.art] = actual;
+    else delete blq[r.art];
+  });
+  localStorage.setItem('wms_bloque_overrides', JSON.stringify(blq));
 }
 
 function resetDataStock(){
