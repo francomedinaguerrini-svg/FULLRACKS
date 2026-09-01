@@ -2224,12 +2224,20 @@ var _DATA_BASE_BLOQUE = {};
 // ======= PERSISTENCIA DE DATA — reasignaciones de bloque =======
 (function(){
   var blq = JSON.parse(localStorage.getItem('wms_bloque_overrides')||'{}');
-  // Aplicar el último bloque guardado encima del bloque base del Excel
+  var huboMinuscula = false;
+  // Aplicar el último bloque guardado encima del bloque base del Excel.
+  // Normalizado a mayúsculas: los nombres de bloque siempre se manejan en
+  // mayúscula ("4S","9S"...) — un destino guardado en minúscula ("4s") queda
+  // invisible en el plano porque nunca coincide con esas claves fijas.
   DATA.forEach(function(r){
     if(blq[r.art] !== undefined){
-      r.bloque = blq[r.art];
+      var val = blq[r.art];
+      var normalizado = val.toUpperCase();
+      if(normalizado !== val){ blq[r.art] = normalizado; huboMinuscula = true; }
+      r.bloque = normalizado;
     }
   });
+  if(huboMinuscula) localStorage.setItem('wms_bloque_overrides', JSON.stringify(blq));
 })();
 
 function saveDataStock(){
@@ -10955,8 +10963,8 @@ function renderNave(){
 // entero de un bloque a otro (ej: "AT52 del 3 al 4").
 function moverDisenoEntreBloques(){
   var diseno = (document.getElementById('nave-mover-diseno').value||'').trim();
-  var origen = (document.getElementById('nave-mover-origen').value||'').trim();
-  var destino = (document.getElementById('nave-mover-destino').value||'').trim();
+  var origen = (document.getElementById('nave-mover-origen').value||'').trim().toUpperCase();
+  var destino = (document.getElementById('nave-mover-destino').value||'').trim().toUpperCase();
   if(!diseno || !origen || !destino){ showToast('❌ Completá diseño, bloque origen y bloque destino'); return; }
   if(origen.toUpperCase()===destino.toUpperCase()){ showToast('El origen y el destino son el mismo bloque'); return; }
 
@@ -10986,7 +10994,7 @@ function moverDisenoEntreBloques(){
 // para cuando no se quiere mover el diseño entero, solo esa medida/código.
 function moverArticuloEntreBloques(){
   var codigo = (document.getElementById('nave-mover-articulo').value||'').trim();
-  var destino = (document.getElementById('nave-mover-articulo-destino').value||'').trim();
+  var destino = (document.getElementById('nave-mover-articulo-destino').value||'').trim().toUpperCase();
   if(!codigo || !destino){ showToast('❌ Completá código de artículo y bloque destino'); return; }
 
   var art = DATA.find(function(r){ return String(r.art).toUpperCase()===codigo.toUpperCase(); });
@@ -11265,7 +11273,7 @@ function moverArticuloBloque(art, bloqueActual){
   if(!da){ showToast('❌ Artículo no encontrado'); return; }
   var nuevo = prompt('Mover "'+da.med+' — '+da.diseno+'" — hoy está en bloque "'+bloqueActual+'". ¿A qué bloque lo movés?', bloqueActual);
   if(nuevo===null) return; // canceló
-  nuevo = nuevo.trim();
+  nuevo = nuevo.trim().toUpperCase();
   if(!nuevo){ showToast('❌ Bloque vacío — no se movió'); return; }
   if(nuevo===bloqueActual){ showToast('Sigue en el mismo bloque'); return; }
   da.bloque = nuevo;
