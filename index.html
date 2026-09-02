@@ -11959,14 +11959,33 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
     var todasPos = posAsign.concat(nuevasPos);
     todasPos.forEach(function(p){loteUsadas.add(p.id);});
     var mejorPos = todasPos[0];
-    var vaciaLabel = mejorPos.vacia ? ' ← POSICIÓN VACÍA (prioridad)' : '';
+    // Solo se muestran las posiciones que requieren una acción: las nuevas
+    // a abrir, o las que están vacías y se van a reutilizar. Las que el
+    // artículo ya ocupa (con stock propio) no se listan — no hay nada que
+    // decidir ahí, ya se sabe que se sigue cargando en su lugar de siempre.
+    // `pos` sigue llevando TODAS las posiciones (incluidas las ya ocupadas
+    // por el propio artículo) — este campo se usa para escribir de verdad
+    // en el Mapa de Racks al confirmar la recepción del tránsito, así que
+    // no puede perder ninguna posición o esas unidades no se acreditarían.
     var posStr = todasPos.map(function(p){return p.id+(p.nueva?'🆕':'');}).join(', ');
+    // `detalle` es el texto que se ve/imprime (planilla, UI) — ahí sí se
+    // ocultan las posiciones que el artículo ya ocupa con su propio stock,
+    // porque no hay nada que decidir ahí: ya se sabe que se sigue cargando
+    // en su lugar de siempre. Solo se muestran las que requieren acción:
+    // las nuevas a abrir, o las vacías que se van a reutilizar.
+    var posAMostrar = todasPos.filter(function(p){return p.nueva || p.vacia;});
+    var huboOcupadas = todasPos.some(function(p){return !p.nueva && !p.vacia;});
+    var posStrMostrar = posAMostrar.map(function(p){return p.id+(p.nueva?'🆕':'');}).join(', ');
     var extraTxt = nuevasPos.length ? (' — '+pallNecesarios+' pallet(s), abrir '+nuevasPos.length+' posición(es) nueva(s)') : '';
     var faltanAviso = (faltanPos>0 && nuevasPos.length<faltanPos) ? ' (⚠️ faltan '+(faltanPos-nuevasPos.length)+' posición(es) más, rack casi lleno)' : '';
+    var ocupadaNota = (huboOcupadas && posAMostrar.length) ? ' (sigue sumando además en su posición actual)' : '';
+    var detalleTxt = posAMostrar.length
+      ? 'Rack: '+posStrMostrar+extraTxt+faltanAviso+ocupadaNota
+      : 'Rack: mantiene posición actual';
     return {
       tipo:    'rack',
       pos:     posStr,
-      detalle: 'Rack: '+posStr+vaciaLabel+extraTxt+faltanAviso,
+      detalle: detalleTxt,
       pallets: pallFuturo.toFixed(1),
       exacto:  faltanPos<=0,
       posVacia: mejorPos.vacia,
