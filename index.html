@@ -11960,7 +11960,7 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
     todasPos.forEach(function(p){loteUsadas.add(p.id);});
     var mejorPos = todasPos[0];
     var vaciaLabel = mejorPos.vacia ? ' ← POSICIÓN VACÍA (prioridad)' : '';
-    var posStr = todasPos.map(function(p){return p.id+(p.vacia?'★':(p.nueva?'🆕':''));}).join(', ');
+    var posStr = todasPos.map(function(p){return p.id+(p.nueva?'🆕':'');}).join(', ');
     var extraTxt = nuevasPos.length ? (' — '+pallNecesarios+' pallet(s), abrir '+nuevasPos.length+' posición(es) nueva(s)') : '';
     var faltanAviso = (faltanPos>0 && nuevasPos.length<faltanPos) ? ' (⚠️ faltan '+(faltanPos-nuevasPos.length)+' posición(es) más, rack casi lleno)' : '';
     return {
@@ -12026,7 +12026,7 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
           for(var m=1; m<=f.modulos && posiciones.length<pallNecesarios; m++){
             var pid = f.id+'-N'+nv+'-P'+(m<10?'0'+m:''+m);
             if(!ocupadas.has(pid) && !yaElegidas.has(pid) && !loteUsadas.has(pid)){
-              posiciones.push({id:pid, vacia:false});
+              posiciones.push({id:pid, vacia:false, nueva:true});
               yaElegidas.add(pid);
             }
           }
@@ -12036,7 +12036,7 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
 
     if(posiciones.length){
       posiciones.forEach(function(p){loteUsadas.add(p.id);});
-      var posStr2 = posiciones.map(function(p){return p.id+(p.vacia?'★':'');}).join(', ');
+      var posStr2 = posiciones.map(function(p){return p.id+(p.nueva?'🆕':'');}).join(', ');
       var faltan = pallNecesarios - posiciones.length;
       return {
         tipo:    'rack',
