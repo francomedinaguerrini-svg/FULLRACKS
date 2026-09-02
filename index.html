@@ -11878,7 +11878,32 @@ function cydSetPosConfirmadaSalida(id, idx, value){
   transitoSave(lista);
 }
 
-function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
+// Posiciones que YA quedaron sugeridas para este mismo artículo en OTRO
+// tránsito todavía pendiente de confirmar (estado 'transito') — se leen
+// acá antes de sugerir, porque cargar/descargar tránsitos no toca el Mapa
+// de Racks hasta que se confirma, así que dos tránsitos pendientes del
+// mismo artículo no se enteran uno del otro salvo que se chequee esto.
+// excludeId sirve para no comparar un tránsito contra sí mismo cuando se
+// recalcula su propia sugerencia (ej: al reimprimir su planilla).
+function transitoPosSugeridasPendientes(artId, excludeId){
+  var set = new Set();
+  transitoGetAll().forEach(function(t){
+    if(t.estado!=='transito') return;
+    if(excludeId && t.id===excludeId) return;
+    (t.items||[]).forEach(function(it){
+      if(it.art!==artId) return;
+      var sug = it.sugerencia;
+      if(!sug || (sug.tipo!=='rack' && sug.tipo!=='rack_lleno')) return;
+      String(sug.pos||'').split(',').forEach(function(p){
+        p = p.replace(/[★🆕]/g,'').trim();
+        if(p) set.add(p);
+      });
+    });
+  });
+  return set;
+}
+
+function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas, excludeTransitoId){
   // loteUsadas: Set compartido entre TODAS las filas de un mismo lote
   // (planilla/tránsito) — evita que dos artículos distintos del mismo
   // lote reciban la misma posición vacía o libre como sugerencia, ya que
@@ -11887,6 +11912,11 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
   if(!loteUsadas) loteUsadas = new Set();
   var da = DATA.find(function(r){return r.art===artId;});
   if(!da) return {tipo:'desconocido', pos:'—', detalle:'Art no en DATA'};
+
+  // Posiciones que otro tránsito pendiente (sin confirmar) ya se reservó
+  // como sugerencia para este mismo artículo — no se vuelven a ofrecer
+  // como "vacía a reutilizar" ni como "posición nueva".
+  var pendientesOtro = transitoPosSugeridasPendientes(artId, excludeTransitoId);
 
   var stockFuturo = (da.stock||0) + cantEntrada;
   var mp = da.max_pos||32;
@@ -11937,6 +11967,7 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
     if(faltanPos > 0){
       var nivelIdeal = rot<=0?4: rot<1.25?3: rot<2.5?2:1;
       var ocupadas = new Set(Object.keys(ASIGN));
+      pendientesOtro.forEach(function(pid){ocupadas.add(pid);});
       var yaElegidas = new Set(posAsign.map(function(p){return p.id;}));
       var ordenNiveles = [nivelIdeal, nivelIdeal===4?3:4, 2, 1];
       ordenNiveles = ordenNiveles.filter(function(v,i,a){return a.indexOf(v)===i;});
@@ -12026,6 +12057,7 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
       if(!v||!v.art) return;
       if((v.unidades||0) > 0) return;
       if(loteUsadas.has(posId)) return;
+      if(pendientesOtro.has(posId)) return;
       var nivel = parseInt((posId.split('-')[1]||'N4').replace('N',''))||4;
       if(nivel===nivelIdeal) posiciones.push({id:posId, vacia:true});
     });
@@ -12034,6 +12066,7 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
     // los pallets necesarios, mismo orden de prioridad de niveles que antes
     if(posiciones.length < pallNecesarios){
       var ocupadas = new Set(Object.keys(ASIGN));
+      pendientesOtro.forEach(function(pid){ocupadas.add(pid);});
       var yaElegidas = new Set(posiciones.map(function(p){return p.id;}));
       var ordenNiveles = [nivelIdeal, nivelIdeal===4?3:4, 2, 1];
       ordenNiveles = ordenNiveles.filter(function(v,i,a){return a.indexOf(v)===i;});
@@ -12086,8 +12119,8 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas){
 // Premisa: un artículo no puede tener stock físico en dos lugares a la vez —
 // si ya está en una puntera o en el rack, y el destino sugerido termina siendo
 // otro lugar, hay que avisar para unificar en vez de dejarlo repartido.
-function transitoPosicionSugerida(artId, cantEntrada, loteUsadas){
-  var res = _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas);
+function transitoPosicionSugerida(artId, cantEntrada, loteUsadas, excludeTransitoId){
+  var res = _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas, excludeTransitoId);
   var da = DATA.find(function(r){return r.art===artId;});
   var stockViejo = da ? (da.stock||0) : 0;
 
@@ -12426,12 +12459,15 @@ function cydExportarPlanilla(id){
 
   var loteUsadas = new Set();
   var rows = tr.items.map(function(r){
-    // Calcular sugerencia en tiempo real para garantizar datos frescos
+    // Calcular sugerencia en tiempo real para garantizar datos frescos.
+    // excludeTransitoId=tr.id: no comparar este tránsito contra sí mismo
+    // al leer los tránsitos pendientes (sí contra CUALQUIER OTRO tránsito
+    // pendiente del mismo artículo, para no repetir posición).
     var sug;
     if(esCarga){
-      sug = transitoPosicionSugerida(r.art, r.cant, loteUsadas);
+      sug = transitoPosicionSugerida(r.art, r.cant, loteUsadas, tr.id);
     } else {
-      sug = transitoPosicionSugerida(r.art, r.cant, loteUsadas);
+      sug = transitoPosicionSugerida(r.art, r.cant, loteUsadas, tr.id);
     }
 
     var stockNuevo = (r.stockActual||0) + r.cant;
