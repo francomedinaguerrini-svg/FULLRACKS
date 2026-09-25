@@ -4345,10 +4345,29 @@ function procesarPaste(){
     } else {
       art = parseInt(String(cols[0]).replace(/,/g,''));
       if(!art) return;
+
+      // Formato Drive con columnas ocultas incluidas en el copiado (sin fila
+      // de encabezado pegada): entre el domicilio de Origen/Destino (que
+      // varía en cantidad de celdas de pedido a pedido) y los datos finales
+      // hay una columna "espejo" que repite el propio código de Artículo —
+      // sirve de ancla estable. A partir de esa ancla el orden es siempre:
+      // [ancla] X1 X2 Entrega Entrega Entrega VolUnit VolTotal VIAJE
+      // TRANSPORTE CHOFER TRACTOR/SEMI
+      let marker = -1;
+      for(let i=9;i<cols.length;i++){
+        const v = parseInt(String(cols[i]||'').replace(/,/g,''));
+        if(v && v===art){ marker=i; break; }
+      }
+
       // Detectar formato automáticamente (pegados viejos, sin encabezado)
       // Formato A (pedido original): 77 cols, cant en col 63
       // Formato B (planilla control): ~45 cols, cant en col 37
-      if(cols.length >= 70){
+      if(marker>=0 && cols.length>=marker+9){
+        cant = Math.round(cleanNum(cols[marker+3]));
+        volumen = cleanVol(cols[marker+6]);
+        nroPed = String(cols[marker+8]||'').trim();
+        cliente = String(cols[8]||'').trim();
+      } else if(cols.length >= 70){
         cant = Math.round(cleanNum(cols[63]||0));
         cliente = String(cols[71]||'').trim();
         nroPed = String(cols[70]||'').trim();
