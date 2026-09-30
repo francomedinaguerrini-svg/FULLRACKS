@@ -4346,26 +4346,33 @@ function procesarPaste(){
       art = parseInt(String(cols[0]).replace(/,/g,''));
       if(!art) return;
 
-      // Formato Drive con columnas ocultas incluidas en el copiado (sin fila
-      // de encabezado pegada): entre el domicilio de Origen/Destino (que
-      // varía en cantidad de celdas de pedido a pedido) y los datos finales
-      // hay una columna "espejo" que repite el propio código de Artículo —
-      // sirve de ancla estable. A partir de esa ancla el orden es siempre:
-      // [ancla] X1 X2 Entrega Entrega Entrega VolUnit VolTotal VIAJE
-      // TRANSPORTE CHOFER TRACTOR/SEMI
-      let marker = -1;
-      for(let i=9;i<cols.length;i++){
-        const v = parseInt(String(cols[i]||'').replace(/,/g,''));
-        if(v && v===art){ marker=i; break; }
+      // Formato Drive sin fila de encabezado pegada (con o sin columnas
+      // ocultas incluidas en el copiado — la cantidad de columnas del medio
+      // varía de pedido a pedido y no se puede confiar en una posición fija).
+      // Ancla GENÉRICA que se repite en todos los formatos vistos hasta
+      // ahora: el par de columnas de Volumen — dos celdas ADYACENTES,
+      // escritas con coma decimal (ej. "6,9" y "6,90", o "0,530" y "0,53"),
+      // con valores prácticamente iguales entre sí (unitario vs total,
+      // redondeados distinto). La Cantidad/Entrega SIEMPRE está en la
+      // celda inmediatamente anterior a ese par, y el VIAJE en la celda
+      // inmediatamente posterior — sin importar cuántas columnas ocultas
+      // (domicilio, suc, factura, etc.) haya antes de esa ancla.
+      let volIdx = -1;
+      for(let i=9;i<cols.length-1;i++){
+        const a = cols[i], b = cols[i+1];
+        if(a && b && a.indexOf(',')>=0 && b.indexOf(',')>=0){
+          const va = cleanVol(a), vb = cleanVol(b);
+          if(va>0 && Math.abs(va-vb) < Math.max(0.02, va*0.05)){ volIdx=i; break; }
+        }
       }
 
       // Detectar formato automáticamente (pegados viejos, sin encabezado)
       // Formato A (pedido original): 77 cols, cant en col 63
       // Formato B (planilla control): ~45 cols, cant en col 37
-      if(marker>=0 && cols.length>=marker+9){
-        cant = Math.round(cleanNum(cols[marker+3]));
-        volumen = cleanVol(cols[marker+6]);
-        nroPed = String(cols[marker+8]||'').trim();
+      if(volIdx>=2){
+        cant = Math.round(cleanNum(cols[volIdx-1]));
+        volumen = cleanVol(cols[volIdx+1]);
+        nroPed = String(cols[volIdx+2]||'').trim();
         cliente = String(cols[8]||'').trim();
       } else if(cols.length >= 70){
         cant = Math.round(cleanNum(cols[63]||0));
