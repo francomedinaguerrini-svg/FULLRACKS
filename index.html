@@ -4265,7 +4265,15 @@ function procesarPaste(){
   let volumenTotal = 0;
 
   function cleanNum(v){ return parseFloat(String(v||'0').replace(/[$,]/g,'').trim())||0; }
-  function cleanVol(v){ return parseFloat(String(v||'0').replace(/\./g,'').replace(',','.').trim())||0; } // "0,42" (coma decimal) → 0.42
+  // Detecta automáticamente el separador decimal: si tiene coma, es formato
+  // es-AR ("0,530" → 0.53, el punto sería de miles); si no tiene coma pero
+  // sí punto, el punto YA es el separador decimal ("10.50" → 10.5, formato
+  // que también aparece en algunos pedidos)
+  function cleanVol(v){
+    v = String(v||'0').trim();
+    if(v.indexOf(',')>=0){ return parseFloat(v.replace(/\./g,'').replace(',','.'))||0; }
+    return parseFloat(v)||0;
+  }
 
   // Formato NUEVO: primera línea es un encabezado real (Articulo, Proveedor,
   // Diametro, Seccion, Tipo, Llanta, Diseno, ..., Entrega, VOLUMEN, VIAJE...)
@@ -4345,27 +4353,37 @@ function procesarPaste(){
       // Cantidad/Volumen/Viaje: ancla GENÉRICA que se repite en todos los
       // formatos vistos hasta ahora, en vez de una posición fija (la
       // cantidad de columnas del medio varía de pedido a pedido y no se
-      // puede confiar en eso). El par de columnas de Volumen — dos celdas
-      // ADYACENTES, escritas con coma decimal (ej. "6,9" y "6,90", o
-      // "0,530" y "0,53"), con valores prácticamente iguales entre sí
-      // (unitario vs total, redondeados distinto) — sirve de ancla: la
-      // Cantidad/Entrega SIEMPRE está en la celda inmediatamente anterior
-      // a ese par, y el VIAJE en la celda inmediatamente posterior — sin
-      // importar cuántas columnas ocultas (domicilio, suc, factura, etc.)
-      // haya antes, ni cuántos campos queden después del VIAJE.
+      // puede confiar en eso). Buscamos la celda de Volumen — un número
+      // "decimal puro" (con coma O con punto, detectado por separado en
+      // cleanVol) — escaneando DESDE EL FINAL de la fila hacia el
+      // principio, así nunca se confunde con la Factura (que a veces
+      // también trae formato "21.905" con punto de miles, pero está mucho
+      // antes en la fila, cerca del Cliente). Si la celda inmediata
+      // anterior a la encontrada TAMBIÉN es decimal y el valor es
+      // prácticamente igual, es el par unitario/total (ej. "0,530" y
+      // "0,53") y se toma como una sola ancla. La Cantidad/Entrega es la
+      // celda no vacía inmediatamente anterior a esa ancla, y el VIAJE la
+      // celda no vacía inmediatamente posterior — sin importar cuántas
+      // columnas ocultas haya en el medio ni qué venga después del VIAJE.
+      const DEC_RE = /^\d+[.,]\d+$/;
       let volIdx = -1;
-      for(let i=9;i<cols.length-1;i++){
-        const a = cols[i], b = cols[i+1];
-        if(a && b && a.indexOf(',')>=0 && b.indexOf(',')>=0){
-          const va = cleanVol(a), vb = cleanVol(b);
-          if(va>0 && Math.abs(va-vb) < Math.max(0.02, va*0.05)){ volIdx=i; break; }
-        }
+      for(let i=cols.length-1;i>=9;i--){
+        if(DEC_RE.test(String(cols[i]||'').trim())){ volIdx=i; break; }
       }
 
-      if(volIdx>=2){
-        cant = Math.round(cleanNum(cols[volIdx-1]));
-        volumen = cleanVol(cols[volIdx+1]);
-        nroPed = String(cols[volIdx+2]||'').trim();
+      if(volIdx>=9){
+        let volIdxIni = volIdx;
+        if(volIdx>9 && DEC_RE.test(String(cols[volIdx-1]||'').trim())){
+          const va = cleanVol(cols[volIdx-1]), vb = cleanVol(cols[volIdx]);
+          if(Math.abs(va-vb) < Math.max(0.02, vb*0.05)){ volIdxIni = volIdx-1; }
+        }
+        let j = volIdxIni-1;
+        while(j>=0 && !String(cols[j]||'').trim()) j--;
+        cant = j>=0 ? Math.round(cleanNum(cols[j])) : 0;
+        volumen = cleanVol(cols[volIdx]);
+        let k = volIdx+1;
+        while(k<cols.length && !String(cols[k]||'').trim()) k++;
+        nroPed = k<cols.length ? String(cols[k]||'').trim() : '';
       } else if(reconstruido){
         // Fallback: formato viejo reconstruido por VIAJE, sin par de
         // Volumen detectable — posiciones fijas relativas al final
