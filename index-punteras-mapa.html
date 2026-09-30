@@ -4327,9 +4327,11 @@ function procesarPaste(){
       llan = String(cols[headerMap.llan]||'').trim();
       diseno = String(cols[headerMap.diseno]||'').trim();
       volumen = headerMap.volumen!==undefined ? cleanVol(cols[headerMap.volumen]) : 0;
-    } else if(reconstruido){
-      // Reconstruido por VIAJE: inicio por posición absoluta, final por
-      // posición relativa al final (ver comentario arriba)
+    } else {
+      // Sin fila de encabezado pegada (reconstruido por VIAJE, o tal cual
+      // vino — da lo mismo, ambos casos entran acá). Campos del INICIO por
+      // posición absoluta (Articulo, Proveedor, Diametro, Seccion, Tipo,
+      // Llanta, Diseno, Nombre) — casi nunca vienen vacíos.
       art = parseInt(String(cols[0]).replace(/,/g,''));
       if(!art) return;
       prov = String(cols[1]||'').trim();
@@ -4339,24 +4341,18 @@ function procesarPaste(){
       llan = String(cols[5]||'').trim();
       diseno = String(cols[6]||'').trim();
       cliente = String(cols[8]||'').trim();
-      cant = Math.round(cleanNum(cols[cols.length-6]));
-      volumen = cleanVol(cols[cols.length-3]);
-      nroPed = String(cols[cols.length-1]||'').trim();
-    } else {
-      art = parseInt(String(cols[0]).replace(/,/g,''));
-      if(!art) return;
 
-      // Formato Drive sin fila de encabezado pegada (con o sin columnas
-      // ocultas incluidas en el copiado — la cantidad de columnas del medio
-      // varía de pedido a pedido y no se puede confiar en una posición fija).
-      // Ancla GENÉRICA que se repite en todos los formatos vistos hasta
-      // ahora: el par de columnas de Volumen — dos celdas ADYACENTES,
-      // escritas con coma decimal (ej. "6,9" y "6,90", o "0,530" y "0,53"),
-      // con valores prácticamente iguales entre sí (unitario vs total,
-      // redondeados distinto). La Cantidad/Entrega SIEMPRE está en la
-      // celda inmediatamente anterior a ese par, y el VIAJE en la celda
-      // inmediatamente posterior — sin importar cuántas columnas ocultas
-      // (domicilio, suc, factura, etc.) haya antes de esa ancla.
+      // Cantidad/Volumen/Viaje: ancla GENÉRICA que se repite en todos los
+      // formatos vistos hasta ahora, en vez de una posición fija (la
+      // cantidad de columnas del medio varía de pedido a pedido y no se
+      // puede confiar en eso). El par de columnas de Volumen — dos celdas
+      // ADYACENTES, escritas con coma decimal (ej. "6,9" y "6,90", o
+      // "0,530" y "0,53"), con valores prácticamente iguales entre sí
+      // (unitario vs total, redondeados distinto) — sirve de ancla: la
+      // Cantidad/Entrega SIEMPRE está en la celda inmediatamente anterior
+      // a ese par, y el VIAJE en la celda inmediatamente posterior — sin
+      // importar cuántas columnas ocultas (domicilio, suc, factura, etc.)
+      // haya antes, ni cuántos campos queden después del VIAJE.
       let volIdx = -1;
       for(let i=9;i<cols.length-1;i++){
         const a = cols[i], b = cols[i+1];
@@ -4366,29 +4362,27 @@ function procesarPaste(){
         }
       }
 
-      // Detectar formato automáticamente (pegados viejos, sin encabezado)
-      // Formato A (pedido original): 77 cols, cant en col 63
-      // Formato B (planilla control): ~45 cols, cant en col 37
       if(volIdx>=2){
         cant = Math.round(cleanNum(cols[volIdx-1]));
         volumen = cleanVol(cols[volIdx+1]);
         nroPed = String(cols[volIdx+2]||'').trim();
-        cliente = String(cols[8]||'').trim();
+      } else if(reconstruido){
+        // Fallback: formato viejo reconstruido por VIAJE, sin par de
+        // Volumen detectable — posiciones fijas relativas al final
+        cant = Math.round(cleanNum(cols[cols.length-6]));
+        volumen = cleanVol(cols[cols.length-3]);
+        nroPed = String(cols[cols.length-1]||'').trim();
       } else if(cols.length >= 70){
+        // Fallback: Formato A viejo (pedido original), 77 cols, cant en col 63
         cant = Math.round(cleanNum(cols[63]||0));
         cliente = String(cols[71]||'').trim();
         nroPed = String(cols[70]||'').trim();
       } else {
+        // Fallback: Formato B viejo (planilla control), ~45 cols, cant en col 37
         cant = Math.round(cleanNum(cols[37]||cols[36]||0));
         cliente = String(cols[23]||'').trim();
         nroPed = String(cols[42]||'').trim();
       }
-      prov = String(cols[1]||'').trim();
-      diam = String(cols[2]||'').trim();
-      secc = String(cols[3]||'').trim();
-      tipo = String(cols[4]||'').trim();
-      llan = String(cols[5]||'').trim();
-      diseno = String(cols[6]||'').trim();
     }
 
     if(!cant) return;
