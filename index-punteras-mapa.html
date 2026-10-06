@@ -4263,6 +4263,7 @@ function procesarPaste(){
   const pedido = [];
   const seen = {};
   let volumenTotal = 0;
+  const lineasViaje = [], lineasCliente = [];
 
   function cleanNum(v){ return parseFloat(String(v||'0').replace(/[$,]/g,'').trim())||0; }
   // Detecta automáticamente el separador decimal: si tiene coma, es formato
@@ -4304,9 +4305,12 @@ function procesarPaste(){
     lineas.forEach(function(l){ tokens.push.apply(tokens, l.split('\t')); });
     const registros = [];
     let buf = [], sueltos = 0;
-    tokens.forEach(function(t){
+    // El registro cierra en el ÚLTIMO de una racha de VIAJEs seguidos —
+    // algunas planillas traen dos columnas con formato de viaje al final
+    // (ej. "061026-2.1  061026-2.3") y no hay que cortar en la primera.
+    tokens.forEach(function(t, idx){
       buf.push(t);
-      if(VIAJE_RE.test(String(t).trim())){ registros.push(buf); buf=[]; }
+      if(VIAJE_RE.test(String(t).trim()) && !VIAJE_RE.test(String(tokens[idx+1]||'').trim())){ registros.push(buf); buf=[]; }
     });
     sueltos = buf.length;
     if(registros.length){
@@ -4366,12 +4370,41 @@ function procesarPaste(){
       // celda no vacía inmediatamente posterior — sin importar cuántas
       // columnas ocultas haya en el medio ni qué venga después del VIAJE.
       const DEC_RE = /^\d+[.,]\d+$/;
+      const VIAJE_RE2 = /^\d{5,6}-\d+(\.\d+)?$/;
+      const esPlata = function(v){ return String(v||'').trim().charAt(0)==='$'; };
+      const vacia = function(v){ return !String(v||'').trim(); };
+
+      // Ancla PRINCIPAL: la racha de VIAJEs al final de la fila. El VIAJE
+      // es el último de la racha; el VOLUMEN es la primera celda con dato
+      // antes de la racha; la ENTREGA es la siguiente celda con dato hacia
+      // atrás, salteando las columnas de plata ($ valorizado / saldo).
+      // Así funciona aunque el volumen venga "0" o entero.
+      let finV = cols.length-1;
+      while(finV>=0 && vacia(cols[finV])) finV--;
+      let iniV = finV;
+      while(iniV-1>=0 && VIAJE_RE2.test(String(cols[iniV-1]||'').trim())) iniV--;
+      let anclaOK = false;
+      if(finV>9 && VIAJE_RE2.test(String(cols[finV]||'').trim())){
+        let v = iniV-1;
+        while(v>9 && (vacia(cols[v]) || esPlata(cols[v]))) v--;
+        let e = v-1;
+        while(e>9 && (vacia(cols[e]) || esPlata(cols[e]))) e--;
+        if(v>9 && e>9 && /^-?[\d.,]+$/.test(String(cols[v]).trim()) && /^-?[\d.,]+$/.test(String(cols[e]).trim())){
+          nroPed  = String(cols[finV]).trim();
+          volumen = cleanVol(cols[v]);
+          cant    = Math.round(cleanNum(cols[e]));
+          anclaOK = true;
+        }
+      }
+
       let volIdx = -1;
       for(let i=cols.length-1;i>=9;i--){
         if(DEC_RE.test(String(cols[i]||'').trim())){ volIdx=i; break; }
       }
 
-      if(volIdx>=9){
+      if(anclaOK){
+        // ya resuelto por la racha de VIAJE
+      } else if(volIdx>=9){
         let volIdxIni = volIdx;
         if(volIdx>9 && DEC_RE.test(String(cols[volIdx-1]||'').trim())){
           const va = cleanVol(cols[volIdx-1]), vb = cleanVol(cols[volIdx]);
@@ -4413,6 +4446,8 @@ function procesarPaste(){
     const stock = dataArt ? dataArt.stock : (headerMap ? 0 : Math.round(cleanNum(cols[11]||0)));
 
     volumenTotal += volumen;
+    lineasViaje.push(nroPed);
+    lineasCliente.push(cliente);
 
     // Capturar datos del rango (columnas que indican desde/hasta/descripción de rango)
     const rangoLinea = { cant, rangoDesc:'', volumen };
@@ -4454,18 +4489,30 @@ function procesarPaste(){
     return;
   }
 
+  // Si se pegaron VARIOS pedidos/viajes juntos, se concatenan en uno solo:
+  // las Entregas ya quedaron sumadas por artículo (seen[art]) y acá se
+  // juntan todos los VIAJES y CLIENTES distintos (sin repetir, en el orden
+  // en que aparecen) para el Nº Pedido y el Destino.
+  function unicos(lista){
+    const out = [];
+    lista.forEach(function(v){ v = String(v||'').trim(); if(v && out.indexOf(v)<0) out.push(v); });
+    return out;
+  }
+  const viajesTodos   = unicos(lineasViaje);
+  const clientesTodos = unicos(lineasCliente);
+
   // Auto-completar destino y nro pedido si están vacíos
   const dest = document.getElementById('ped-destino');
-  if(!dest.value && pedido[0].cliente) dest.value = pedido[0].cliente;
+  if(!dest.value && clientesTodos.length) dest.value = clientesTodos.join(' / ');
   const nroPedEl2 = document.getElementById('ped-nropedido');
-  if(nroPedEl2 && !nroPedEl2.value && pedido[0].nroPed) nroPedEl2.value = pedido[0].nroPed;
+  if(nroPedEl2 && !nroPedEl2.value && viajesTodos.length) nroPedEl2.value = viajesTodos.join(' + ');
 
   // Auto-generar nro pedido
   const nroPedEl = document.getElementById('ped-nropedido');
   if(nroPedEl && !nroPedEl.value) nroPedEl.value = generarNroPedido();
   window._volumenPedidoActual = volumenTotal;
   procesarPedido(pedido);
-  showToast('✅ '+pedido.length+' artículos procesados'+(volumenTotal>0?' · 📐 '+volumenTotal.toFixed(2)+' m³':''));
+  showToast('✅ '+pedido.length+' artículos procesados'+(viajesTodos.length>1?' · '+viajesTodos.length+' viajes concatenados':'')+(volumenTotal>0?' · 📐 '+volumenTotal.toFixed(2)+' m³':''));
 }
 
 let _modoPedido = 'pedidos';
