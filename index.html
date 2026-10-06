@@ -607,6 +607,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
     <div class="tab" id="maintab-mapa" onclick="switchTab('mapa',this)">🗺️ Mapa Racks</div>
     <div class="tab" id="maintab-cydesc" onclick="switchTab('cydesc',this)">🚚 Carga/Desc.</div>
     <div class="tab" id="maintab-prod" onclick="switchTab('prod',this)">⚡ Productividad</div>
+    <div class="tab" id="maintab-scan" onclick="switchTab('scan',this)">📷 Escanear</div>
     <button class="tab-more-btn" id="tab-more-btn" onclick="toggleTabMore()">▾ Más</button>
   </div>
   <div class="tab-bar-row2" id="tab-bar-row2">
@@ -1132,6 +1133,48 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 
     <!-- Modal de conteo -->
     <div id="inv-conteo-activo"></div>
+  </div>
+</div>
+
+<!-- ESCANEO EAN (inventario con cámara) -->
+<div class="view" id="view-scan">
+  <button id="scan-btn-cam" onclick="scanToggleCamara()"
+    style="position:fixed;right:18px;bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:900;width:76px;height:76px;border-radius:50%;border:none;background:#0071e3;color:#fff;font-size:30px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;display:none;line-height:1">📷</button>
+  <div style="max-width:640px;margin:0 auto;padding:12px 12px 110px">
+    <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+      <div style="font-weight:700;font-size:16px">📷 Escaneo de inventario</div>
+      <div style="font-size:12px;color:#6e6e73;margin-top:2px">Leé el código de barras (EAN/UPC) de la etiqueta. Si el sistema no lo conoce, elegís el artículo una vez y queda vinculado.</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="scan-ubic" placeholder="📍 Ubicación (ej. B4S, 4S-N2-P03, P6-5)" autocomplete="off"
+          onchange="scanGuardarUbic()" style="flex:1;padding:10px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px;text-transform:uppercase">
+      </div>
+      <div id="scan-reader" style="margin-top:10px;display:none;border-radius:10px;overflow:hidden;position:sticky;top:0;z-index:5;background:#000"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="scan-manual" inputmode="numeric" placeholder="⌨️ o tipeá / pistola: código y Enter" autocomplete="off"
+          onkeydown="if(event.key==='Enter'){scanProcesarCodigo(this.value);this.value='';}"
+          style="flex:1;padding:10px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px">
+      </div>
+    </div>
+
+    <div id="scan-activo"></div>
+
+    <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
+        <div style="font-weight:700">🧾 Conteo actual <span id="scan-resumen" style="font-weight:400;color:#6e6e73;font-size:12px"></span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button onclick="scanExportar()" style="padding:7px 10px;border:none;border-radius:8px;background:#34c759;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📤 Exportar Excel</button>
+          <button onclick="document.getElementById('scan-import-input').click()" style="padding:7px 10px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">📥 Importar conteo</button>
+          <button onclick="scanReset()" style="padding:7px 10px;border:none;border-radius:8px;background:none;color:#ff3b30;font-size:12px;cursor:pointer">🗑️ Nuevo conteo</button>
+          <input type="file" id="scan-import-input" accept=".xlsx,.xls" style="display:none" onchange="scanImportar(this.files[0]);this.value=''">
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button id="scan-vista-art" onclick="scanVista('art')" style="flex:1;padding:6px;border:1px solid #d2d2d7;border-radius:8px;background:#f5f5f7;font-size:12px;cursor:pointer">Por artículo (vs. sistema)</button>
+        <button id="scan-vista-lec" onclick="scanVista('lec')" style="flex:1;padding:6px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">Lecturas</button>
+      </div>
+      <div id="scan-lista" style="margin-top:8px"></div>
+      <div style="font-size:11px;color:#a0a0a5;margin-top:10px" id="scan-vinculos-lbl"></div>
+    </div>
   </div>
 </div>
 
@@ -1977,7 +2020,7 @@ function renderDash(){
 }
 
 // Tabs fila 1 (visibles siempre)
-const _tabsFila1 = ['stock','pedidos','mapa','cydesc','prod'];
+const _tabsFila1 = ['stock','pedidos','mapa','cydesc','prod','scan'];
 
 function toggleTabMore(){
   var row2 = document.getElementById('tab-bar-row2');
@@ -2022,6 +2065,8 @@ function switchTab(name,btn){
   if(name==='rot') renderRotacion();
   if(name==='prod') renderProductividad();
   if(name==='inv') renderInventario();
+  var _sb=document.getElementById('scan-btn-cam'); if(_sb) _sb.style.display = name==='scan' ? 'block' : 'none';
+  if(name==='scan') renderScan(); else if(typeof scanCerrarCamara==='function') scanCerrarCamara();
   if(name==='repo') renderReposicion();
   if(name==='pedidos') initPedidos();
   if(name==='cydesc') initCyDesc();
@@ -16593,6 +16638,306 @@ function exportarViajesChasis(){
   showToast('✅ Informe exportado');
 }
 
+</script>
+
+<script>
+/* =====================================================================
+   📷 ESCANEO DE INVENTARIO POR EAN/UPC
+   - wms_ean_map   : { "0888135008050": "32209", ... }  (aprende sola)
+   - wms_scan_conteo: [ {id, art, cant, ubic, ean, ts}, ... ]
+   - Cada teléfono guarda lo suyo (localStorage). El Excel exportado
+     lleva la columna EAN, así al importarlo en la PC se aprenden
+     también los vínculos.
+   ===================================================================== */
+var _scanCam = null, _scanUltimo = {cod:'', t:0}, _scanCandidato = {cod:'', t:0}, _scanVistaActual = 'art';
+
+function scanGetMap(){ try{ return JSON.parse(localStorage.getItem('wms_ean_map')||'{}'); }catch(e){ return {}; } }
+function scanSetMap(m){ localStorage.setItem('wms_ean_map', JSON.stringify(m)); }
+function scanGetConteo(){ try{ return JSON.parse(localStorage.getItem('wms_scan_conteo')||'[]'); }catch(e){ return []; } }
+function scanSetConteo(c){ localStorage.setItem('wms_scan_conteo', JSON.stringify(c)); }
+function scanEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function scanArt(art){ return DATA.find(function(d){ return String(d.art)===String(art); }); }
+
+// Normaliza: UPC-A (12) → 13 con 0 adelante; valida dígito verificador
+function scanNormalizar(cod){
+  cod = String(cod||'').replace(/\D/g,'');
+  if(cod.length===12) cod = '0'+cod;
+  if(cod.length!==13 && cod.length!==8) return null;
+  var d = cod.split('').map(Number), chk = d.pop(), s = 0;
+  for(var i=d.length-1, w=3; i>=0; i--, w = (w===3?1:3)) s += d[i]*w;
+  return ((10 - s%10)%10)===chk ? cod : null;
+}
+
+function renderScan(){
+  var u = localStorage.getItem('wms_scan_ubic')||'';
+  var inp = document.getElementById('scan-ubic'); if(inp && !inp.value) inp.value = u;
+  scanRenderLista();
+  var n = Object.keys(scanGetMap()).length;
+  document.getElementById('scan-vinculos-lbl').textContent = '🔗 '+n+' códigos vinculados a artículos en este dispositivo';
+}
+function scanGuardarUbic(){
+  var el = document.getElementById('scan-ubic');
+  el.value = el.value.trim().toUpperCase();
+  localStorage.setItem('wms_scan_ubic', el.value);
+}
+
+// ---------- Cámara ----------
+function scanCargarLib(cb){
+  if(window.Html5Qrcode) return cb();
+  var s = document.createElement('script');
+  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+  s.onload = cb;
+  s.onerror = function(){ showToast('⚠️ No se pudo cargar el lector (¿sin internet?). Usá el campo de tipeo.'); };
+  document.head.appendChild(s);
+}
+function scanToggleCamara(){
+  var btn = document.getElementById('scan-btn-cam'), box = document.getElementById('scan-reader');
+  if(_scanCam){ scanCerrarCamara(); return; }
+  if(location.protocol!=='https:' && location.hostname!=='localhost'){
+    showToast('⚠️ La cámara solo funciona abriendo el WMS desde GitHub Pages (https)'); return;
+  }
+  scanCargarLib(function(){
+    box.style.display = 'block';
+    var F = Html5QrcodeSupportedFormats;
+    _scanCam = new Html5Qrcode('scan-reader', { formatsToSupport:[F.EAN_13, F.UPC_A, F.EAN_8, F.UPC_E, F.CODE_128, F.QR_CODE], verbose:false });
+    _scanCam.start({ facingMode:'environment' },
+      { fps:10, qrbox:function(w,h){ return { width:Math.min(w*0.9, 360), height:Math.min(h*0.45, 160) }; } },
+      function(txt){ scanProcesarCodigo(txt, true); },
+      function(){}
+    ).then(function(){ btn.textContent = '⏹️'; btn.style.background = '#ff3b30'; box.scrollIntoView({behavior:'smooth',block:'start'}); })
+     .catch(function(e){ _scanCam = null; box.style.display='none'; showToast('⚠️ No se pudo abrir la cámara: '+e); });
+  });
+}
+function scanCerrarCamara(){
+  var btn = document.getElementById('scan-btn-cam'), box = document.getElementById('scan-reader');
+  if(_scanCam){ var c=_scanCam; _scanCam=null; c.stop().then(function(){c.clear();}).catch(function(){}); }
+  if(box) box.style.display = 'none';
+  if(btn){ btn.textContent = '📷'; btn.style.background = '#0071e3'; }
+}
+
+// ---------- Lectura ----------
+function scanProcesarCodigo(raw, desdeCamara){
+  raw = String(raw||'').trim();
+  if(!raw) return;
+  var ahora = Date.now();
+  // la cámara lee el mismo código muchas veces por segundo
+  if(desdeCamara && raw===_scanUltimo.cod && ahora-_scanUltimo.t < 2500) return;
+  if(desdeCamara && document.getElementById('scan-cant')) return; // hay una lectura esperando cantidad
+  _scanUltimo = {cod:raw, t:ahora};
+
+  var cod = scanNormalizar(raw);
+  // Cámara: se acepta recién cuando lee el MISMO código 2 veces seguidas
+  // (evita lecturas falsas con etiquetas arrugadas o con reflejo)
+  if(desdeCamara && cod){
+    if(_scanCandidato.cod!==cod || ahora-_scanCandidato.t>1500){ _scanCandidato={cod:cod,t:ahora}; _scanUltimo={cod:'',t:0}; return; }
+    _scanCandidato={cod:'',t:0};
+  }
+  if(!cod){
+    // ¿tipeó directo un número de artículo?
+    if(!desdeCamara && scanArt(raw)){ scanMostrarArticulo(String(scanArt(raw).art), ''); return; }
+    if(desdeCamara) return; // lectura dudosa de la cámara: se ignora y se reintenta sola
+    showToast('⚠️ Código inválido: '+raw); return;
+  }
+  if(navigator.vibrate) navigator.vibrate(80);
+  var art = scanGetMap()[cod];
+  if(art && scanArt(art)) scanMostrarArticulo(art, cod);
+  else scanMostrarVincular(cod);
+}
+
+function scanMostrarArticulo(art, ean){
+  var r = scanArt(art); if(!r) return;
+  var ubic = document.getElementById('scan-ubic').value.trim().toUpperCase();
+  var ya = scanGetConteo().filter(function(x){ return String(x.art)===String(art); }).reduce(function(s,x){return s+x.cant;},0);
+  document.getElementById('scan-activo').innerHTML =
+    '<div style="background:#e8f5e9;border:2px solid #34c759;border-radius:14px;padding:14px;margin-bottom:10px">'+
+      '<div style="font-size:12px;color:#248a3d;font-weight:600">✅ '+(ean?'EAN '+ean:'Artículo tipeado')+(ubic?' · 📍 '+scanEsc(ubic):'')+'</div>'+
+      '<div style="font-size:20px;font-weight:800;margin-top:4px">'+scanEsc(r.art)+' · '+scanEsc(r.med)+'</div>'+
+      '<div style="font-size:13px;color:#3a3a3c">'+scanEsc(r.prov)+' '+scanEsc(r.diseno)+'</div>'+
+      (ya?'<div style="font-size:12px;color:#6e6e73;margin-top:4px">Ya contadas en este conteo: <b>'+ya+'</b></div>':'')+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<input id="scan-cant" type="number" inputmode="numeric" min="1" placeholder="Cantidad" '+
+          'onkeydown="if(event.key===\'Enter\')scanConfirmar(\''+scanEsc(art)+'\',\''+ean+'\')" '+
+          'style="flex:1;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:18px;font-weight:700;text-align:center">'+
+        '<button onclick="scanConfirmar(\''+scanEsc(art)+'\',\''+ean+'\')" style="padding:12px 18px;border:none;border-radius:10px;background:#34c759;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Guardar</button>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:8px">'+
+        '<button onclick="scanCancelarActivo()" style="background:none;border:none;color:#6e6e73;font-size:12px;cursor:pointer">✖ Cancelar</button>'+
+        (ean?'<button onclick="scanDesvincular(\''+ean+'\')" style="background:none;border:none;color:#ff3b30;font-size:12px;cursor:pointer">🔗 No es este artículo</button>':'')+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){ var c=document.getElementById('scan-cant'); if(c) c.focus(); }, 50);
+}
+
+function scanMostrarVincular(ean){
+  document.getElementById('scan-activo').innerHTML =
+    '<div style="background:#fff8e1;border:2px solid #ff9f0a;border-radius:14px;padding:14px;margin-bottom:10px">'+
+      '<div style="font-size:12px;color:#b25000;font-weight:600">🆕 Código nuevo: '+ean+'</div>'+
+      '<div style="font-size:13px;margin-top:4px">¿Qué artículo es? Elegilo una vez y queda vinculado.</div>'+
+      '<input id="scan-busca" placeholder="Artículo, medida o diseño (ej. 32209, 225/75, TR652)" autocomplete="off" '+
+        'oninput="scanBuscarVinc(this.value,\''+ean+'\')" '+
+        'style="width:100%;box-sizing:border-box;margin-top:8px;padding:10px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px">'+
+      '<div id="scan-busca-res" style="margin-top:6px;max-height:260px;overflow:auto"></div>'+
+      '<button onclick="scanCancelarActivo()" style="margin-top:6px;background:none;border:none;color:#6e6e73;font-size:12px;cursor:pointer">✖ Cancelar</button>'+
+    '</div>';
+  setTimeout(function(){ var c=document.getElementById('scan-busca'); if(c) c.focus(); }, 50);
+}
+function scanBuscarVinc(q, ean){
+  q = String(q||'').trim().toUpperCase();
+  var box = document.getElementById('scan-busca-res');
+  if(q.length<2){ box.innerHTML=''; return; }
+  var qn = q.replace(/[\s\/R]/g,'');
+  var res = DATA.filter(function(r){
+    var t = (r.art+' '+r.med+' '+r.diseno+' '+r.prov).toUpperCase();
+    return t.indexOf(q)>=0 || String(r.med||'').toUpperCase().replace(/[\s\/R]/g,'').indexOf(qn)>=0;
+  }).slice(0,30);
+  box.innerHTML = res.length ? res.map(function(r){
+    return '<div onclick="scanVincular(\''+ean+'\',\''+scanEsc(r.art)+'\')" style="padding:9px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px">'+
+      '<b>'+scanEsc(r.art)+'</b> · '+scanEsc(r.med)+' · '+scanEsc(r.prov)+' '+scanEsc(r.diseno)+
+      ' <span style="color:#6e6e73">(stock '+(r.stock||0)+')</span></div>';
+  }).join('') : '<div style="font-size:12px;color:#6e6e73;padding:6px">Sin resultados</div>';
+}
+function scanVincular(ean, art){
+  var m = scanGetMap(); m[ean] = String(art); scanSetMap(m);
+  showToast('🔗 '+ean+' → '+art+' vinculado');
+  scanMostrarArticulo(String(art), ean);
+  renderScan();
+}
+function scanDesvincular(ean){
+  if(!confirm('¿Desvincular el código '+ean+'? La próxima lectura te va a pedir elegir el artículo de nuevo.')) return;
+  var m = scanGetMap(); delete m[ean]; scanSetMap(m);
+  scanMostrarVincular(ean); renderScan();
+}
+function scanCancelarActivo(){ document.getElementById('scan-activo').innerHTML=''; _scanUltimo={cod:'',t:0}; }
+
+function scanConfirmar(art, ean){
+  var c = parseInt(document.getElementById('scan-cant').value, 10);
+  if(!(c>0)){ showToast('⚠️ Cargá la cantidad'); return; }
+  var ubic = document.getElementById('scan-ubic').value.trim().toUpperCase();
+  var cont = scanGetConteo();
+  cont.push({ id:Date.now()+'_'+Math.random().toString(36).slice(2,6), art:String(art), cant:c, ubic:ubic, ean:ean||'', ts:new Date().toISOString() });
+  scanSetConteo(cont);
+  if(navigator.vibrate) navigator.vibrate([60,40,60]);
+  showToast('✅ '+art+' · '+c+' un.'+(ubic?' en '+ubic:''));
+  scanCancelarActivo();
+  scanRenderLista();
+  var box = document.getElementById('scan-reader');
+  if(_scanCam && box) box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ---------- Lista ----------
+function scanVista(v){
+  _scanVistaActual = v;
+  document.getElementById('scan-vista-art').style.background = v==='art'?'#f5f5f7':'#fff';
+  document.getElementById('scan-vista-lec').style.background = v==='lec'?'#f5f5f7':'#fff';
+  scanRenderLista();
+}
+function scanAgrupar(){
+  var g = {};
+  scanGetConteo().forEach(function(x){
+    if(!g[x.art]) g[x.art] = {art:x.art, cant:0, ubics:{}};
+    g[x.art].cant += x.cant;
+    var u = x.ubic||'(sin ubic.)'; g[x.art].ubics[u] = (g[x.art].ubics[u]||0) + x.cant;
+  });
+  return Object.keys(g).map(function(k){
+    var r = scanArt(k), sis = r ? (r.stock||0) : 0;
+    return {art:k, r:r, cant:g[k].cant, ubics:g[k].ubics, sistema:sis, dif:g[k].cant - sis};
+  });
+}
+function scanRenderLista(){
+  var cont = scanGetConteo(), box = document.getElementById('scan-lista');
+  if(!box) return;
+  var tot = cont.reduce(function(s,x){return s+x.cant;},0);
+  var grupos = scanAgrupar();
+  document.getElementById('scan-resumen').textContent = cont.length ? '· '+grupos.length+' arts · '+tot+' un. · '+cont.length+' lecturas' : '';
+  if(!cont.length){ box.innerHTML = '<div style="font-size:13px;color:#a0a0a5;padding:10px 0">Todavía no hay nada contado.</div>'; return; }
+  if(_scanVistaActual==='lec'){
+    box.innerHTML = cont.slice().reverse().map(function(x){
+      var r = scanArt(x.art), h = new Date(x.ts);
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px">'+
+        '<div style="flex:1"><b>'+scanEsc(x.art)+'</b> '+(r?scanEsc(r.med)+' '+scanEsc(r.diseno):'')+
+        '<div style="font-size:11px;color:#6e6e73">'+(x.ubic?'📍 '+scanEsc(x.ubic)+' · ':'')+h.toLocaleDateString('es-AR')+' '+h.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'</div></div>'+
+        '<div style="font-weight:700;font-size:15px">'+x.cant+'</div>'+
+        '<button onclick="scanBorrarLectura(\''+x.id+'\')" style="background:none;border:none;color:#ff3b30;cursor:pointer;font-size:15px">✖</button></div>';
+    }).join('');
+    return;
+  }
+  grupos.sort(function(a,b){ return Math.abs(b.dif)-Math.abs(a.dif); });
+  box.innerHTML = grupos.map(function(g){
+    var col = g.dif===0 ? '#248a3d' : (g.dif<0 ? '#d70015' : '#b25000');
+    var ub = Object.keys(g.ubics).map(function(u){ return scanEsc(u)+': '+g.ubics[u]; }).join(' · ');
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px">'+
+      '<div style="flex:1"><b>'+scanEsc(g.art)+'</b> '+(g.r?scanEsc(g.r.med)+' '+scanEsc(g.r.diseno):'<span style="color:#d70015">no está en la base</span>')+
+      '<div style="font-size:11px;color:#6e6e73">'+ub+'</div></div>'+
+      '<div style="text-align:right;font-size:12px;line-height:1.35">Contado <b style="font-size:15px">'+g.cant+'</b><br>Sistema '+g.sistema+
+      '<br><b style="color:'+col+'">'+(g.dif>0?'+':'')+g.dif+'</b></div></div>';
+  }).join('') +
+  '<div style="font-size:11px;color:#a0a0a5;margin-top:6px">La diferencia compara contra el stock total del sistema: tiene sentido cuando contaste todas las ubicaciones del artículo.</div>';
+}
+function scanBorrarLectura(id){
+  if(!confirm('¿Borrar esta lectura?')) return;
+  scanSetConteo(scanGetConteo().filter(function(x){ return x.id!==id; }));
+  scanRenderLista();
+}
+function scanReset(){
+  var n = scanGetConteo().length;
+  if(!n){ showToast('No hay conteo para borrar'); return; }
+  if(!confirm('¿Empezar un conteo nuevo? Se borran las '+n+' lecturas actuales (exportalas antes). Los códigos vinculados NO se borran.')) return;
+  scanSetConteo([]); scanCancelarActivo(); renderScan();
+}
+
+// ---------- Exportar / Importar ----------
+function scanExportar(){
+  var cont = scanGetConteo();
+  if(!cont.length){ showToast('No hay nada contado'); return; }
+  var resumen = scanAgrupar().map(function(g){
+    return { 'ARTÍCULO':g.art, 'PROVEEDOR':g.r?g.r.prov:'', 'MEDIDA':g.r?g.r.med:'', 'DISEÑO':g.r?g.r.diseno:'',
+             'CONTADO':g.cant, 'STOCK SISTEMA':g.sistema, 'DIFERENCIA':g.dif,
+             'UBICACIONES':Object.keys(g.ubics).map(function(u){return u+': '+g.ubics[u];}).join(' | ') };
+  });
+  var lect = cont.map(function(x){
+    var r = scanArt(x.art), h = new Date(x.ts);
+    return { 'FECHA':h.toLocaleDateString('es-AR'), 'HORA':h.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
+             'UBICACIÓN':x.ubic, 'ARTÍCULO':x.art, 'MEDIDA':r?r.med:'', 'DISEÑO':r?r.diseno:'', 'CANTIDAD':x.cant, 'EAN':x.ean };
+  });
+  var map = scanGetMap();
+  var vinc = Object.keys(map).map(function(e){ var r=scanArt(map[e]); return {'EAN':e,'ARTÍCULO':map[e],'MEDIDA':r?r.med:'','DISEÑO':r?r.diseno:''}; });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lect), 'Lecturas');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vinc), 'Vinculos EAN');
+  var f = new Date(), fs = f.getFullYear()+'-'+String(f.getMonth()+1).padStart(2,'0')+'-'+String(f.getDate()).padStart(2,'0')+'_'+String(f.getHours()).padStart(2,'0')+String(f.getMinutes()).padStart(2,'0');
+  XLSX.writeFile(wb, 'Conteo_'+fs+'.xlsx');
+}
+function scanImportar(file){
+  if(!file) return;
+  var rd = new FileReader();
+  rd.onload = function(e){
+    try{
+      var wb = XLSX.read(e.target.result, {type:'array'});
+      var map = scanGetMap(), nuevosV = 0;
+      var shV = wb.Sheets['Vinculos EAN'];
+      if(shV) XLSX.utils.sheet_to_json(shV).forEach(function(r){
+        var ean = scanNormalizar(r['EAN']), art = String(r['ARTÍCULO']||'').trim();
+        if(ean && art && map[ean]!==art){ map[ean]=art; nuevosV++; }
+      });
+      scanSetMap(map);
+      var shL = wb.Sheets['Lecturas'];
+      if(!shL){ showToast('⚠️ El archivo no tiene la hoja "Lecturas"'); renderScan(); return; }
+      var filas = XLSX.utils.sheet_to_json(shL).filter(function(r){ return r['ARTÍCULO'] && parseInt(r['CANTIDAD'],10)>0; });
+      var cont = scanGetConteo();
+      var modo = cont.length ? (confirm('Ya hay '+cont.length+' lecturas en este dispositivo.\n\nAceptar = SUMAR las del archivo (ej. juntar el conteo de varios operarios)\nCancelar = no importar') ? 'sumar' : null) : 'sumar';
+      if(!modo){ renderScan(); return; }
+      filas.forEach(function(r, i){
+        cont.push({ id:'imp'+Date.now()+'_'+i, art:String(r['ARTÍCULO']).trim(), cant:parseInt(r['CANTIDAD'],10),
+                    ubic:String(r['UBICACIÓN']||'').trim().toUpperCase(), ean:String(r['EAN']||''), ts:new Date().toISOString() });
+      });
+      scanSetConteo(cont);
+      showToast('📥 '+filas.length+' lecturas importadas'+(nuevosV?' · 🔗 '+nuevosV+' vínculos nuevos':''));
+      renderScan();
+    }catch(err){ showToast('⚠️ No se pudo leer el archivo: '+err.message); }
+  };
+  rd.readAsArrayBuffer(file);
+}
 </script>
 
 </body>
