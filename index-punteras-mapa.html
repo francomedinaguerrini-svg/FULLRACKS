@@ -1148,15 +1148,15 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
         <input id="scan-ubic" placeholder="📍 Ubicación (ej. B4S, 4S-N2-P03, P6-5)" autocomplete="off"
           onchange="scanGuardarUbic()" style="flex:1;padding:10px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px;text-transform:uppercase">
       </div>
-      <div id="scan-reader" style="margin-top:10px;display:none;border-radius:10px;overflow:hidden;position:sticky;top:0;z-index:5;background:#000"></div>
+      <div id="scan-activo" style="margin-top:10px"></div>
+      <div id="scan-reader" style="margin-top:10px;display:none;border-radius:10px;overflow:hidden;background:#000"></div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <input id="scan-manual" inputmode="numeric" placeholder="⌨️ o tipeá / pistola: código y Enter" autocomplete="off"
-          onkeydown="if(event.key==='Enter'){scanProcesarCodigo(this.value);this.value='';}"
-          style="flex:1;padding:10px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px">
+        <input id="scan-manual" type="text" inputmode="numeric" enterkeyhint="search" placeholder="⌨️ Código o nº de artículo" autocomplete="off"
+          onkeydown="if(event.key==='Enter'){scanManualOk();}" oninput="scanManualAuto(this)"
+          style="flex:1;min-width:0;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:16px">
+        <button onclick="scanManualOk()" style="padding:12px 16px;border:none;border-radius:10px;background:#1d1d1f;color:#fff;font-weight:600;font-size:15px;cursor:pointer">Buscar</button>
       </div>
     </div>
-
-    <div id="scan-activo"></div>
 
     <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
@@ -16699,9 +16699,15 @@ function scanToggleCamara(){
   scanCargarLib(function(){
     box.style.display = 'block';
     var F = Html5QrcodeSupportedFormats;
-    _scanCam = new Html5Qrcode('scan-reader', { formatsToSupport:[F.EAN_13, F.UPC_A, F.EAN_8, F.UPC_E, F.CODE_128, F.QR_CODE], verbose:false });
+    _scanCam = new Html5Qrcode('scan-reader', {
+      formatsToSupport:[F.EAN_13, F.UPC_A, F.EAN_8, F.UPC_E, F.CODE_128],
+      experimentalFeatures:{ useBarCodeDetectorIfSupported:true },
+      verbose:false
+    });
     _scanCam.start({ facingMode:'environment' },
-      { fps:10, qrbox:function(w,h){ return { width:Math.min(w*0.9, 360), height:Math.min(h*0.45, 160) }; } },
+      { fps:15, aspectRatio:1.3333,
+        videoConstraints:{ facingMode:'environment', width:{ideal:1920}, height:{ideal:1440} },
+        qrbox:function(w,h){ return { width:Math.floor(w*0.94), height:Math.floor(h*0.55) }; } },
       function(txt){ scanProcesarCodigo(txt, true); },
       function(){}
     ).then(function(){ btn.textContent = '⏹️'; btn.style.background = '#ff3b30'; box.scrollIntoView({behavior:'smooth',block:'start'}); })
@@ -16722,16 +16728,10 @@ function scanProcesarCodigo(raw, desdeCamara){
   var ahora = Date.now();
   // la cámara lee el mismo código muchas veces por segundo
   if(desdeCamara && raw===_scanUltimo.cod && ahora-_scanUltimo.t < 2500) return;
-  if(desdeCamara && document.getElementById('scan-cant')) return; // hay una lectura esperando cantidad
+  if(desdeCamara && (document.getElementById('scan-cant') || document.getElementById('scan-busca'))) return; // hay un panel abierto
   _scanUltimo = {cod:raw, t:ahora};
 
   var cod = scanNormalizar(raw);
-  // Cámara: se acepta recién cuando lee el MISMO código 2 veces seguidas
-  // (evita lecturas falsas con etiquetas arrugadas o con reflejo)
-  if(desdeCamara && cod){
-    if(_scanCandidato.cod!==cod || ahora-_scanCandidato.t>1500){ _scanCandidato={cod:cod,t:ahora}; _scanUltimo={cod:'',t:0}; return; }
-    _scanCandidato={cod:'',t:0};
-  }
   if(!cod){
     // ¿tipeó directo un número de artículo?
     if(!desdeCamara && scanArt(raw)){ scanMostrarArticulo(String(scanArt(raw).art), ''); return; }
@@ -16757,7 +16757,7 @@ function scanMostrarArticulo(art, ean){
       '<div style="display:flex;gap:8px;margin-top:10px">'+
         '<input id="scan-cant" type="number" inputmode="numeric" min="1" placeholder="Cantidad" '+
           'onkeydown="if(event.key===\'Enter\')scanConfirmar(\''+scanEsc(art)+'\',\''+ean+'\')" '+
-          'style="flex:1;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:18px;font-weight:700;text-align:center">'+
+          'enterkeyhint="done" style="flex:1;min-width:0;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:18px;font-weight:700;text-align:center">'+
         '<button onclick="scanConfirmar(\''+scanEsc(art)+'\',\''+ean+'\')" style="padding:12px 18px;border:none;border-radius:10px;background:#34c759;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Guardar</button>'+
       '</div>'+
       '<div style="display:flex;justify-content:space-between;margin-top:8px">'+
@@ -16765,7 +16765,8 @@ function scanMostrarArticulo(art, ean){
         (ean?'<button onclick="scanDesvincular(\''+ean+'\')" style="background:none;border:none;color:#ff3b30;font-size:12px;cursor:pointer">🔗 No es este artículo</button>':'')+
       '</div>'+
     '</div>';
-  setTimeout(function(){ var c=document.getElementById('scan-cant'); if(c) c.focus(); }, 50);
+  scanPanelAbierto();
+  setTimeout(function(){ var c=document.getElementById('scan-cant'); if(c) c.focus(); }, 350);
 }
 
 function scanMostrarVincular(ean){
@@ -16775,11 +16776,12 @@ function scanMostrarVincular(ean){
       '<div style="font-size:13px;margin-top:4px">¿Qué artículo es? Elegilo una vez y queda vinculado.</div>'+
       '<input id="scan-busca" placeholder="Artículo, medida o diseño (ej. 32209, 225/75, TR652)" autocomplete="off" '+
         'oninput="scanBuscarVinc(this.value,\''+ean+'\')" '+
-        'style="width:100%;box-sizing:border-box;margin-top:8px;padding:10px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px">'+
+        'style="width:100%;box-sizing:border-box;margin-top:8px;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:16px">'+
       '<div id="scan-busca-res" style="margin-top:6px;max-height:260px;overflow:auto"></div>'+
       '<button onclick="scanCancelarActivo()" style="margin-top:6px;background:none;border:none;color:#6e6e73;font-size:12px;cursor:pointer">✖ Cancelar</button>'+
     '</div>';
-  setTimeout(function(){ var c=document.getElementById('scan-busca'); if(c) c.focus(); }, 50);
+  scanPanelAbierto();
+  setTimeout(function(){ var c=document.getElementById('scan-busca'); if(c) c.focus(); }, 350);
 }
 function scanBuscarVinc(q, ean){
   q = String(q||'').trim().toUpperCase();
@@ -16791,7 +16793,7 @@ function scanBuscarVinc(q, ean){
     return t.indexOf(q)>=0 || String(r.med||'').toUpperCase().replace(/[\s\/R]/g,'').indexOf(qn)>=0;
   }).slice(0,30);
   box.innerHTML = res.length ? res.map(function(r){
-    return '<div onclick="scanVincular(\''+ean+'\',\''+scanEsc(r.art)+'\')" style="padding:9px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px">'+
+    return '<div onclick="scanVincular(\''+ean+'\',\''+scanEsc(r.art)+'\')" style="padding:12px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:14px">'+
       '<b>'+scanEsc(r.art)+'</b> · '+scanEsc(r.med)+' · '+scanEsc(r.prov)+' '+scanEsc(r.diseno)+
       ' <span style="color:#6e6e73">(stock '+(r.stock||0)+')</span></div>';
   }).join('') : '<div style="font-size:12px;color:#6e6e73;padding:6px">Sin resultados</div>';
@@ -16807,7 +16809,28 @@ function scanDesvincular(ean){
   var m = scanGetMap(); delete m[ean]; scanSetMap(m);
   scanMostrarVincular(ean); renderScan();
 }
-function scanCancelarActivo(){ document.getElementById('scan-activo').innerHTML=''; _scanUltimo={cod:'',t:0}; }
+function scanCancelarActivo(){
+  document.getElementById('scan-activo').innerHTML=''; _scanUltimo={cod:'',t:0};
+  if(_scanCam){ try{ _scanCam.resume(); }catch(e){} }
+}
+// Panel abierto: congela la cámara (deja de leer) y lleva la pantalla al panel
+function scanPanelAbierto(){
+  if(_scanCam){ try{ _scanCam.pause(true); }catch(e){} }
+  var el = document.getElementById('scan-activo');
+  if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+// Campo manual: botón Buscar / Enter
+function scanManualOk(){
+  var el = document.getElementById('scan-manual');
+  var v = el.value.trim(); if(!v) return;
+  el.value=''; el.blur();
+  scanProcesarCodigo(v, false);
+}
+// Si se tipea/pega un EAN/UPC completo y válido, se procesa solo (sin Enter)
+function scanManualAuto(el){
+  var v = el.value.replace(/\D/g,'');
+  if((v.length===13 || v.length===12) && scanNormalizar(v)){ el.value=''; el.blur(); scanProcesarCodigo(v, false); }
+}
 
 function scanConfirmar(art, ean){
   var c = parseInt(document.getElementById('scan-cant').value, 10);
@@ -16821,7 +16844,7 @@ function scanConfirmar(art, ean){
   scanCancelarActivo();
   scanRenderLista();
   var box = document.getElementById('scan-reader');
-  if(_scanCam && box) box.scrollIntoView({behavior:'smooth',block:'start'});
+  if(_scanCam && box) box.scrollIntoView({behavior:'smooth',block:'center'});
 }
 
 // ---------- Lista ----------
