@@ -1142,9 +1142,17 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
     style="position:fixed;right:18px;bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:900;width:76px;height:76px;border-radius:50%;border:none;background:#0071e3;color:#fff;font-size:30px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer;display:none;line-height:1">📷</button>
   <div style="max-width:640px;margin:0 auto;padding:12px 12px 110px">
     <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
-      <div style="font-weight:700;font-size:16px">📷 Escaneo de inventario</div>
-      <div style="font-size:12px;color:#6e6e73;margin-top:2px">Leé el código de barras (EAN/UPC) de la etiqueta. Si el sistema no lo conoce, elegís el artículo una vez y queda vinculado.</div>
-      <div style="display:flex;gap:8px;margin-top:10px">
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button id="scan-modo-carga" onclick="scanSetModo('carga')" style="flex:1;padding:10px 4px;border:1px solid #1d1d1f;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">🚚 Carga</button>
+        <button id="scan-modo-stock" onclick="scanSetModo('stock')" style="flex:1;padding:10px 4px;border:1px solid #1d1d1f;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">📦 Stock</button>
+        <button id="scan-modo-descarga" onclick="scanSetModo('descarga')" style="flex:1;padding:10px 4px;border:1px solid #1d1d1f;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">📥 Descarga</button>
+      </div>
+      <div style="font-weight:700;font-size:16px"><span id="scan-titulo">📦 Escaneo de stock</span> <span style="font-size:10px;color:#a0a0a5;font-weight:400">v07-10 d</span></div>
+      <div id="scan-ayuda" style="font-size:12px;color:#6e6e73;margin-top:2px"></div>
+      <div id="scan-tr-wrap" style="display:none;margin-top:10px">
+        <select id="scan-tr-sel" onchange="scanSetTr(this.value)" style="width:100%;padding:11px;border:1px solid #d2d2d7;border-radius:10px;font-size:15px;background:#fff"></select>
+      </div>
+      <div id="scan-ubic-wrap" style="display:flex;gap:8px;margin-top:10px">
         <input id="scan-ubic" placeholder="📍 Ubicación (ej. B4S, 4S-N2-P03, P6-5)" autocomplete="off"
           onchange="scanGuardarUbic()" style="flex:1;padding:10px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px;text-transform:uppercase">
       </div>
@@ -1156,10 +1164,14 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
           style="flex:1;min-width:0;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:16px">
         <button onclick="scanManualOk()" style="padding:12px 16px;border:none;border-radius:10px;background:#1d1d1f;color:#fff;font-weight:600;font-size:15px;cursor:pointer">Buscar</button>
       </div>
+      <button onclick="document.getElementById('scan-foto-input').click()" style="width:100%;margin-top:8px;padding:14px;border:none;border-radius:10px;background:#5e5ce6;color:#fff;font-weight:700;font-size:16px;cursor:pointer">📸 Sacar foto al código</button>
+      <input type="file" id="scan-foto-input" accept="image/*" capture="environment" style="display:none" onchange="scanDesdeFoto(this.files[0]);this.value=''">
+      <div style="font-size:11px;color:#a0a0a5;margin-top:4px;text-align:center">Si la cámara en vivo no lo toma, la foto usa la cámara del teléfono (con su enfoque) y la analiza completa.</div>
     </div>
 
+    <div id="scan-prog"></div>
     <div id="scan-pend"></div>
-    <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+    <div id="scan-stock-card" style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
         <div style="font-weight:700">🧾 Conteo actual <span id="scan-resumen" style="font-weight:400;color:#6e6e73;font-size:12px"></span></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -16674,6 +16686,7 @@ function renderScan(){
   var inp = document.getElementById('scan-ubic'); if(inp && !inp.value) inp.value = u;
   scanRenderLista();
   scanRenderPend();
+  scanRenderModo();
   var n = Object.keys(scanGetMap()).length;
   document.getElementById('scan-vinculos-lbl').textContent = '🔗 '+n+' códigos vinculados a artículos en este dispositivo';
 }
@@ -16688,11 +16701,12 @@ function scanGuardarUbic(){
 // mismo motor de Google que usan las apps). iPhone/Safari no lo trae, así
 // que se carga ZXing-C++ compilado a WebAssembly — mucho más preciso que
 // el lector JS anterior. Se analiza el cuadro a resolución completa.
-var _scanDetector = null, _scanPausado = false;
+var _scanDetector = null, _scanPausado = false, _scanMotor = '';
 function scanCargarLib(cb){
   if(_scanDetector) return cb();
   var FMT = ['ean_13','ean_8','upc_a','upc_e','code_128','qr_code','data_matrix'];
   function conPolyfill(){
+    _scanMotor = 'ZXing';
     if(window.BarcodeDetectionAPI){ _scanDetector = new BarcodeDetectionAPI.BarcodeDetector({formats:FMT}); return cb(); }
     var s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/barcode-detector@2.3.1/dist/iife/pure.js';
@@ -16702,7 +16716,7 @@ function scanCargarLib(cb){
   }
   if('BarcodeDetector' in window){
     BarcodeDetector.getSupportedFormats().then(function(f){
-      if(f.indexOf('ean_13')>=0){ _scanDetector = new BarcodeDetector({formats:FMT.filter(function(x){return f.indexOf(x)>=0;})}); cb(); }
+      if(f.indexOf('ean_13')>=0){ _scanMotor = 'nativo'; _scanDetector = new BarcodeDetector({formats:FMT.filter(function(x){return f.indexOf(x)>=0;})}); cb(); }
       else conPolyfill();
     }).catch(conPolyfill);
   } else conPolyfill();
@@ -16724,12 +16738,13 @@ function scanToggleCamara(){
           '<video id="scan-video" playsinline muted autoplay style="width:100%;display:block;max-height:52vh;object-fit:cover"></video>'+
           '<div id="scan-guia" style="position:absolute;left:4%;right:4%;top:30%;bottom:30%;border:3px solid rgba(255,255,255,.85);border-radius:10px;box-shadow:0 0 0 2000px rgba(0,0,0,.25);pointer-events:none;transition:border-color .15s"></div>'+
           '<div id="scan-ctrls" style="position:absolute;left:8px;right:8px;bottom:8px;display:flex;gap:8px;align-items:center"></div>'+
-        '</div>';
+        '</div>'+
+        '<div id="scan-estado" style="background:#1d1d1f;color:#d1d1d6;font-size:11px;padding:5px 8px;font-family:monospace">iniciando…</div>';
       box.style.display = 'block';
       var video = document.getElementById('scan-video');
       video.srcObject = stream;
       var track = stream.getVideoTracks()[0];
-      _scanCam = { stream:stream, track:track, video:video, canvas:document.createElement('canvas'), ocupado:false, vuelta:0, vivo:true, linterna:false };
+      _scanCam = { stream:stream, track:track, video:video, canvas:document.createElement('canvas'), ocupado:false, vuelta:0, vivo:true, linterna:false, ultimo:'—', motor:_scanMotor };
       _scanPausado = false;
       scanArmarControles(track);
       // tocar el video = reenfocar (donde el teléfono lo permite)
@@ -16771,6 +16786,7 @@ function scanLoop(){
   // Alterna: franja central a resolución completa (códigos chicos/lejos)
   // y cuadro entero achicado (etiquetas giradas o fuera del recuadro)
   cam.vuelta++;
+  if(cam.vuelta%10===0){ var est=document.getElementById('scan-estado'); if(est) est.textContent = 'Motor: '+cam.motor+' · '+W+'×'+H+' · analizados: '+cam.vuelta+' · última lectura: '+cam.ultimo; }
   if(cam.vuelta%3){
     var sx = Math.round(W*0.03), sy = Math.round(H*0.25), sw = W-2*sx, sh = Math.round(H*0.5);
     cv.width = sw; cv.height = sh; ctx.drawImage(v, sx, sy, sw, sh, 0, 0, sw, sh);
@@ -16784,6 +16800,7 @@ function scanLoop(){
     for(var i=0;i<(res||[]).length;i++){
       var raw = String(res[i].rawValue||'').trim(), f = String(res[i].format||'');
       var cod = scanNormalizar(raw) || ((/qr|matrix|128/.test(f) && raw.length>=3) ? raw : null);
+      if(raw){ cam.ultimo = f+': '+scanCorto(raw); var est2=document.getElementById('scan-estado'); if(est2) est2.textContent = '✅ Leído ('+f+'): '+scanCorto(raw); }
       if(cod){
         var g = document.getElementById('scan-guia');
         if(g){ g.style.borderColor = '#34c759'; setTimeout(function(){ if(g) g.style.borderColor='rgba(255,255,255,.85)'; }, 400); }
@@ -16793,6 +16810,37 @@ function scanLoop(){
     }
     setTimeout(scanLoop, 60);
   }).catch(function(){ cam.ocupado = false; setTimeout(scanLoop, 200); });
+}
+// Foto: usa la cámara nativa del teléfono (enfoque y resolución completos)
+// y busca códigos en la imagen entera, a varios tamaños.
+function scanDesdeFoto(file){
+  if(!file) return;
+  showToast('🔍 Analizando foto…');
+  scanCargarLib(function(){
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function(){
+      var W = img.naturalWidth, H = img.naturalHeight, cv = document.createElement('canvas'), ctx = cv.getContext('2d', {willReadFrequently:true});
+      var tamanos = [2000, 1400, 3000, 1000], i = 0;
+      function probar(){
+        if(i>=tamanos.length){ URL.revokeObjectURL(url); showToast('⚠️ No encontré ningún código en la foto. Probá más cerca/nítida, con el código derecho.'); return; }
+        var k = Math.min(1, tamanos[i++]/Math.max(W,H));
+        cv.width = Math.round(W*k); cv.height = Math.round(H*k); ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        _scanDetector.detect(cv).then(function(res){
+          res = (res||[]).filter(function(r){ return String(r.rawValue||'').trim(); });
+          if(!res.length) return probar();
+          URL.revokeObjectURL(url);
+          // prioriza EAN/UPC válido; si no, el primero (QR)
+          var elegido = res.find(function(r){ return scanNormalizar(r.rawValue); }) || res[0];
+          if(res.length>1) showToast('📸 '+res.length+' códigos en la foto — tomé '+(scanNormalizar(elegido.rawValue)?'el EAN':'el '+elegido.format));
+          _scanUltimo = {cod:'', t:0};
+          scanProcesarCodigo(String(elegido.rawValue).trim(), false);
+        }).catch(function(){ probar(); });
+      }
+      probar();
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); showToast('⚠️ No se pudo abrir la foto'); };
+    img.src = url;
+  });
 }
 function scanCerrarCamara(){
   var btn = document.getElementById('scan-btn-cam'), box = document.getElementById('scan-reader');
@@ -16825,7 +16873,10 @@ function scanProcesarCodigo(raw, desdeCamara){
   if(!raw) return;
   var ahora = Date.now();
   // la cámara lee el mismo código muchas veces por segundo
-  if(desdeCamara && raw===_scanUltimo.cod && ahora-_scanUltimo.t < 2500) return;
+  if(desdeCamara && raw===_scanUltimo.cod && ahora-_scanUltimo.t < (scanModo()==='carga' ? 1000 : 2500)){
+    if(scanModo()==='carga') _scanUltimo.t = ahora; // sigue a la vista: no cuenta de nuevo hasta que salga del cuadro
+    return;
+  }
   if(desdeCamara && (document.getElementById('scan-cant') || document.getElementById('scan-busca'))) return; // hay un panel abierto
   _scanUltimo = {cod:raw, t:ahora};
 
@@ -16845,6 +16896,9 @@ function scanProcesarCodigo(raw, desdeCamara){
 
 function scanMostrarArticulo(art, ean){
   var r = scanArt(art); if(!r) return;
+  var _m = scanModo();
+  if(_m==='carga'){ document.getElementById('scan-activo').innerHTML=''; _scanPausado=false; scanCargaRegistrar(String(art), ean); return; }
+  if(_m==='descarga'){ scanDescargaPanel(String(art), ean); return; }
   var ubic = document.getElementById('scan-ubic').value.trim().toUpperCase();
   var ya = scanGetConteo().filter(function(x){ return String(x.art)===String(art); }).reduce(function(s,x){return s+x.cant;},0);
   document.getElementById('scan-activo').innerHTML =
@@ -17136,6 +17190,249 @@ function scanAplicarPend(ean, art){
   delete p[ean]; scanSetPend(p); scanSetConteo(cont);
   showToast('🔗 '+ean+' → '+art+' · '+tot+' un. agregadas');
   return true;
+}
+
+// =====================================================================
+// MODOS DEL ESCÁNER: 🚚 Carga (salida) · 📦 Stock · 📥 Descarga (entrada)
+//  - Carga: contra un tránsito de SALIDA pendiente. Cada lectura = 1
+//    cubierta. Avisa cruces (artículo que no va) y sobrantes.
+//  - Descarga: contra un tránsito de ENTRADA pendiente. Registra cantidad
+//    y lugar de guardado. NO escribe ubicaciones en el WMS (solo registro).
+//  - Lo leído queda en wms_scan_ses_<idTránsito>, por teléfono.
+// =====================================================================
+function scanModo(){ return localStorage.getItem('wms_scan_modo')||'stock'; }
+function scanTrId(){ return localStorage.getItem('wms_scan_tr_'+scanModo())||''; }
+function scanTr(){ var id=scanTrId(); return id ? transitoGetAll().find(function(t){ return t.id===id; }) : null; }
+function scanGetSes(id){ try{ return JSON.parse(localStorage.getItem('wms_scan_ses_'+id)||'{"lec":[],"cruces":[]}'); }catch(e){ return {lec:[],cruces:[]}; } }
+function scanSetSes(id, s){ localStorage.setItem('wms_scan_ses_'+id, JSON.stringify(s)); }
+
+function scanSetModo(m){
+  localStorage.setItem('wms_scan_modo', m);
+  scanCancelarActivo();
+  renderScan();
+}
+function scanSetTr(id){
+  localStorage.setItem('wms_scan_tr_'+scanModo(), id||'');
+  scanCancelarActivo();
+  renderScan();
+}
+function scanTransitosModo(){
+  var m = scanModo();
+  return transitoGetAll().filter(function(t){
+    if(t.estado!=='transito') return false;
+    return m==='carga' ? t.flujo==='salida' : t.flujo!=='salida';
+  });
+}
+function scanEsperado(tr){
+  var e = {};
+  (tr.items||[]).forEach(function(r){ var k=String(r.art); e[k] = (e[k]||0) + (parseInt(r.cant,10)||0); });
+  return e;
+}
+function scanLeidoPorArt(ses){
+  var l = {};
+  ses.lec.forEach(function(x){ l[x.art] = (l[x.art]||0) + x.cant; });
+  return l;
+}
+
+// --- Pantalla grande de resultado (carga) ---
+function scanFlash(color, titulo, sub, vibra){
+  var box = document.getElementById('scan-activo');
+  box.innerHTML = '<div style="background:'+color+';color:#fff;border-radius:14px;padding:16px;margin-bottom:10px;text-align:center">'+
+    '<div style="font-size:22px;font-weight:800">'+titulo+'</div>'+
+    '<div style="font-size:14px;margin-top:4px;opacity:.95">'+sub+'</div></div>';
+  if(navigator.vibrate) navigator.vibrate(vibra);
+  clearTimeout(window._scanFlashT);
+  window._scanFlashT = setTimeout(function(){ if(box.innerHTML.indexOf('scan-cant')<0 && box.innerHTML.indexOf('scan-busca')<0) box.innerHTML=''; }, 2500);
+}
+
+function scanCargaRegistrar(art, ean){
+  var tr = scanTr();
+  if(!tr){ showToast('⚠️ Elegí primero el tránsito que se está cargando'); return; }
+  var r = scanArt(art), esp = scanEsperado(tr), ses = scanGetSes(tr.id);
+  var desc = scanEsc(art)+' · '+scanEsc(r?r.med:'')+' '+scanEsc(r?r.diseno:'');
+  if(!esp[art]){
+    ses.cruces.push({art:String(art), ean:ean||'', ts:new Date().toISOString()});
+    scanSetSes(tr.id, ses);
+    scanFlash('#d70015', '❌ CRUCE — NO VA', desc+'<br>Este artículo no está en el pedido. No se contó.', [300,100,300]);
+  } else {
+    ses.lec.push({id:Date.now()+'_'+Math.random().toString(36).slice(2,6), art:String(art), cant:1, ubic:'', ean:ean||'', ts:new Date().toISOString()});
+    scanSetSes(tr.id, ses);
+    var n = scanLeidoPorArt(ses)[art], e = esp[art];
+    if(n>e) scanFlash('#ff9500', '⚠️ SOBRA — '+n+' / '+e, desc+'<br>Ya estaban todas. Sacá '+(n-e)+' del camión.', [200,80,200]);
+    else scanFlash(n===e?'#248a3d':'#0071e3', (n===e?'✅ COMPLETO ':'+1 · ')+n+' / '+e, desc, 80);
+  }
+  scanRenderProg();
+}
+
+function scanDescargaPanel(art, ean){
+  var tr = scanTr();
+  if(!tr){ showToast('⚠️ Elegí primero el tránsito que se está descargando'); return; }
+  var r = scanArt(art), esp = scanEsperado(tr), ses = scanGetSes(tr.id);
+  var ya = scanLeidoPorArt(ses)[art]||0, e = esp[art]||0;
+  var it = (tr.items||[]).find(function(x){ return String(x.art)===String(art); });
+  var sug = it && it.sugerencia ? String(it.sugerencia.pos||'').replace(/[★🆕]/g,'').trim() : '';
+  var ubic = (document.getElementById('scan-ubic').value||'').trim().toUpperCase();
+  var falta = Math.max(0, e-ya);
+  document.getElementById('scan-activo').innerHTML =
+    '<div style="background:'+(e?'#e8f5e9':'#fff3e0')+';border:2px solid '+(e?'#34c759':'#ff9500')+';border-radius:14px;padding:14px;margin-bottom:10px">'+
+      (e ? '<div style="font-size:12px;color:#248a3d;font-weight:600">✅ Viene en el tránsito · esperado '+e+' · recibido '+ya+'</div>'
+         : '<div style="font-size:13px;color:#b25000;font-weight:700">⚠️ NO venía en este tránsito (sobrante / cruce)</div>')+
+      '<div style="font-size:20px;font-weight:800;margin-top:4px">'+scanEsc(art)+' · '+scanEsc(r?r.med:'')+'</div>'+
+      '<div style="font-size:13px;color:#3a3a3c">'+scanEsc(r?r.prov:'')+' '+scanEsc(r?r.diseno:'')+'</div>'+
+      (sug?'<div style="font-size:12px;color:#6e6e73;margin-top:4px">Sugerido: <b>'+scanEsc(sug)+'</b> (solo referencia)</div>':'')+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<input id="scan-cant" type="number" inputmode="numeric" min="1" placeholder="Cant." value="'+(falta||'')+'" enterkeyhint="next" '+
+          'style="width:90px;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:18px;font-weight:700;text-align:center">'+
+        '<input id="scan-desc-ubic" placeholder="📍 Dónde se guardó" value="'+scanEsc(ubic)+'" autocomplete="off" enterkeyhint="done" '+
+          'onkeydown="if(event.key===\'Enter\')scanDescargaGuardar('+scanJ(art)+','+scanJ(ean)+')" '+
+          'style="flex:1;min-width:0;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:16px;text-transform:uppercase">'+
+      '</div>'+
+      '<button onclick="scanDescargaGuardar('+scanJ(art)+','+scanJ(ean)+')" style="width:100%;margin-top:8px;padding:12px;border:none;border-radius:10px;background:#34c759;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Guardar</button>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:8px">'+
+        '<button onclick="scanCancelarActivo()" style="background:none;border:none;color:#6e6e73;font-size:12px;cursor:pointer">✖ Cancelar</button>'+
+        (ean?'<button onclick="scanDesvincular('+scanJ(ean)+')" style="background:none;border:none;color:#ff3b30;font-size:12px;cursor:pointer">🔗 No es este artículo</button>':'')+
+      '</div>'+
+    '</div>';
+  scanPanelAbierto();
+  setTimeout(function(){ var c=document.getElementById('scan-cant'); if(c){ c.focus(); c.select(); } }, 350);
+}
+function scanDescargaGuardar(art, ean){
+  var tr = scanTr(); if(!tr) return;
+  var c = parseInt(document.getElementById('scan-cant').value, 10);
+  if(!(c>0)){ showToast('⚠️ Cargá la cantidad'); return; }
+  var ub = (document.getElementById('scan-desc-ubic').value||'').trim().toUpperCase();
+  if(!ub){ showToast('⚠️ Cargá dónde se guardó'); return; }
+  document.getElementById('scan-ubic').value = ub; localStorage.setItem('wms_scan_ubic', ub);
+  var ses = scanGetSes(tr.id);
+  ses.lec.push({id:Date.now()+'_'+Math.random().toString(36).slice(2,6), art:String(art), cant:c, ubic:ub, ean:ean||'', ts:new Date().toISOString()});
+  scanSetSes(tr.id, ses);
+  if(navigator.vibrate) navigator.vibrate([60,40,60]);
+  showToast('✅ '+art+' · '+c+' un. en '+ub);
+  scanCancelarActivo();
+  scanRenderProg();
+}
+
+// --- Resumen esperado vs leído ---
+function scanFilasResumen(tr){
+  var esp = scanEsperado(tr), ses = scanGetSes(tr.id), leido = scanLeidoPorArt(ses), filas = [];
+  var ubics = {};
+  ses.lec.forEach(function(x){ if(x.ubic){ ubics[x.art] = ubics[x.art]||{}; ubics[x.art][x.ubic] = (ubics[x.art][x.ubic]||0) + x.cant; } });
+  var arts = Object.keys(esp).concat(Object.keys(leido).filter(function(a){ return !esp[a]; }));
+  arts.forEach(function(a){
+    var e = esp[a]||0, l = leido[a]||0, r = scanArt(a);
+    filas.push({art:a, r:r, esp:e, leido:l, dif:l-e,
+      estado: !e ? 'NO VENÍA' : (l===e ? 'OK' : (l<e ? 'FALTA' : 'SOBRA')),
+      ubic: ubics[a] ? Object.keys(ubics[a]).map(function(u){ return u+': '+ubics[a][u]; }).join(' · ') : ''});
+  });
+  var ord = {'FALTA':0,'SOBRA':1,'NO VENÍA':2,'OK':3};
+  filas.sort(function(x,y){ return ord[x.estado]-ord[y.estado]; });
+  return {filas:filas, ses:ses};
+}
+function scanRenderProg(){
+  var box = document.getElementById('scan-prog'); if(!box) return;
+  var m = scanModo();
+  if(m==='stock'){ box.innerHTML=''; return; }
+  var tr = scanTr();
+  if(!tr){ box.innerHTML = '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;font-size:13px;color:#6e6e73">Elegí arriba el tránsito para empezar.</div>'; return; }
+  var res = scanFilasResumen(tr), f = res.filas;
+  var totE = f.reduce(function(s,x){return s+x.esp;},0), totL = f.reduce(function(s,x){return s+Math.min(x.leido,x.esp||0);},0);
+  var nFalta = f.filter(function(x){return x.estado==='FALTA';}).length, nSobra = f.filter(function(x){return x.estado==='SOBRA'||x.estado==='NO VENÍA';}).length;
+  var pct = totE ? Math.round(totL*100/totE) : 0;
+  var col = {'OK':'#248a3d','FALTA':'#d70015','SOBRA':'#b25000','NO VENÍA':'#b25000'};
+  box.innerHTML =
+    '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-weight:700">'+(m==='carga'?'🚚 Carga':'📥 Descarga')+' · '+scanEsc(tr.nroContenedor||tr.id)+'</div>'+
+      '<div style="font-size:20px;font-weight:800">'+totL+' / '+totE+'</div></div>'+
+      '<div style="height:8px;background:#e5e5ea;border-radius:4px;margin-top:6px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(pct>=100?'#34c759':'#0071e3')+'"></div></div>'+
+      '<div style="font-size:12px;color:#6e6e73;margin-top:6px">'+(nFalta?'🔴 '+nFalta+' con faltante · ':'')+(nSobra?'🟠 '+nSobra+' sobrante/no venía · ':'')+(m==='carga'&&res.ses.cruces.length?'❌ '+res.ses.cruces.length+' cruces evitados':'')+'</div>'+
+      '<div style="margin-top:8px">'+f.map(function(x){
+        return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f0f0f0;font-size:13px">'+
+          '<div style="flex:1;min-width:0"><b>'+scanEsc(x.art)+'</b> '+(x.r?scanEsc(x.r.med)+' '+scanEsc(x.r.diseno):'')+
+          (x.ubic?'<div style="font-size:11px;color:#6e6e73">📍 '+scanEsc(x.ubic)+'</div>':'')+'</div>'+
+          '<div style="font-weight:700;font-size:15px;white-space:nowrap">'+x.leido+' / '+x.esp+'</div>'+
+          '<div style="width:74px;text-align:right;font-size:11px;font-weight:700;color:'+col[x.estado]+'">'+x.estado+(x.dif&&x.estado!=='OK'?' '+(x.dif>0?'+':'')+x.dif:'')+'</div></div>';
+      }).join('')+'</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">'+
+        '<button onclick="scanDeshacer()" style="padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">↩️ Deshacer última</button>'+
+        '<button onclick="scanExportarModo()" style="padding:8px 10px;border:none;border-radius:8px;background:#34c759;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📤 Exportar resumen</button>'+
+        (m==='carga'?'<button onclick="scanPasarADespacho()" style="padding:8px 10px;border:none;border-radius:8px;background:#0071e3;color:#fff;font-size:12px;font-weight:600;cursor:pointer">➡️ Pasar cantidades al despacho</button>':'')+
+        '<button onclick="scanReiniciarSes()" style="padding:8px 10px;border:none;border-radius:8px;background:none;color:#ff3b30;font-size:12px;cursor:pointer">🗑️ Reiniciar</button>'+
+      '</div>'+
+    '</div>';
+}
+function scanDeshacer(){
+  var tr = scanTr(); if(!tr) return;
+  var ses = scanGetSes(tr.id), x = ses.lec.pop();
+  if(!x){ showToast('No hay lecturas para deshacer'); return; }
+  scanSetSes(tr.id, ses); showToast('↩️ Deshecho: '+x.art+' · '+x.cant+' un.'); scanRenderProg();
+}
+function scanReiniciarSes(){
+  var tr = scanTr(); if(!tr) return;
+  if(!confirm('¿Borrar todo lo escaneado de este tránsito en este teléfono?')) return;
+  localStorage.removeItem('wms_scan_ses_'+tr.id); scanCancelarActivo(); scanRenderProg();
+}
+// Acción manual: copia lo contado como "cantidad real" del despacho (lo que
+// después usa Despachar). No despacha ni toca ubicaciones.
+function scanPasarADespacho(){
+  var tr = scanTr(); if(!tr) return;
+  var leido = scanLeidoPorArt(scanGetSes(tr.id));
+  if(!confirm('¿Pasar lo escaneado como cantidad REAL de cada artículo del despacho '+(tr.nroContenedor||tr.id)+'?\n\nLos que no se escanearon quedan en 0. No se despacha nada todavía.')) return;
+  var lista = transitoGetAll(), t = lista.find(function(z){ return z.id===tr.id; }); if(!t) return;
+  var porArt = {};
+  t.items.forEach(function(r){ var k=String(r.art); porArt[k] = porArt[k]||[]; porArt[k].push(r); });
+  Object.keys(porArt).forEach(function(k){
+    var resto = leido[k]||0;
+    porArt[k].forEach(function(r, i){
+      var v = i===porArt[k].length-1 ? resto : Math.min(resto, r.cant);
+      r.cantReal = v; resto -= v;
+    });
+  });
+  transitoSave(lista);
+  showToast('➡️ Cantidades reales cargadas en el despacho — revisalas en Carga/Desc. → Tránsito');
+}
+function scanExportarModo(){
+  var tr = scanTr(); if(!tr) return;
+  var m = scanModo(), res = scanFilasResumen(tr);
+  var resumen = res.filas.map(function(x){
+    var o = {'ARTÍCULO':x.art,'MEDIDA':x.r?x.r.med:'','DISEÑO':x.r?x.r.diseno:'','PROVEEDOR':x.r?x.r.prov:'','ESPERADO':x.esp,
+             'ESCANEADO':x.leido,'DIFERENCIA':x.dif,'ESTADO':x.estado};
+    if(m==='descarga') o['GUARDADO EN'] = x.ubic;
+    return o;
+  });
+  var lect = res.ses.lec.map(function(x){ var h=new Date(x.ts); return {'FECHA':h.toLocaleDateString('es-AR'),'HORA':h.toLocaleTimeString('es-AR'),'ARTÍCULO':x.art,'CANTIDAD':x.cant,'UBICACIÓN':x.ubic,'CÓDIGO':x.ean}; });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lect), 'Lecturas');
+  if(m==='carga' && res.ses.cruces.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(res.ses.cruces.map(function(c){ var r=scanArt(c.art); return {'FECHA/HORA':new Date(c.ts).toLocaleString('es-AR'),'ARTÍCULO':c.art,'MEDIDA':r?r.med:'','CÓDIGO':c.ean}; })), 'Cruces evitados');
+  XLSX.writeFile(wb, (m==='carga'?'Carga_':'Descarga_')+String(tr.nroContenedor||tr.id).replace(/[^\w.-]+/g,'-')+'.xlsx');
+}
+
+function scanRenderModo(){
+  var m = scanModo();
+  ['carga','stock','descarga'].forEach(function(k){
+    var b = document.getElementById('scan-modo-'+k); if(!b) return;
+    b.style.background = k===m ? '#1d1d1f' : '#fff'; b.style.color = k===m ? '#fff' : '#1d1d1f';
+  });
+  var sel = document.getElementById('scan-tr-sel'), wrap = document.getElementById('scan-tr-wrap');
+  wrap.style.display = m==='stock' ? 'none' : 'block';
+  if(m!=='stock'){
+    var trs = scanTransitosModo(), act = scanTrId();
+    if(act && !trs.some(function(t){ return t.id===act; })){ localStorage.removeItem('wms_scan_tr_'+m); act=''; }
+    sel.innerHTML = '<option value="">— Elegí el tránsito '+(m==='carga'?'de salida':'de entrada')+' ('+trs.length+' pendientes) —</option>'+
+      trs.map(function(t){
+        var n = (t.items||[]).reduce(function(s,r){return s+(parseInt(r.cant,10)||0);},0);
+        return '<option value="'+scanEsc(t.id)+'"'+(t.id===act?' selected':'')+'>'+scanEsc((t.tipoIcon||'')+' '+(t.nroContenedor||t.id)+(t.destino?' → '+t.destino:'')+' · '+t.fecha+' · '+n+' un.')+'</option>';
+      }).join('');
+  }
+  document.getElementById('scan-ubic-wrap').style.display = m==='stock' ? 'flex' : 'none';
+  document.getElementById('scan-stock-card').style.display = m==='stock' ? 'block' : 'none';
+  document.getElementById('scan-pend').style.display = m==='stock' ? 'block' : 'none';
+  document.getElementById('scan-titulo').textContent = m==='carga' ? '🚚 Escaneo de carga' : (m==='descarga' ? '📥 Escaneo de descarga' : '📦 Escaneo de stock');
+  document.getElementById('scan-ayuda').textContent = m==='carga'
+    ? 'Escaneá cubierta por cubierta mientras cargás. Cada lectura suma 1. Si el artículo no va en el pedido, avisa CRUCE y no lo cuenta.'
+    : (m==='descarga' ? 'Escaneá la etiqueta, cargá cuántas y dónde las guardaste. Queda registrado; la ubicación en el WMS la asignás vos.'
+       : 'Leé el código, cargá la cantidad. Compara contra el stock del sistema.');
+  scanRenderProg();
 }
 
 function scanImportar(file){
