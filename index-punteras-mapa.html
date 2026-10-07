@@ -16691,7 +16691,7 @@ function scanGuardarUbic(){
 var _scanDetector = null, _scanPausado = false;
 function scanCargarLib(cb){
   if(_scanDetector) return cb();
-  var FMT = ['ean_13','ean_8','upc_a','upc_e','code_128'];
+  var FMT = ['ean_13','ean_8','upc_a','upc_e','code_128','qr_code','data_matrix'];
   function conPolyfill(){
     if(window.BarcodeDetectionAPI){ _scanDetector = new BarcodeDetectionAPI.BarcodeDetector({formats:FMT}); return cb(); }
     var s = document.createElement('script');
@@ -16782,7 +16782,8 @@ function scanLoop(){
     cam.ocupado = false;
     if(!cam.vivo) return;
     for(var i=0;i<(res||[]).length;i++){
-      var cod = scanNormalizar(res[i].rawValue);
+      var raw = String(res[i].rawValue||'').trim(), f = String(res[i].format||'');
+      var cod = scanNormalizar(raw) || ((/qr|matrix|128/.test(f) && raw.length>=3) ? raw : null);
       if(cod){
         var g = document.getElementById('scan-guia');
         if(g){ g.style.borderColor = '#34c759'; setTimeout(function(){ if(g) g.style.borderColor='rgba(255,255,255,.85)'; }, 400); }
@@ -16805,6 +16806,20 @@ function scanCerrarCamara(){
 }
 
 // ---------- Lectura ----------
+// Busca un número de artículo de la base dentro del texto leído (ej. un QR
+// propio que diga "...ART. 80882..."). Prioriza lo que viene después de
+// "ART"; si no, cualquier número que exista como artículo (solo si hay uno).
+function scanArtDeTexto(txt){
+  txt = String(txt||'');
+  if(scanNormalizar(txt)) return null; // un EAN no es un nº de artículo
+  var m = txt.match(/ART(?:[IÍ]CULO)?\.?\s*[:#Nº°-]*\s*(\d{3,7})/i);
+  if(m && scanArt(m[1])) return String(scanArt(m[1]).art);
+  var nums = (txt.match(/\d{3,7}/g)||[]).filter(function(n, i, a){ return a.indexOf(n)===i && scanArt(n); });
+  return nums.length===1 ? String(scanArt(nums[0]).art) : null;
+}
+// texto seguro para meter dentro de onclick="..."
+function scanJ(x){ return scanEsc(JSON.stringify(String(x==null?'':x))); }
+function scanCorto(x){ x=String(x||''); return x.length>40 ? x.slice(0,40)+'…' : x; }
 function scanProcesarCodigo(raw, desdeCamara){
   raw = String(raw||'').trim();
   if(!raw) return;
@@ -16818,11 +16833,12 @@ function scanProcesarCodigo(raw, desdeCamara){
   if(!cod){
     // ¿tipeó directo un número de artículo?
     if(!desdeCamara && scanArt(raw)){ scanMostrarArticulo(String(scanArt(raw).art), ''); return; }
-    if(desdeCamara) return; // lectura dudosa de la cámara: se ignora y se reintenta sola
-    showToast('⚠️ Código inválido: '+raw); return;
+    // QR / código propio: se usa el texto tal cual
+    cod = raw;
   }
   if(navigator.vibrate) navigator.vibrate(80);
   var art = scanGetMap()[cod];
+  if(!(art && scanArt(art))) art = scanArtDeTexto(cod); // ¿el QR trae el nº de artículo adentro?
   if(art && scanArt(art)) scanMostrarArticulo(art, cod);
   else scanMostrarVincular(cod);
 }
@@ -16833,19 +16849,19 @@ function scanMostrarArticulo(art, ean){
   var ya = scanGetConteo().filter(function(x){ return String(x.art)===String(art); }).reduce(function(s,x){return s+x.cant;},0);
   document.getElementById('scan-activo').innerHTML =
     '<div style="background:#e8f5e9;border:2px solid #34c759;border-radius:14px;padding:14px;margin-bottom:10px">'+
-      '<div style="font-size:12px;color:#248a3d;font-weight:600">✅ '+(ean?'EAN '+ean:'Artículo tipeado')+(ubic?' · 📍 '+scanEsc(ubic):'')+'</div>'+
+      '<div style="font-size:12px;color:#248a3d;font-weight:600">✅ '+(ean?(scanNormalizar(ean)?'EAN '+ean:'QR '+scanEsc(scanCorto(ean))):'Artículo tipeado')+(ubic?' · 📍 '+scanEsc(ubic):'')+'</div>'+
       '<div style="font-size:20px;font-weight:800;margin-top:4px">'+scanEsc(r.art)+' · '+scanEsc(r.med)+'</div>'+
       '<div style="font-size:13px;color:#3a3a3c">'+scanEsc(r.prov)+' '+scanEsc(r.diseno)+'</div>'+
       (ya?'<div style="font-size:12px;color:#6e6e73;margin-top:4px">Ya contadas en este conteo: <b>'+ya+'</b></div>':'')+
       '<div style="display:flex;gap:8px;margin-top:10px">'+
         '<input id="scan-cant" type="number" inputmode="numeric" min="1" placeholder="Cantidad" '+
-          'onkeydown="if(event.key===\'Enter\')scanConfirmar(\''+scanEsc(art)+'\',\''+ean+'\')" '+
+          'onkeydown="if(event.key===\'Enter\')scanConfirmar('+scanJ(art)+','+scanJ(ean)+')" '+
           'enterkeyhint="done" style="flex:1;min-width:0;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:18px;font-weight:700;text-align:center">'+
-        '<button onclick="scanConfirmar(\''+scanEsc(art)+'\',\''+ean+'\')" style="padding:12px 18px;border:none;border-radius:10px;background:#34c759;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Guardar</button>'+
+        '<button onclick="scanConfirmar('+scanJ(art)+','+scanJ(ean)+')" style="padding:12px 18px;border:none;border-radius:10px;background:#34c759;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Guardar</button>'+
       '</div>'+
       '<div style="display:flex;justify-content:space-between;margin-top:8px">'+
         '<button onclick="scanCancelarActivo()" style="background:none;border:none;color:#6e6e73;font-size:12px;cursor:pointer">✖ Cancelar</button>'+
-        (ean?'<button onclick="scanDesvincular(\''+ean+'\')" style="background:none;border:none;color:#ff3b30;font-size:12px;cursor:pointer">🔗 No es este artículo</button>':'')+
+        (ean?'<button onclick="scanDesvincular('+scanJ(ean)+')" style="background:none;border:none;color:#ff3b30;font-size:12px;cursor:pointer">🔗 No es este artículo</button>':'')+
       '</div>'+
     '</div>';
   scanPanelAbierto();
@@ -16855,10 +16871,10 @@ function scanMostrarArticulo(art, ean){
 function scanMostrarVincular(ean){
   document.getElementById('scan-activo').innerHTML =
     '<div style="background:#fff8e1;border:2px solid #ff9f0a;border-radius:14px;padding:14px;margin-bottom:10px">'+
-      '<div style="font-size:12px;color:#b25000;font-weight:600">🆕 Código nuevo: '+ean+'</div>'+
+      '<div style="font-size:12px;color:#b25000;font-weight:600">'+(scanNormalizar(ean)?'🆕 Código nuevo: ':'🆕 QR / código nuevo: ')+scanEsc(scanCorto(ean))+'</div>'+
       '<div style="font-size:13px;margin-top:4px">¿Qué artículo es? Elegilo una vez y queda vinculado.</div>'+
       '<input id="scan-busca" placeholder="Artículo, medida o diseño (ej. 32209, 225/75, TR652)" autocomplete="off" '+
-        'oninput="scanBuscarVinc(this.value,\''+ean+'\')" '+
+        'oninput="scanBuscarVinc(this.value,'+scanJ(ean)+')" '+
         'style="width:100%;box-sizing:border-box;margin-top:8px;padding:12px;border:1px solid #d2d2d7;border-radius:10px;font-size:16px">'+
       '<div id="scan-busca-res" style="margin-top:6px;max-height:260px;overflow:auto"></div>'+
       '<button onclick="scanCancelarActivo()" style="margin-top:6px;background:none;border:none;color:#6e6e73;font-size:12px;cursor:pointer">✖ Cancelar</button>'+
@@ -16876,7 +16892,7 @@ function scanBuscarVinc(q, ean){
     return t.indexOf(q)>=0 || String(r.med||'').toUpperCase().replace(/[\s\/R]/g,'').indexOf(qn)>=0;
   }).slice(0,30);
   box.innerHTML = res.length ? res.map(function(r){
-    return '<div onclick="scanVincular(\''+ean+'\',\''+scanEsc(r.art)+'\')" style="padding:12px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:14px">'+
+    return '<div onclick="scanVincular('+scanJ(ean)+','+scanJ(r.art)+')" style="padding:12px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:14px">'+
       '<b>'+scanEsc(r.art)+'</b> · '+scanEsc(r.med)+' · '+scanEsc(r.prov)+' '+scanEsc(r.diseno)+
       ' <span style="color:#6e6e73">(stock '+(r.stock||0)+')</span></div>';
   }).join('') : '<div style="font-size:12px;color:#6e6e73;padding:6px">Sin resultados</div>';
@@ -17036,9 +17052,19 @@ function scanImportarGenerico(wb){
     var n = filas.reduce(function(s,r){ return s + (scanNormalizar(r[c])?1:0); }, 0);
     if(n>mejorN){ mejorN=n; mejor=c; }
   }
-  if(mejor<0){ showToast('⚠️ No encontré códigos EAN/UPC en el archivo'); return; }
+  // Sin EAN/UPC: buscar la columna con texto de QR (la que más artículos de la base trae adentro)
+  var modoQR = false;
+  if(mejor<0){
+    for(var c2=0;c2<nCols;c2++){
+      var n2 = filas.reduce(function(s,r){ return s + (scanArtDeTexto(r[c2])?1:0); }, 0);
+      if(n2>mejorN){ mejorN=n2; mejor=c2; }
+    }
+    modoQR = mejor>=0;
+  }
+  if(mejor<0){ showToast('⚠️ No encontré códigos EAN/UPC ni QR con artículo en el archivo'); return; }
+  var leerCod = function(v){ return modoQR ? (String(v||'').trim() || null) : scanNormalizar(v); };
   // ¿la primera fila es encabezado?
-  var head = scanNormalizar(filas[0][mejor]) ? null : filas[0].map(function(h){ return String(h||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); });
+  var head = (modoQR ? scanArtDeTexto(filas[0][mejor]) : scanNormalizar(filas[0][mejor])) ? null : filas[0].map(function(h){ return String(h||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); });
   var colCant = -1, colUbic = -1;
   if(head) head.forEach(function(h,i){
     if(i===mejor) return;
@@ -17049,7 +17075,7 @@ function scanImportarGenerico(wb){
   // junta por código+ubicación
   var acum = {}, orden = [];
   datos.forEach(function(r){
-    var cod = scanNormalizar(r[mejor]); if(!cod) return;
+    var cod = leerCod(r[mejor]); if(!cod) return;
     var cant = colCant>=0 ? parseInt(String(r[colCant]).replace(/\D/g,''),10) : 1;
     if(!(cant>0)) return;
     var ub = colUbic>=0 ? String(r[colUbic]||'').trim().toUpperCase() : '';
@@ -17063,6 +17089,7 @@ function scanImportarGenerico(wb){
   var okL = 0, okU = 0, pendU = 0, pendC = {};
   orden.forEach(function(k, i){
     var x = acum[k], ub = x.ubic || ubicDef, art = map[x.cod];
+    if(!(art && scanArt(art))) art = scanArtDeTexto(x.cod);
     if(art && scanArt(art)){
       cont.push({ id:'se'+Date.now()+'_'+i, art:String(art), cant:x.cant, ubic:ub, ean:x.cod, ts:new Date().toISOString() });
       okL++; okU += x.cant;
@@ -17089,9 +17116,9 @@ function scanRenderPend(){
     cods.map(function(c){
       var t = pend[c].reduce(function(s,x){return s+x.cant;},0);
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #ffe0b2;font-size:13px">'+
-        '<div style="flex:1;font-family:monospace">'+c+' <span style="color:#6e6e73;font-family:inherit">· '+t+' un.</span></div>'+
-        '<button onclick="scanMostrarVincular(\''+c+'\')" style="padding:7px 12px;border:none;border-radius:8px;background:#ff9f0a;color:#fff;font-weight:600;font-size:12px;cursor:pointer">Vincular</button>'+
-        '<button onclick="scanDescartarPend(\''+c+'\')" style="background:none;border:none;color:#ff3b30;cursor:pointer;font-size:15px">✖</button></div>';
+        '<div style="flex:1;font-family:monospace;word-break:break-all">'+scanEsc(scanCorto(c))+' <span style="color:#6e6e73;font-family:inherit">· '+t+' un.</span></div>'+
+        '<button onclick="scanMostrarVincular('+scanJ(c)+')" style="padding:7px 12px;border:none;border-radius:8px;background:#ff9f0a;color:#fff;font-weight:600;font-size:12px;cursor:pointer">Vincular</button>'+
+        '<button onclick="scanDescartarPend('+scanJ(c)+')" style="background:none;border:none;color:#ff3b30;cursor:pointer;font-size:15px">✖</button></div>';
     }).join('')+'</div>';
 }
 function scanDescartarPend(c){
