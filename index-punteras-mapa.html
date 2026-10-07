@@ -1147,10 +1147,15 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
         <button id="scan-modo-stock" onclick="scanSetModo('stock')" style="flex:1;padding:10px 4px;border:1px solid #1d1d1f;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">📦 Stock</button>
         <button id="scan-modo-descarga" onclick="scanSetModo('descarga')" style="flex:1;padding:10px 4px;border:1px solid #1d1d1f;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer">📥 Descarga</button>
       </div>
-      <div style="font-weight:700;font-size:16px"><span id="scan-titulo">📦 Escaneo de stock</span> <span style="font-size:10px;color:#a0a0a5;font-weight:400">v07-10 d</span></div>
+      <div style="font-weight:700;font-size:16px"><span id="scan-titulo">📦 Escaneo de stock</span> <span style="font-size:10px;color:#a0a0a5;font-weight:400">v07-10 f</span></div>
       <div id="scan-ayuda" style="font-size:12px;color:#6e6e73;margin-top:2px"></div>
       <div id="scan-tr-wrap" style="display:none;margin-top:10px">
         <select id="scan-tr-sel" onchange="scanSetTr(this.value)" style="width:100%;padding:11px;border:1px solid #d2d2d7;border-radius:10px;font-size:15px;background:#fff"></select>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button onclick="scanMostrarQRTr()" style="flex:1;padding:9px 6px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">📲 Pasar al celular (QR)</button>
+          <button onclick="document.getElementById('scan-ses-input').click()" style="flex:1;padding:9px 6px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">📥 Importar escaneo del celular</button>
+          <input type="file" id="scan-ses-input" accept=".xlsx,.xls" style="display:none" onchange="scanImportarSesion(this.files[0]);this.value=''">
+        </div>
       </div>
       <div id="scan-ubic-wrap" style="display:flex;gap:8px;margin-top:10px">
         <input id="scan-ubic" placeholder="📍 Ubicación (ej. B4S, 4S-N2-P03, P6-5)" autocomplete="off"
@@ -16880,6 +16885,7 @@ function scanProcesarCodigo(raw, desdeCamara){
   if(desdeCamara && (document.getElementById('scan-cant') || document.getElementById('scan-busca'))) return; // hay un panel abierto
   _scanUltimo = {cod:raw, t:ahora};
 
+  if(raw.indexOf('WMSTR1|')===0){ scanRecibirTr(raw); return; }
   var cod = scanNormalizar(raw);
   if(!cod){
     // ¿tipeó directo un número de artículo?
@@ -17202,7 +17208,11 @@ function scanAplicarPend(ean, art){
 // =====================================================================
 function scanModo(){ return localStorage.getItem('wms_scan_modo')||'stock'; }
 function scanTrId(){ return localStorage.getItem('wms_scan_tr_'+scanModo())||''; }
-function scanTr(){ var id=scanTrId(); return id ? transitoGetAll().find(function(t){ return t.id===id; }) : null; }
+function scanTr(){
+  var id=scanTrId(); if(!id) return null;
+  if(id.indexOf('LIBRE_')===0) return {id:id, libre:true, nroContenedor:'Sin tránsito', flujo:scanModo()==='carga'?'salida':'entrada', items:[]};
+  return scanTodosTr().find(function(t){ return t.id===id; }) || null;
+}
 function scanGetSes(id){ try{ return JSON.parse(localStorage.getItem('wms_scan_ses_'+id)||'{"lec":[],"cruces":[]}'); }catch(e){ return {lec:[],cruces:[]}; } }
 function scanSetSes(id, s){ localStorage.setItem('wms_scan_ses_'+id, JSON.stringify(s)); }
 
@@ -17218,7 +17228,7 @@ function scanSetTr(id){
 }
 function scanTransitosModo(){
   var m = scanModo();
-  return transitoGetAll().filter(function(t){
+  return scanTodosTr().filter(function(t){
     if(t.estado!=='transito') return false;
     return m==='carga' ? t.flujo==='salida' : t.flujo!=='salida';
   });
@@ -17250,6 +17260,12 @@ function scanCargaRegistrar(art, ean){
   if(!tr){ showToast('⚠️ Elegí primero el tránsito que se está cargando'); return; }
   var r = scanArt(art), esp = scanEsperado(tr), ses = scanGetSes(tr.id);
   var desc = scanEsc(art)+' · '+scanEsc(r?r.med:'')+' '+scanEsc(r?r.diseno:'');
+  if(tr.libre){
+    ses.lec.push({id:Date.now()+'_'+Math.random().toString(36).slice(2,6), art:String(art), cant:1, ubic:'', ean:ean||'', ts:new Date().toISOString()});
+    scanSetSes(tr.id, ses);
+    scanFlash('#0071e3', '+1 · '+scanLeidoPorArt(ses)[art]+' de este artículo', desc, 80);
+    scanRenderProg(); return;
+  }
   if(!esp[art]){
     ses.cruces.push({art:String(art), ean:ean||'', ts:new Date().toISOString()});
     scanSetSes(tr.id, ses);
@@ -17276,7 +17292,8 @@ function scanDescargaPanel(art, ean){
   document.getElementById('scan-activo').innerHTML =
     '<div style="background:'+(e?'#e8f5e9':'#fff3e0')+';border:2px solid '+(e?'#34c759':'#ff9500')+';border-radius:14px;padding:14px;margin-bottom:10px">'+
       (e ? '<div style="font-size:12px;color:#248a3d;font-weight:600">✅ Viene en el tránsito · esperado '+e+' · recibido '+ya+'</div>'
-         : '<div style="font-size:13px;color:#b25000;font-weight:700">⚠️ NO venía en este tránsito (sobrante / cruce)</div>')+
+         : (tr.libre ? '<div style="font-size:12px;color:#6e6e73;font-weight:600">📝 Sin tránsito · recibido hasta ahora '+ya+'</div>'
+                     : '<div style="font-size:13px;color:#b25000;font-weight:700">⚠️ NO venía en este tránsito (sobrante / cruce)</div>'))+
       '<div style="font-size:20px;font-weight:800;margin-top:4px">'+scanEsc(art)+' · '+scanEsc(r?r.med:'')+'</div>'+
       '<div style="font-size:13px;color:#3a3a3c">'+scanEsc(r?r.prov:'')+' '+scanEsc(r?r.diseno:'')+'</div>'+
       (sug?'<div style="font-size:12px;color:#6e6e73;margin-top:4px">Sugerido: <b>'+scanEsc(sug)+'</b> (solo referencia)</div>':'')+
@@ -17321,10 +17338,10 @@ function scanFilasResumen(tr){
   arts.forEach(function(a){
     var e = esp[a]||0, l = leido[a]||0, r = scanArt(a);
     filas.push({art:a, r:r, esp:e, leido:l, dif:l-e,
-      estado: !e ? 'NO VENÍA' : (l===e ? 'OK' : (l<e ? 'FALTA' : 'SOBRA')),
+      estado: tr.libre ? 'LEÍDO' : (!e ? 'NO VENÍA' : (l===e ? 'OK' : (l<e ? 'FALTA' : 'SOBRA'))),
       ubic: ubics[a] ? Object.keys(ubics[a]).map(function(u){ return u+': '+ubics[a][u]; }).join(' · ') : ''});
   });
-  var ord = {'FALTA':0,'SOBRA':1,'NO VENÍA':2,'OK':3};
+  var ord = {'FALTA':0,'SOBRA':1,'NO VENÍA':2,'OK':3,'LEÍDO':4};
   filas.sort(function(x,y){ return ord[x.estado]-ord[y.estado]; });
   return {filas:filas, ses:ses};
 }
@@ -17338,7 +17355,8 @@ function scanRenderProg(){
   var totE = f.reduce(function(s,x){return s+x.esp;},0), totL = f.reduce(function(s,x){return s+Math.min(x.leido,x.esp||0);},0);
   var nFalta = f.filter(function(x){return x.estado==='FALTA';}).length, nSobra = f.filter(function(x){return x.estado==='SOBRA'||x.estado==='NO VENÍA';}).length;
   var pct = totE ? Math.round(totL*100/totE) : 0;
-  var col = {'OK':'#248a3d','FALTA':'#d70015','SOBRA':'#b25000','NO VENÍA':'#b25000'};
+  var col = {'OK':'#248a3d','FALTA':'#d70015','SOBRA':'#b25000','NO VENÍA':'#b25000','LEÍDO':'#0071e3'};
+  if(tr.libre){ totE = f.reduce(function(s,x){return s+x.leido;},0); totL = totE; pct = 100; }
   box.innerHTML =
     '<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">'+
       '<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-weight:700">'+(m==='carga'?'🚚 Carga':'📥 Descarga')+' · '+scanEsc(tr.nroContenedor||tr.id)+'</div>'+
@@ -17349,13 +17367,13 @@ function scanRenderProg(){
         return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f0f0f0;font-size:13px">'+
           '<div style="flex:1;min-width:0"><b>'+scanEsc(x.art)+'</b> '+(x.r?scanEsc(x.r.med)+' '+scanEsc(x.r.diseno):'')+
           (x.ubic?'<div style="font-size:11px;color:#6e6e73">📍 '+scanEsc(x.ubic)+'</div>':'')+'</div>'+
-          '<div style="font-weight:700;font-size:15px;white-space:nowrap">'+x.leido+' / '+x.esp+'</div>'+
-          '<div style="width:74px;text-align:right;font-size:11px;font-weight:700;color:'+col[x.estado]+'">'+x.estado+(x.dif&&x.estado!=='OK'?' '+(x.dif>0?'+':'')+x.dif:'')+'</div></div>';
+          '<div style="font-weight:700;font-size:15px;white-space:nowrap">'+(tr.libre?x.leido:x.leido+' / '+x.esp)+'</div>'+
+          '<div style="width:74px;text-align:right;font-size:11px;font-weight:700;color:'+col[x.estado]+'">'+x.estado+(x.dif&&x.estado!=='OK'&&!tr.libre?' '+(x.dif>0?'+':'')+x.dif:'')+'</div></div>';
       }).join('')+'</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">'+
         '<button onclick="scanDeshacer()" style="padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">↩️ Deshacer última</button>'+
         '<button onclick="scanExportarModo()" style="padding:8px 10px;border:none;border-radius:8px;background:#34c759;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📤 Exportar resumen</button>'+
-        (m==='carga'?'<button onclick="scanPasarADespacho()" style="padding:8px 10px;border:none;border-radius:8px;background:#0071e3;color:#fff;font-size:12px;font-weight:600;cursor:pointer">➡️ Pasar cantidades al despacho</button>':'')+
+        (m==='carga'&&!tr.libre?'<button onclick="scanPasarADespacho()" style="padding:8px 10px;border:none;border-radius:8px;background:#0071e3;color:#fff;font-size:12px;font-weight:600;cursor:pointer">➡️ Pasar cantidades al despacho</button>':'')+
         '<button onclick="scanReiniciarSes()" style="padding:8px 10px;border:none;border-radius:8px;background:none;color:#ff3b30;font-size:12px;cursor:pointer">🗑️ Reiniciar</button>'+
       '</div>'+
     '</div>';
@@ -17377,7 +17395,8 @@ function scanPasarADespacho(){
   var tr = scanTr(); if(!tr) return;
   var leido = scanLeidoPorArt(scanGetSes(tr.id));
   if(!confirm('¿Pasar lo escaneado como cantidad REAL de cada artículo del despacho '+(tr.nroContenedor||tr.id)+'?\n\nLos que no se escanearon quedan en 0. No se despacha nada todavía.')) return;
-  var lista = transitoGetAll(), t = lista.find(function(z){ return z.id===tr.id; }); if(!t) return;
+  var lista = transitoGetAll(), t = lista.find(function(z){ return z.id===tr.id; });
+  if(!t){ showToast('📲 Este tránsito es una copia en el celular: exportá el resumen e importalo en la PC para pasarlo al despacho'); return; }
   var porArt = {};
   t.items.forEach(function(r){ var k=String(r.art); porArt[k] = porArt[k]||[]; porArt[k].push(r); });
   Object.keys(porArt).forEach(function(k){
@@ -17393,6 +17412,11 @@ function scanPasarADespacho(){
 function scanExportarModo(){
   var tr = scanTr(); if(!tr) return;
   var m = scanModo(), res = scanFilasResumen(tr);
+  var ref = tr.nroContenedor||tr.id;
+  if(tr.libre){
+    if(!res.ses.lec.length){ showToast('No hay nada escaneado'); return; }
+    ref = (prompt('Referencia de esta '+(m==='carga'?'carga':'descarga')+' (nº de pedido, patente, contenedor…):','')||'').trim() || 'sin-ref';
+  }
   var resumen = res.filas.map(function(x){
     var o = {'ARTÍCULO':x.art,'MEDIDA':x.r?x.r.med:'','DISEÑO':x.r?x.r.diseno:'','PROVEEDOR':x.r?x.r.prov:'','ESPERADO':x.esp,
              'ESCANEADO':x.leido,'DIFERENCIA':x.dif,'ESTADO':x.estado};
@@ -17403,8 +17427,12 @@ function scanExportarModo(){
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lect), 'Lecturas');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['ID',tr.id],['MODO',m],['TRÁNSITO',ref],['EXPORTADO',new Date().toLocaleString('es-AR')]]), 'Info');
   if(m==='carga' && res.ses.cruces.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(res.ses.cruces.map(function(c){ var r=scanArt(c.art); return {'FECHA/HORA':new Date(c.ts).toLocaleString('es-AR'),'ARTÍCULO':c.art,'MEDIDA':r?r.med:'','CÓDIGO':c.ean}; })), 'Cruces evitados');
-  XLSX.writeFile(wb, (m==='carga'?'Carga_':'Descarga_')+String(tr.nroContenedor||tr.id).replace(/[^\w.-]+/g,'-')+'.xlsx');
+  XLSX.writeFile(wb, (m==='carga'?'Carga_':'Descarga_')+String(ref).replace(/[^\w.-]+/g,'-')+'.xlsx');
+  if(tr.libre && confirm('Excel exportado. ¿Vaciar lo escaneado para empezar la próxima '+(m==='carga'?'carga':'descarga')+'?')){
+    localStorage.removeItem('wms_scan_ses_'+tr.id); scanRenderProg();
+  }
 }
 
 function scanRenderModo(){
@@ -17417,11 +17445,13 @@ function scanRenderModo(){
   wrap.style.display = m==='stock' ? 'none' : 'block';
   if(m!=='stock'){
     var trs = scanTransitosModo(), act = scanTrId();
-    if(act && !trs.some(function(t){ return t.id===act; })){ localStorage.removeItem('wms_scan_tr_'+m); act=''; }
+    var libreId = 'LIBRE_'+m;
+    if(act && act!==libreId && !trs.some(function(t){ return t.id===act; })){ localStorage.removeItem('wms_scan_tr_'+m); act=''; }
     sel.innerHTML = '<option value="">— Elegí el tránsito '+(m==='carga'?'de salida':'de entrada')+' ('+trs.length+' pendientes) —</option>'+
+      '<option value="'+libreId+'"'+(act===libreId?' selected':'')+'>📝 Sin tránsito — solo escanear y exportar Excel</option>'+
       trs.map(function(t){
         var n = (t.items||[]).reduce(function(s,r){return s+(parseInt(r.cant,10)||0);},0);
-        return '<option value="'+scanEsc(t.id)+'"'+(t.id===act?' selected':'')+'>'+scanEsc((t.tipoIcon||'')+' '+(t.nroContenedor||t.id)+(t.destino?' → '+t.destino:'')+' · '+t.fecha+' · '+n+' un.')+'</option>';
+        return '<option value="'+scanEsc(t.id)+'"'+(t.id===act?' selected':'')+'>'+scanEsc((t.copiaEscaner?'📲 ':'')+(t.tipoIcon||'')+' '+(t.nroContenedor||t.id)+(t.destino?' → '+t.destino:'')+' · '+t.fecha+' · '+n+' un.')+'</option>';
       }).join('');
   }
   document.getElementById('scan-ubic-wrap').style.display = m==='stock' ? 'flex' : 'none';
@@ -17433,6 +17463,107 @@ function scanRenderModo(){
     : (m==='descarga' ? 'Escaneá la etiqueta, cargá cuántas y dónde las guardaste. Queda registrado; la ubicación en el WMS la asignás vos.'
        : 'Leé el código, cargá la cantidad. Compara contra el stock del sistema.');
   scanRenderProg();
+}
+
+// ---------- Pasar tránsitos PC → celular (QR en pantalla) y escaneo celular → PC (Excel) ----------
+// Cada dispositivo guarda sus datos en su navegador, así que el celular no ve
+// los tránsitos de la PC. La PC muestra un QR con el tránsito; el celular lo
+// escanea con el mismo escáner y lo guarda como COPIA (wms_scan_trs), que no
+// se mezcla con los tránsitos reales del celular.
+function scanGetCopias(){ try{ return JSON.parse(localStorage.getItem('wms_scan_trs')||'[]'); }catch(e){ return []; } }
+function scanSetCopias(a){ localStorage.setItem('wms_scan_trs', JSON.stringify(a)); }
+function scanTodosTr(){
+  var reales = transitoGetAll(), ids = {};
+  reales.forEach(function(t){ ids[t.id]=1; });
+  return reales.concat(scanGetCopias().filter(function(t){ return !ids[t.id]; }));
+}
+function scanLimpio(x){ return String(x==null?'':x).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[|;,]/g,' ').trim(); }
+function scanTrACodigo(tr){
+  var items = (tr.items||[]).map(function(r){
+    var pos = r.sugerencia ? String(r.sugerencia.pos||'').replace(/[★🆕]/g,'').trim() : '';
+    return scanLimpio(r.art)+','+(parseInt(r.cant,10)||0)+','+scanLimpio(pos);
+  }).join(';');
+  return 'WMSTR1|'+scanLimpio(tr.id)+'|'+(tr.flujo==='salida'?'S':'E')+'|'+scanLimpio(tr.nroContenedor)+'|'+scanLimpio(tr.destino)+'|'+scanLimpio(tr.fecha)+'|'+items;
+}
+function scanCodigoATr(txt){
+  var p = String(txt).split('|'); if(p[0]!=='WMSTR1' || p.length<7) return null;
+  return { id:p[1], flujo:p[2]==='S'?'salida':'entrada', nroContenedor:p[3], destino:p[4], fecha:p[5], estado:'transito',
+    tipoIcon:p[2]==='S'?'📋':'📥', copiaEscaner:true,
+    items: p.slice(6).join('|').split(';').filter(Boolean).map(function(s){ var c=s.split(','); return {art:c[0], cant:parseInt(c[1],10)||0, sugerencia:c[2]?{pos:c[2]}:null}; }) };
+}
+function scanRecibirTr(txt){
+  var tr = scanCodigoATr(txt);
+  if(!tr){ showToast('⚠️ QR de tránsito inválido'); return; }
+  var copias = scanGetCopias().filter(function(t){ return t.id!==tr.id; });
+  copias.unshift(tr); scanSetCopias(copias.slice(0,30));
+  var modo = tr.flujo==='salida' ? 'carga' : 'descarga';
+  localStorage.setItem('wms_scan_modo', modo);
+  localStorage.setItem('wms_scan_tr_'+modo, tr.id);
+  if(navigator.vibrate) navigator.vibrate([80,60,80]);
+  var n = tr.items.reduce(function(s,r){return s+r.cant;},0);
+  showToast('📲 Tránsito '+(tr.nroContenedor||tr.id)+' recibido · '+tr.items.length+' arts · '+n+' un.');
+  scanCancelarActivo(); renderScan();
+}
+function scanMostrarQRTr(){
+  var tr = scanTr();
+  if(!tr){ showToast('⚠️ Elegí primero el tránsito'); return; }
+  var txt = scanTrACodigo(tr);
+  if(txt.length>2800){ showToast('⚠️ El tránsito es muy grande para un solo QR ('+tr.items.length+' líneas)'); return; }
+  function dibujar(){
+    var bg = document.createElement('div');
+    bg.id = 'scan-qr-modal';
+    bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px';
+    bg.innerHTML = '<div style="background:#fff;border-radius:16px;padding:18px;max-width:420px;width:100%;text-align:center">'+
+      '<div style="font-weight:800;font-size:16px">📲 Escaneá este QR con el celular</div>'+
+      '<div style="font-size:12px;color:#6e6e73;margin:4px 0 12px">En el celular: Escanear → abrir cámara (en cualquier modo) y apuntar a la pantalla.<br>'+scanEsc(tr.nroContenedor||tr.id)+' · '+tr.items.length+' líneas</div>'+
+      '<div id="scan-qr-dibujo" style="display:flex;justify-content:center;background:#fff;padding:8px"></div>'+
+      '<button onclick="document.getElementById(\'scan-qr-modal\').remove()" style="margin-top:14px;padding:10px 22px;border:none;border-radius:10px;background:#1d1d1f;color:#fff;font-weight:600;cursor:pointer">Cerrar</button></div>';
+    bg.addEventListener('click', function(e){ if(e.target===bg) bg.remove(); });
+    document.body.appendChild(bg);
+    new QRCode(document.getElementById('scan-qr-dibujo'), { text:txt, width:360, height:360, correctLevel:QRCode.CorrectLevel.L });
+  }
+  if(window.QRCode) return dibujar();
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = dibujar;
+  s.onerror = function(){ showToast('⚠️ No se pudo cargar el generador de QR (¿sin internet?)'); };
+  document.head.appendChild(s);
+}
+// PC: importar el Excel que exportó el celular → queda la sesión en la PC
+function scanImportarSesion(file){
+  if(!file) return;
+  var rd = new FileReader();
+  rd.onload = function(e){
+    try{
+      var wb = XLSX.read(e.target.result, {type:'array'});
+      var info = wb.Sheets['Info'] ? XLSX.utils.sheet_to_json(wb.Sheets['Info'], {header:1}) : [];
+      var id = ''; info.forEach(function(r){ if(String(r[0]).toUpperCase()==='ID') id = String(r[1]||''); });
+      if(!id){ showToast('⚠️ El archivo no es un resumen de Carga/Descarga del escáner'); return; }
+      var tr;
+      if(id.indexOf('LIBRE_')===0){
+        tr = scanTr();
+        if(!tr || tr.libre){ showToast('⚠️ Elegí primero en la lista el tránsito contra el que querés comparar este Excel, y volvé a importarlo'); return; }
+        var refA = ''; info.forEach(function(r){ if(String(r[0]).toUpperCase()==='TRÁNSITO') refA = String(r[1]||''); });
+        if(!confirm('Comparar el escaneo "'+refA+'" contra el tránsito '+(tr.nroContenedor||tr.id)+(tr.destino?' → '+tr.destino:'')+'?')) return;
+        id = tr.id;
+      } else {
+        tr = scanTodosTr().find(function(t){ return t.id===id; });
+        if(!tr){ showToast('⚠️ El tránsito '+id+' no está en este dispositivo (¿ya se despachó/recibió?)'); return; }
+      }
+      var lec = XLSX.utils.sheet_to_json(wb.Sheets['Lecturas']||{}).filter(function(r){ return r['ARTÍCULO'] && parseInt(r['CANTIDAD'],10)>0; })
+        .map(function(r,i){ return {id:'imp'+Date.now()+'_'+i, art:String(r['ARTÍCULO']).trim(), cant:parseInt(r['CANTIDAD'],10), ubic:String(r['UBICACIÓN']||''), ean:String(r['CÓDIGO']||''), ts:new Date().toISOString()}; });
+      if(id!==tr.id) id = tr.id;
+      var cru = wb.Sheets['Cruces evitados'] ? XLSX.utils.sheet_to_json(wb.Sheets['Cruces evitados']).map(function(r){ return {art:String(r['ARTÍCULO']||''), ean:String(r['CÓDIGO']||''), ts:new Date().toISOString()}; }) : [];
+      var previo = scanGetSes(id).lec.length;
+      if(previo && !confirm('Este tránsito ya tiene '+previo+' lecturas en este dispositivo. ¿Reemplazarlas por las del archivo?')) return;
+      scanSetSes(id, {lec:lec, cruces:cru});
+      var modo = tr.flujo==='salida' ? 'carga' : 'descarga';
+      localStorage.setItem('wms_scan_modo', modo); localStorage.setItem('wms_scan_tr_'+modo, id);
+      showToast('📥 Escaneo importado · '+lec.length+' lecturas');
+      renderScan();
+    }catch(err){ showToast('⚠️ No se pudo leer el archivo: '+err.message); }
+  };
+  rd.readAsArrayBuffer(file);
 }
 
 function scanImportar(file){
