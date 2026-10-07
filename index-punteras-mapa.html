@@ -1158,14 +1158,15 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       </div>
     </div>
 
+    <div id="scan-pend"></div>
     <div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap">
         <div style="font-weight:700">🧾 Conteo actual <span id="scan-resumen" style="font-weight:400;color:#6e6e73;font-size:12px"></span></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button onclick="scanExportar()" style="padding:7px 10px;border:none;border-radius:8px;background:#34c759;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📤 Exportar Excel</button>
-          <button onclick="document.getElementById('scan-import-input').click()" style="padding:7px 10px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">📥 Importar conteo</button>
+          <button onclick="document.getElementById('scan-import-input').click()" style="padding:7px 10px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;font-size:12px;cursor:pointer">📥 Importar (WMS o Scan to Excel)</button>
           <button onclick="scanReset()" style="padding:7px 10px;border:none;border-radius:8px;background:none;color:#ff3b30;font-size:12px;cursor:pointer">🗑️ Nuevo conteo</button>
-          <input type="file" id="scan-import-input" accept=".xlsx,.xls" style="display:none" onchange="scanImportar(this.files[0]);this.value=''">
+          <input type="file" id="scan-import-input" accept=".xlsx,.xls,.csv,.txt" style="display:none" onchange="scanImportar(this.files[0]);this.value=''">
         </div>
       </div>
       <div style="display:flex;gap:6px;margin-top:8px">
@@ -16672,6 +16673,7 @@ function renderScan(){
   var u = localStorage.getItem('wms_scan_ubic')||'';
   var inp = document.getElementById('scan-ubic'); if(inp && !inp.value) inp.value = u;
   scanRenderLista();
+  scanRenderPend();
   var n = Object.keys(scanGetMap()).length;
   document.getElementById('scan-vinculos-lbl').textContent = '🔗 '+n+' códigos vinculados a artículos en este dispositivo';
 }
@@ -16681,43 +16683,124 @@ function scanGuardarUbic(){
   localStorage.setItem('wms_scan_ubic', el.value);
 }
 
-// ---------- Cámara ----------
+// ---------- Cámara (motor propio) ----------
+// Android/Chrome: usa el lector NATIVO del teléfono (BarcodeDetector, el
+// mismo motor de Google que usan las apps). iPhone/Safari no lo trae, así
+// que se carga ZXing-C++ compilado a WebAssembly — mucho más preciso que
+// el lector JS anterior. Se analiza el cuadro a resolución completa.
+var _scanDetector = null, _scanPausado = false;
 function scanCargarLib(cb){
-  if(window.Html5Qrcode) return cb();
-  var s = document.createElement('script');
-  s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-  s.onload = cb;
-  s.onerror = function(){ showToast('⚠️ No se pudo cargar el lector (¿sin internet?). Usá el campo de tipeo.'); };
-  document.head.appendChild(s);
+  if(_scanDetector) return cb();
+  var FMT = ['ean_13','ean_8','upc_a','upc_e','code_128'];
+  function conPolyfill(){
+    if(window.BarcodeDetectionAPI){ _scanDetector = new BarcodeDetectionAPI.BarcodeDetector({formats:FMT}); return cb(); }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/barcode-detector@2.3.1/dist/iife/pure.js';
+    s.onload = function(){ _scanDetector = new BarcodeDetectionAPI.BarcodeDetector({formats:FMT}); cb(); };
+    s.onerror = function(){ showToast('⚠️ No se pudo cargar el lector (¿sin internet?). Usá el campo de tipeo.'); };
+    document.head.appendChild(s);
+  }
+  if('BarcodeDetector' in window){
+    BarcodeDetector.getSupportedFormats().then(function(f){
+      if(f.indexOf('ean_13')>=0){ _scanDetector = new BarcodeDetector({formats:FMT.filter(function(x){return f.indexOf(x)>=0;})}); cb(); }
+      else conPolyfill();
+    }).catch(conPolyfill);
+  } else conPolyfill();
 }
 function scanToggleCamara(){
-  var btn = document.getElementById('scan-btn-cam'), box = document.getElementById('scan-reader');
   if(_scanCam){ scanCerrarCamara(); return; }
   if(location.protocol!=='https:' && location.hostname!=='localhost'){
     showToast('⚠️ La cámara solo funciona abriendo el WMS desde GitHub Pages (https)'); return;
   }
+  var btn = document.getElementById('scan-btn-cam'), box = document.getElementById('scan-reader');
+  btn.textContent = '⏳';
   scanCargarLib(function(){
-    box.style.display = 'block';
-    var F = Html5QrcodeSupportedFormats;
-    _scanCam = new Html5Qrcode('scan-reader', {
-      formatsToSupport:[F.EAN_13, F.UPC_A, F.EAN_8, F.UPC_E, F.CODE_128],
-      experimentalFeatures:{ useBarCodeDetectorIfSupported:true },
-      verbose:false
-    });
-    _scanCam.start({ facingMode:'environment' },
-      { fps:15, aspectRatio:1.3333,
-        videoConstraints:{ facingMode:'environment', width:{ideal:1920}, height:{ideal:1440} },
-        qrbox:function(w,h){ return { width:Math.floor(w*0.94), height:Math.floor(h*0.55) }; } },
-      function(txt){ scanProcesarCodigo(txt, true); },
-      function(){}
-    ).then(function(){ btn.textContent = '⏹️'; btn.style.background = '#ff3b30'; box.scrollIntoView({behavior:'smooth',block:'start'}); })
-     .catch(function(e){ _scanCam = null; box.style.display='none'; showToast('⚠️ No se pudo abrir la cámara: '+e); });
+    navigator.mediaDevices.getUserMedia({ audio:false, video:{
+      facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080},
+      advanced:[{focusMode:'continuous'}] } })
+    .then(function(stream){
+      box.innerHTML =
+        '<div style="position:relative">'+
+          '<video id="scan-video" playsinline muted autoplay style="width:100%;display:block;max-height:52vh;object-fit:cover"></video>'+
+          '<div id="scan-guia" style="position:absolute;left:4%;right:4%;top:30%;bottom:30%;border:3px solid rgba(255,255,255,.85);border-radius:10px;box-shadow:0 0 0 2000px rgba(0,0,0,.25);pointer-events:none;transition:border-color .15s"></div>'+
+          '<div id="scan-ctrls" style="position:absolute;left:8px;right:8px;bottom:8px;display:flex;gap:8px;align-items:center"></div>'+
+        '</div>';
+      box.style.display = 'block';
+      var video = document.getElementById('scan-video');
+      video.srcObject = stream;
+      var track = stream.getVideoTracks()[0];
+      _scanCam = { stream:stream, track:track, video:video, canvas:document.createElement('canvas'), ocupado:false, vuelta:0, vivo:true, linterna:false };
+      _scanPausado = false;
+      scanArmarControles(track);
+      // tocar el video = reenfocar (donde el teléfono lo permite)
+      video.addEventListener('click', function(){ try{ track.applyConstraints({advanced:[{focusMode:'single-shot'}]}).then(function(){ return track.applyConstraints({advanced:[{focusMode:'continuous'}]}); }).catch(function(){}); }catch(e){} });
+      video.play().catch(function(){});
+      btn.textContent = '⏹️'; btn.style.background = '#ff3b30';
+      box.scrollIntoView({behavior:'smooth', block:'center'});
+      scanLoop();
+    })
+    .catch(function(e){ btn.textContent = '📷'; showToast('⚠️ No se pudo abrir la cámara: '+(e && e.name || e)); });
   });
+}
+function scanArmarControles(track){
+  var c = document.getElementById('scan-ctrls'); if(!c) return;
+  var cap = {}; try{ cap = track.getCapabilities ? track.getCapabilities() : {}; }catch(e){}
+  var html = '';
+  if(cap.torch) html += '<button onclick="scanLinterna()" id="scan-torch" style="padding:9px 12px;border:none;border-radius:20px;background:rgba(0,0,0,.6);color:#fff;font-size:14px">🔦</button>';
+  if(cap.zoom && cap.zoom.max>1){
+    var z0 = Math.min(cap.zoom.max, Math.max(cap.zoom.min||1, 2));
+    html += '<input type="range" min="'+(cap.zoom.min||1)+'" max="'+Math.min(cap.zoom.max,8)+'" step="'+(cap.zoom.step||0.1)+'" value="'+z0+'" oninput="scanZoom(this.value)" style="flex:1">';
+    try{ track.applyConstraints({advanced:[{zoom:z0}]}).catch(function(){}); }catch(e){}
+  }
+  c.innerHTML = html;
+}
+function scanLinterna(){
+  if(!_scanCam) return;
+  _scanCam.linterna = !_scanCam.linterna;
+  _scanCam.track.applyConstraints({advanced:[{torch:_scanCam.linterna}]}).catch(function(){});
+}
+function scanZoom(v){ if(_scanCam) _scanCam.track.applyConstraints({advanced:[{zoom:parseFloat(v)}]}).catch(function(){}); }
+
+function scanLoop(){
+  var cam = _scanCam;
+  if(!cam || !cam.vivo) return;
+  var v = cam.video;
+  if(_scanPausado || cam.ocupado || v.readyState<2 || !v.videoWidth){ setTimeout(scanLoop, 120); return; }
+  cam.ocupado = true;
+  var W = v.videoWidth, H = v.videoHeight, cv = cam.canvas, ctx = cv.getContext('2d', {willReadFrequently:true});
+  // Alterna: franja central a resolución completa (códigos chicos/lejos)
+  // y cuadro entero achicado (etiquetas giradas o fuera del recuadro)
+  cam.vuelta++;
+  if(cam.vuelta%3){
+    var sx = Math.round(W*0.03), sy = Math.round(H*0.25), sw = W-2*sx, sh = Math.round(H*0.5);
+    cv.width = sw; cv.height = sh; ctx.drawImage(v, sx, sy, sw, sh, 0, 0, sw, sh);
+  } else {
+    var k = Math.min(1, 1280/Math.max(W,H));
+    cv.width = Math.round(W*k); cv.height = Math.round(H*k); ctx.drawImage(v, 0, 0, cv.width, cv.height);
+  }
+  _scanDetector.detect(cv).then(function(res){
+    cam.ocupado = false;
+    if(!cam.vivo) return;
+    for(var i=0;i<(res||[]).length;i++){
+      var cod = scanNormalizar(res[i].rawValue);
+      if(cod){
+        var g = document.getElementById('scan-guia');
+        if(g){ g.style.borderColor = '#34c759'; setTimeout(function(){ if(g) g.style.borderColor='rgba(255,255,255,.85)'; }, 400); }
+        scanProcesarCodigo(cod, true);
+        break;
+      }
+    }
+    setTimeout(scanLoop, 60);
+  }).catch(function(){ cam.ocupado = false; setTimeout(scanLoop, 200); });
 }
 function scanCerrarCamara(){
   var btn = document.getElementById('scan-btn-cam'), box = document.getElementById('scan-reader');
-  if(_scanCam){ var c=_scanCam; _scanCam=null; c.stop().then(function(){c.clear();}).catch(function(){}); }
-  if(box) box.style.display = 'none';
+  if(_scanCam){
+    _scanCam.vivo = false;
+    try{ _scanCam.stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+    _scanCam = null;
+  }
+  if(box){ box.innerHTML = ''; box.style.display = 'none'; }
   if(btn){ btn.textContent = '📷'; btn.style.background = '#0071e3'; }
 }
 
@@ -16800,6 +16883,7 @@ function scanBuscarVinc(q, ean){
 }
 function scanVincular(ean, art){
   var m = scanGetMap(); m[ean] = String(art); scanSetMap(m);
+  if(scanAplicarPend(ean, art)){ scanCancelarActivo(); renderScan(); return; }
   showToast('🔗 '+ean+' → '+art+' vinculado');
   scanMostrarArticulo(String(art), ean);
   renderScan();
@@ -16811,11 +16895,11 @@ function scanDesvincular(ean){
 }
 function scanCancelarActivo(){
   document.getElementById('scan-activo').innerHTML=''; _scanUltimo={cod:'',t:0};
-  if(_scanCam){ try{ _scanCam.resume(); }catch(e){} }
+  _scanPausado = false;
 }
 // Panel abierto: congela la cámara (deja de leer) y lleva la pantalla al panel
 function scanPanelAbierto(){
-  if(_scanCam){ try{ _scanCam.pause(true); }catch(e){} }
+  _scanPausado = true;
   var el = document.getElementById('scan-activo');
   if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -16902,10 +16986,10 @@ function scanBorrarLectura(id){
   scanRenderLista();
 }
 function scanReset(){
-  var n = scanGetConteo().length;
+  var n = scanGetConteo().length + Object.keys(scanGetPend()).length;
   if(!n){ showToast('No hay conteo para borrar'); return; }
   if(!confirm('¿Empezar un conteo nuevo? Se borran las '+n+' lecturas actuales (exportalas antes). Los códigos vinculados NO se borran.')) return;
-  scanSetConteo([]); scanCancelarActivo(); renderScan();
+  scanSetConteo([]); scanSetPend({}); scanCancelarActivo(); renderScan();
 }
 
 // ---------- Exportar / Importar ----------
@@ -16931,6 +17015,102 @@ function scanExportar(){
   var f = new Date(), fs = f.getFullYear()+'-'+String(f.getMonth()+1).padStart(2,'0')+'-'+String(f.getDate()).padStart(2,'0')+'_'+String(f.getHours()).padStart(2,'0')+String(f.getMinutes()).padStart(2,'0');
   XLSX.writeFile(wb, 'Conteo_'+fs+'.xlsx');
 }
+// ---------- Importar desde Scan to Excel (u otra app de escaneo) ----------
+// Lee cualquier Excel/CSV: busca sola la columna que tiene códigos EAN/UPC.
+// Si hay una columna de cantidad (Cantidad/Qty/Quantity/Cant) la usa; si no,
+// cada fila = 1 cubierta (se suman los códigos repetidos). Si hay una
+// columna de ubicación (Ubicación/Location/Ubic) también la toma.
+// Los códigos ya vinculados entran directo al conteo; los nuevos quedan en
+// "Pendientes de vincular" con su cantidad, y al vincularlos entran solos.
+function scanGetPend(){ try{ return JSON.parse(localStorage.getItem('wms_scan_pend')||'{}'); }catch(e){ return {}; } }
+function scanSetPend(p){ localStorage.setItem('wms_scan_pend', JSON.stringify(p)); }
+
+function scanImportarGenerico(wb){
+  var sh = wb.Sheets[wb.SheetNames[0]];
+  var filas = XLSX.utils.sheet_to_json(sh, {header:1, raw:true, defval:''});
+  if(!filas.length){ showToast('⚠️ El archivo está vacío'); return; }
+  var nCols = filas.reduce(function(m,r){ return Math.max(m, r.length); }, 0);
+  // columna de códigos = la que más EAN/UPC válidos tiene
+  var mejor = -1, mejorN = 0;
+  for(var c=0;c<nCols;c++){
+    var n = filas.reduce(function(s,r){ return s + (scanNormalizar(r[c])?1:0); }, 0);
+    if(n>mejorN){ mejorN=n; mejor=c; }
+  }
+  if(mejor<0){ showToast('⚠️ No encontré códigos EAN/UPC en el archivo'); return; }
+  // ¿la primera fila es encabezado?
+  var head = scanNormalizar(filas[0][mejor]) ? null : filas[0].map(function(h){ return String(h||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); });
+  var colCant = -1, colUbic = -1;
+  if(head) head.forEach(function(h,i){
+    if(i===mejor) return;
+    if(colCant<0 && /^(cant|cantidad|qty|quantity|unidades|count|cuenta)\b/.test(h)) colCant = i;
+    if(colUbic<0 && /^(ubic|ubicacion|location|loc|posicion|lugar)\b/.test(h)) colUbic = i;
+  });
+  var datos = head ? filas.slice(1) : filas;
+  // junta por código+ubicación
+  var acum = {}, orden = [];
+  datos.forEach(function(r){
+    var cod = scanNormalizar(r[mejor]); if(!cod) return;
+    var cant = colCant>=0 ? parseInt(String(r[colCant]).replace(/\D/g,''),10) : 1;
+    if(!(cant>0)) return;
+    var ub = colUbic>=0 ? String(r[colUbic]||'').trim().toUpperCase() : '';
+    var k = cod+'|'+ub;
+    if(!acum[k]){ acum[k] = {cod:cod, ubic:ub, cant:0}; orden.push(k); }
+    acum[k].cant += cant;
+  });
+  if(!orden.length){ showToast('⚠️ No encontré lecturas válidas'); return; }
+  var ubicDef = (document.getElementById('scan-ubic').value||'').trim().toUpperCase();
+  var map = scanGetMap(), cont = scanGetConteo(), pend = scanGetPend();
+  var okL = 0, okU = 0, pendU = 0, pendC = {};
+  orden.forEach(function(k, i){
+    var x = acum[k], ub = x.ubic || ubicDef, art = map[x.cod];
+    if(art && scanArt(art)){
+      cont.push({ id:'se'+Date.now()+'_'+i, art:String(art), cant:x.cant, ubic:ub, ean:x.cod, ts:new Date().toISOString() });
+      okL++; okU += x.cant;
+    } else {
+      if(!pend[x.cod]) pend[x.cod] = [];
+      pend[x.cod].push({cant:x.cant, ubic:ub});
+      pendU += x.cant; pendC[x.cod] = 1;
+    }
+  });
+  scanSetConteo(cont); scanSetPend(pend);
+  var nPend = Object.keys(pendC).length;
+  showToast('📥 '+okU+' un. cargadas'+(nPend?' · ⏳ '+nPend+' códigos para vincular ('+pendU+' un.)':''));
+  renderScan();
+}
+
+function scanRenderPend(){
+  var box = document.getElementById('scan-pend'); if(!box) return;
+  var pend = scanGetPend(), cods = Object.keys(pend);
+  if(!cods.length){ box.innerHTML = ''; return; }
+  box.innerHTML =
+    '<div style="background:#fff8e1;border:1px solid #ffcc80;border-radius:14px;padding:12px;margin-bottom:10px">'+
+    '<div style="font-weight:700;margin-bottom:6px">⏳ Pendientes de vincular ('+cods.length+')</div>'+
+    '<div style="font-size:12px;color:#6e6e73;margin-bottom:6px">Códigos importados que todavía no se sabe qué artículo son. Al vincularlos, sus cantidades entran solas al conteo.</div>'+
+    cods.map(function(c){
+      var t = pend[c].reduce(function(s,x){return s+x.cant;},0);
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #ffe0b2;font-size:13px">'+
+        '<div style="flex:1;font-family:monospace">'+c+' <span style="color:#6e6e73;font-family:inherit">· '+t+' un.</span></div>'+
+        '<button onclick="scanMostrarVincular(\''+c+'\')" style="padding:7px 12px;border:none;border-radius:8px;background:#ff9f0a;color:#fff;font-weight:600;font-size:12px;cursor:pointer">Vincular</button>'+
+        '<button onclick="scanDescartarPend(\''+c+'\')" style="background:none;border:none;color:#ff3b30;cursor:pointer;font-size:15px">✖</button></div>';
+    }).join('')+'</div>';
+}
+function scanDescartarPend(c){
+  if(!confirm('¿Descartar el código '+c+' y sus unidades?')) return;
+  var p = scanGetPend(); delete p[c]; scanSetPend(p); scanRenderPend();
+}
+// Al vincular un código que estaba pendiente, sus unidades entran al conteo
+function scanAplicarPend(ean, art){
+  var p = scanGetPend(); if(!p[ean]) return false;
+  var cont = scanGetConteo(), tot = 0;
+  p[ean].forEach(function(x, i){
+    cont.push({ id:'pv'+Date.now()+'_'+i, art:String(art), cant:x.cant, ubic:x.ubic, ean:ean, ts:new Date().toISOString() });
+    tot += x.cant;
+  });
+  delete p[ean]; scanSetPend(p); scanSetConteo(cont);
+  showToast('🔗 '+ean+' → '+art+' · '+tot+' un. agregadas');
+  return true;
+}
+
 function scanImportar(file){
   if(!file) return;
   var rd = new FileReader();
@@ -16945,7 +17125,7 @@ function scanImportar(file){
       });
       scanSetMap(map);
       var shL = wb.Sheets['Lecturas'];
-      if(!shL){ showToast('⚠️ El archivo no tiene la hoja "Lecturas"'); renderScan(); return; }
+      if(!shL){ scanImportarGenerico(wb); return; }
       var filas = XLSX.utils.sheet_to_json(shL).filter(function(r){ return r['ARTÍCULO'] && parseInt(r['CANTIDAD'],10)>0; });
       var cont = scanGetConteo();
       var modo = cont.length ? (confirm('Ya hay '+cont.length+' lecturas en este dispositivo.\n\nAceptar = SUMAR las del archivo (ej. juntar el conteo de varios operarios)\nCancelar = no importar') ? 'sumar' : null) : 'sumar';
