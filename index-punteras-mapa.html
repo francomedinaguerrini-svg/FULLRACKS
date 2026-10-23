@@ -407,6 +407,11 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 .ped-sum-lbl{font-size:10px;color:#86868b;margin-top:2px}
 
 .nave-wrap{padding:12px;padding-bottom:120px}
+.nave-switch{display:flex;gap:6px;padding:12px 12px 0}
+.nave-switch button{padding:8px 16px;border-radius:20px;border:2px solid #d2d2d7;background:#fff;color:#1d1d1f;font-size:13px;font-weight:700;cursor:pointer}
+.nave-switch button.on{border-color:#0071e3;background:#0071e3;color:#fff}
+#nave-capacidad{padding:0 0 120px}
+#nave-capacidad iframe{width:100%;border:0;display:block;min-height:900px}
 .nave-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .nave-title{font-size:13px;font-weight:600;color:#86868b;text-transform:uppercase;letter-spacing:.5px}
 .nave-grid{display:flex;flex-direction:column;gap:4px}
@@ -975,7 +980,12 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 
 <!-- NAVE -->
 <div class="view" id="view-nave">
-  <div class="nave-wrap">
+  <div class="nave-switch" role="tablist">
+    <button type="button" id="nave-sw-op" class="on" onclick="naveModo('op')">🗺️ Plano operativo</button>
+    <button type="button" id="nave-sw-cap" onclick="naveModo('cap')">📐 Plano de capacidad</button>
+  </div>
+  <div id="nave-capacidad" style="display:none"></div>
+  <div class="nave-wrap" id="nave-operativo">
     <div class="nave-header">
       <span class="nave-title">🏭 Plano de Nave — Bloques, Punteras y Muelles</span>
       <button onclick="toggleNaveConfig()" id="nave-config-btn" style="padding:7px 14px;border-radius:20px;border:2px solid #0071e3;background:#fff;color:#0071e3;font-size:12px;font-weight:700;cursor:pointer">⚙️ Configurar capacidad de bloques</button>
@@ -11072,6 +11082,39 @@ function canonicalizarBloque(b){
   return CANON_BLOQUE2.has(t) ? '2' : t;
 }
 
+// ===== Plano de capacidad (planificador de bloques, aislado en iframe) =====
+// El HTML del planificador vive en <script type="text/plain" id="plano-cap-src">.
+// Comparte origen con el WMS, así que usa el mismo localStorage (clave wms_plano_capacidad)
+// y más adelante puede leer DATA/ASIGN vía window.parent para conectarlo con el stock.
+function naveModo(m){
+  try{ localStorage.setItem('wms_nave_modo', m); }catch(e){}
+  const cap = m==='cap';
+  document.getElementById('nave-operativo').style.display = cap ? 'none' : '';
+  document.getElementById('nave-capacidad').style.display = cap ? '' : 'none';
+  document.getElementById('nave-sw-op').classList.toggle('on', !cap);
+  document.getElementById('nave-sw-cap').classList.toggle('on', cap);
+  if(cap) montarPlanoCapacidad();
+}
+function montarPlanoCapacidad(){
+  const cont = document.getElementById('nave-capacidad');
+  if(cont.querySelector('iframe')) return;
+  const src = document.getElementById('plano-cap-src');
+  if(!src){ cont.innerHTML='<div style="padding:20px;color:#d70015">No se encontró el plano de capacidad en este archivo.</div>'; return; }
+  const f = document.createElement('iframe');
+  f.title = 'Plano de capacidad';
+  f.setAttribute('allow','clipboard-write');
+  f.srcdoc = src.textContent.replace(/<\\\/script>/g,'</'+'script>');
+  cont.appendChild(f);
+}
+window.addEventListener('message', function(ev){
+  const d = ev.data;
+  if(!d || d.tipo!=='plano-cap-alto') return;
+  const f = document.querySelector('#nave-capacidad iframe');
+  if(f && ev.source===f.contentWindow) f.style.height = Math.max(600, d.h+20)+'px';
+});
+document.addEventListener('DOMContentLoaded', function(){
+  try{ if(localStorage.getItem('wms_nave_modo')==='cap') naveModo('cap'); }catch(e){}
+});
 function renderNave(){
 
 
@@ -17685,5 +17728,445 @@ function scanImportar(file){
 }
 </script>
 
+<script type="text/plain" id="plano-cap-src"><!doctype html><html lang="es" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-size:14px}[hidden]{display:none!important}</style><title>Plano de Bloques Halpern</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: plano de nave con los 9 bloques en fila y el pasillo central corrido; abajo, ficha del bloque y configuraciones */
+:root{
+  --bg:#eef0f1; --surface:#fafbfb; --floor:#dfe3e5; --line:#c4cacd; --fg:#1d2326; --muted:#5f6a70;
+  --c1:#2f6596; --c1-soft:#d6e3ef; --c2:#b8562a; --c2-soft:#f3dccf; --c3:#3d7a4f; --c3-soft:#d7eadb; --rack:#5d5672; --rack-2:#8a83a0; --rack-fg:#ffffff; --b1:#7a6f97; --b1-soft:#e4e0ee; --none:#9aa3a8;
+  --safety:#e8b400; --off:#b9c0c4; --focus:#1d2326;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15191b; --surface:#1d2225; --floor:#252b2e; --line:#3a4246; --fg:#e7ebec; --muted:#97a2a7;
+  --c1:#6fa3d4; --c1-soft:#22374a; --c2:#e08455; --c2-soft:#4a2c1e; --c3:#74b98a; --c3-soft:#1f3a28; --rack:#9c93b8; --rack-2:#6c6488; --rack-fg:#15191b; --b1:#b2a8d0; --b1-soft:#2e2a3d; --none:#6b757a;
+  --safety:#e8b400; --off:#4a5357; --focus:#e7ebec; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15191b; --surface:#1d2225; --floor:#252b2e; --line:#3a4246; --fg:#e7ebec; --muted:#97a2a7;
+  --c1:#6fa3d4; --c1-soft:#22374a; --c2:#e08455; --c2-soft:#4a2c1e; --c3:#74b98a; --c3-soft:#1f3a28; --rack:#9c93b8; --rack-2:#6c6488; --rack-fg:#15191b; --b1:#b2a8d0; --b1-soft:#2e2a3d; --none:#6b757a;
+  --safety:#e8b400; --off:#4a5357; --focus:#e7ebec; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;text-wrap:balance;margin:0}
+h1{font-size:2.1rem;line-height:1}
+h2{font-size:1.35rem;text-transform:uppercase;letter-spacing:.04em}
+.lbl{font-family:var(--display);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:.78rem;color:var(--muted)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+header.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between}
+.sub{color:var(--muted);margin-top:4px}
+.kpis{display:flex;flex-wrap:wrap;gap:8px 28px}
+.kpi .v{font-family:var(--mono);font-size:1.5rem;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:.78rem;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.85rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+
+/* plano */
+.plan{background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow-x:auto}
+.nave{position:relative;margin:28px 34px 34px 46px;border:3px solid var(--fg);background:var(--bg)}
+.dim{position:absolute;font-family:var(--mono);font-size:.75rem;color:var(--muted);white-space:nowrap}
+.dim.h{left:0;right:0;top:-24px;text-align:center;border-bottom:1px solid var(--line);line-height:1.6}
+.dim.v{top:0;bottom:0;left:-42px;width:30px;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--line)}
+.dim.v span{writing-mode:vertical-rl;transform:rotate(180deg)}
+.lado{position:absolute;right:-30px;writing-mode:vertical-rl;font-family:var(--display);font-weight:600;letter-spacing:.14em;font-size:.72rem;color:var(--muted);display:flex;align-items:center;justify-content:center}
+.central{position:absolute;left:0;right:0;border-top:2px dashed var(--safety);border-bottom:2px dashed var(--safety)}
+.blk{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;padding:0;border:0;background:none;text-align:left}
+.blk .half{border-right:1px solid var(--line);border-radius:0}
+.blk::after{content:"";position:absolute;inset:0;border:2px solid transparent;pointer-events:none}
+.blk:hover::after{border-color:var(--line)} .blk.sel::after{border-color:var(--fg)}
+.blk-info{flex:1;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:0 6px;min-height:0;overflow:hidden}
+.blk-info b{font-family:var(--display);font-size:1rem;letter-spacing:.03em;line-height:1}
+.blk-info .num{font-size:.68rem;color:var(--muted);white-space:nowrap}
+.chip{font-family:var(--display);font-weight:600;font-size:.66rem;letter-spacing:.06em;padding:1px 5px;border-radius:3px;text-transform:uppercase;align-self:flex-start;white-space:nowrap}
+.chip.C1{background:var(--c1-soft);color:var(--c1)} .chip.C2{background:var(--c2-soft);color:var(--c2)} .chip.C3{background:var(--c3-soft);color:var(--c3)} .chip.B1{background:var(--b1-soft);color:var(--b1)} .chip.N{background:var(--floor);color:var(--muted)}
+.half{background:var(--floor);border-radius:2px;padding:4px;display:grid;flex:none}
+.half .cell{border-radius:1.5px;min-width:0;min-height:0}
+.cell.on.C1{background:var(--c1)} .cell.on.C2{background:var(--c2)} .cell.on.C3{background:var(--c3)} .cell.on.B1{background:var(--b1)} .cell.on.N{background:var(--none)}
+.rackbar{border-radius:1.5px;background:repeating-linear-gradient(90deg,var(--rack) 0 calc(100%/11 - 1px),var(--rack-2) calc(100%/11 - 1px) calc(100%/11));display:flex;align-items:center;justify-content:flex-end;padding-right:3px;color:var(--rack-fg);font-family:var(--display);font-weight:700;line-height:1;overflow:hidden}
+.cell.off{background:transparent;box-shadow:inset 0 0 0 1px var(--off)}
+.cell.aisle{background:transparent;box-shadow:none}
+.trans{position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;border-left:1px dashed var(--line);border-right:1px dashed var(--line)}
+.trans span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--display);font-weight:600;letter-spacing:.12em;font-size:.6rem;color:var(--muted);white-space:nowrap;background:var(--bg);padding:4px 0}
+.warn{color:var(--c2);font-weight:500}
+.playa{position:absolute;top:0;bottom:0;background:var(--surface);border-right:1px solid var(--line)}
+.playa .tag{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;pointer-events:none}
+.playa .tag div{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:5px 9px;font-size:.78rem;line-height:1.3}
+.puerta{position:absolute;background:var(--safety)}
+.carril{position:absolute;border:1px dashed var(--muted);opacity:.55;border-radius:1px}
+.dlab{position:absolute;font-family:var(--display);font-weight:700;font-size:.7rem;letter-spacing:.04em;color:var(--fg);transform:translate(-50%,-50%);white-space:nowrap}
+.opt{display:flex;flex-direction:column;gap:8px}
+.opt .res{font-size:.85rem}
+
+/* paneles */
+.grid2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.ph{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{border:0;background:none;padding:6px 12px;cursor:pointer;font-family:var(--display);font-weight:600;letter-spacing:.05em;font-size:.85rem}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"].C1{background:var(--c1);color:#fff}
+.seg button[aria-pressed="true"].C2{background:var(--c2);color:#fff}
+.seg button[aria-pressed="true"].C3{background:var(--c3);color:#fff}
+.seg button[aria-pressed="true"].B1{background:var(--b1);color:#fff}
+.seg button[aria-pressed="true"].N{background:var(--none);color:#fff}
+.detail{display:flex;flex-wrap:wrap;gap:18px}
+.dside{display:flex;flex-direction:column;gap:6px;min-width:0}
+.dside .half{padding:6px}
+.dside .half.editing .cell{cursor:pointer}
+.dside .half.editing .cell:hover{outline:2px solid var(--fg)}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{font-family:var(--display);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:.75rem;color:var(--muted)}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+td:first-child{font-family:var(--body)}
+tr.tot td{font-weight:600;border-bottom:0}
+.tbl{overflow-x:auto}
+textarea{width:100%;min-height:54px;resize:vertical;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px}
+.btn{border:1px solid var(--line);background:var(--bg);border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--fg)}
+.btn.on{background:var(--safety);border-color:var(--safety);color:#1d2326}
+.note{font-size:.84rem;color:var(--muted)}
+.cfgs{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.cfg{border:1px solid var(--line);border-radius:5px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.cfg.C1{border-top:4px solid var(--c1)} .cfg.C2{border-top:4px solid var(--c2)} .cfg.C3{border-top:4px solid var(--c3)} .cfg.B1{border-top:4px solid var(--b1)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.row select,.row input{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 6px;width:120px;text-align:right}
+.params{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px}
+.dims{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:.85rem}
+.dims input{width:56px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:3px 5px;text-align:right}
+#tip{position:fixed;pointer-events:none;background:var(--fg);color:var(--bg);font-size:.78rem;padding:5px 8px;border-radius:4px;z-index:20;font-family:var(--mono);white-space:nowrap}
+.foot{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+@media (prefers-reduced-motion:no-preference){.cell{transition:background-color .15s}}
+</style></head><body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="lbl">Halpern Neumáticos · Depósito Mendoza</div>
+      <h1>Plano de bloques</h1>
+      <div class="sub">Cada celda es una posición con racks apilados. Tocá un bloque para ver su ficha o cambiarle la configuración.</div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+  </header>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--c1)"></i>Config 1 · Auto / camioneta + picking</span>
+    <span><i class="sw" style="background:var(--c2)"></i>Config 2 · Camión</span>
+    <span><i class="sw" style="background:var(--c3)"></i>Config 3 · Camión con pasillos en cruz</span>
+    <span><i class="sw" style="background:var(--b1)"></i>Bloque 1 · piso</span>
+    <span><i class="sw" style="background:var(--rack)"></i>Rack selectivo (Mapa Racks)</span>
+    <span><i class="sw" style="background:var(--none)"></i>Sin asignar</span>
+    <span><i class="sw" style="box-shadow:inset 0 0 0 1px var(--off)"></i>Sin posición</span>
+    <span><i class="sw" style="background:var(--safety);height:3px"></i>Pasillo central</span>
+    <span><i class="sw" style="background:var(--safety);width:4px"></i>Dársena (D1–D8)</span>
+  </div>
+
+  <section class="plan" aria-label="Plano de la nave"><div class="nave" id="nave"></div></section>
+
+  <div class="grid2">
+    <section class="panel" id="ficha"></section>
+    <section class="panel">
+      <div class="ph"><h2>Nave y optimización</h2></div>
+      <div class="params" id="naveDims"></div>
+      <div class="opt" id="opt"></div>
+      <div class="ph"><h2>Configuraciones</h2></div>
+      <div class="cfgs" id="cfgs"></div>
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Capacidad por rack y apilado</div>
+        <div class="params" id="params"></div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:6px">Medidas de rack (m)</div>
+        <div class="tbl"><table><thead><tr><th></th><th>Real</th><th>Operativa</th></tr></thead>
+          <tbody><tr><td>Largo</td><td>2.31</td><td>2.15</td></tr><tr><td>Ancho</td><td>1.28</td><td>1.05</td></tr><tr><td>Altura</td><td>1.25</td><td>1.00</td></tr></tbody></table></div>
+      </div>
+      <div class="foot">
+        <button class="btn" id="copy" type="button">Copiar resumen para Excel</button>
+        <button class="btn" id="reset" type="button">Restablecer valores originales</button>
+        <span class="note" id="msg" role="status"></span>
+      </div>
+    </section>
+  </div>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const KEY='wms_plano_capacidad';
+const offCols=(rows,cols)=>{const a=[];for(let r=1;r<=rows;r++)for(const c of cols)a.push(r+'-'+c);return a};
+const offRows=(rowsList,cols)=>{const a=[];for(const r of rowsList)for(let c=1;c<=cols;c++)a.push(r+'-'+c);return a};
+const DEF={
+  apilado:7,
+  cap:{AUTO:25,CAMIONETA:16,CAMION:7},
+  nave:{largo:272,ancho:55},
+  dims:{sur:{largo:22,ancho:24},norte:{largo:22,ancho:20}},
+  objetivo:'neu', minCamion:13744,
+  dars:{n:8,ubic:'frente'}, prep:20,
+  cfg:{
+    C1:{nombre:'Config 1',uso:'Auto / Camioneta + Picking',tipo:'AUTO',perdida:30,sugerido:'Desde bloque 2 hasta el 7/8 inclusive',
+      sur:{rows:11,cols:7,gaps:[2,4],off:[]},
+      norte:{rows:9,cols:5,gaps:[2,4],off:[]}},
+    C2:{nombre:'Config 2',uso:'Camión',tipo:'CAMION',perdida:15,sugerido:'Bloque 7 parcial / 8 / 9',
+      sur:{rows:11,cols:11,gaps:[],off:offRows([4,7,11],11)},
+      norte:{rows:9,cols:11,gaps:[],off:offRows([4,7],11)}},
+    C3:{nombre:'Config 3',uso:'Camión con pasillos en cruz',tipo:'CAMION',perdida:15,sugerido:'Bloque 7 parcial / 8 / 9',
+      sur:{rows:11,cols:10,gaps:[],off:[...offRows([5,6],10),...offCols(11,[5])]},
+      norte:{rows:9,cols:10,gaps:[],off:[...offRows([4,5],10),...offCols(9,[5])]}},
+    B1:{nombre:'Bloque 1 · Racks',corto:'Racks',uso:'Racks selectivos (Mapa Racks) + piso al sur',tipo:'AUTO',perdida:30,sugerido:'Solo Bloque 1',fijo:1,rackPos:448,
+      sur:{rows:11,cols:11,gaps:[],off:offRows([5,6,7,8,9,10,11],11),racks:[{from:5,to:6,l:'4'},{from:8,to:9,l:'5'},{from:11,to:11,l:'6'}]},
+      norte:{rows:9,cols:11,gaps:[],off:offRows([1,2,3,4,5,6,7,8,9],11),racks:[{from:1,to:1,l:'6'},{from:3,to:4,l:'7'},{from:6,to:7,l:'8'},{from:9,to:9,l:'9'}]}}
+  },
+  blocks:[1,2,3,4,5,6,7,8,9].map(n=>({n,cfg:n===1?'B1':n<=7?'C1':'C2',obs:''})), mig2:1, mig1:1
+};
+let S=load(); let sel=2; let edit=false;
+function load(){try{const t=localStorage.getItem(KEY);if(t){const o=JSON.parse(t);o.dars=o.dars||structuredClone(DEF.dars);o.prep=o.prep??DEF.prep;for(const k in DEF.cfg)if(!o.cfg[k])o.cfg[k]=structuredClone(DEF.cfg[k]);if(!o.mig1){const n=o.cfg.C1&&o.cfg.C1.norte;if(n&&n.cols===7&&n.off.length===18)o.cfg.C1.norte=structuredClone(DEF.cfg.C1.norte);o.mig1=1}if(o.cfg.B1&&!o.cfg.B1.corto)o.cfg.B1.corto='Racks';if(!o.mig2){const b=o.blocks.find(x=>x.n===1);if(b)b.cfg='B1';o.mig2=1}return o}}catch(e){}return structuredClone(DEF)}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const fmt=n=>Math.round(n).toLocaleString('es-AR');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function sideStats(cfgKey,side){
+  if(cfgKey==='N')return {pos:0,racks:0,neu:0,real:0};
+  const c=S.cfg[cfgKey],t=c[side];
+  const off=new Set(t.off.filter(k=>{const [r,cc]=k.split('-').map(Number);return r<=t.rows&&cc<=t.cols}));
+  const pos=t.rows*t.cols-off.size, racks=pos*S.apilado, neu=racks*S.cap[c.tipo];
+  return {pos,racks,neu,real:Math.round(neu*(1-c.perdida/100))};
+}
+function blockStats(cfgKey){
+  const a=sideStats(cfgKey,'sur'),b=sideStats(cfgKey,'norte');
+  const neu=a.neu+b.neu;
+  return {sur:a,norte:b,pos:a.pos+b.pos,racks:a.racks+b.racks,neu,real:cfgKey==='N'?0:Math.round(neu*(1-S.cfg[cfgKey].perdida/100)),rackPos:cfgKey==='N'?0:(S.cfg[cfgKey].rackPos||0)};
+}
+
+function halfHTML(n,cfgKey,side,scale,editing){
+  const tplKey=cfgKey==='N'?'C1':cfgKey, t=S.cfg[tplKey][side], d=S.dims[side];
+  const off=new Set(t.off), gaps=new Set(t.gaps);
+  const gw=Math.max(3,scale*0.5);
+  const colTracks=[];for(let c=1;c<=t.cols;c++){colTracks.push('1fr');if(gaps.has(c)&&c<t.cols)colTracks.push(gw+'px')}
+  let html=`<div class="half${editing?' editing':''}" style="width:${d.largo*scale}px;height:${d.ancho*scale}px;grid-template-columns:${colTracks.join(' ')};grid-template-rows:repeat(${t.rows},1fr);gap:${Math.max(1,scale*0.12)}px" data-side="${side}">`;
+  const rk=t.racks||[], rackRow=new Set();rk.forEach(x=>{for(let r=x.from;r<=x.to;r++)rackRow.add(r)});
+  const rowH=d.ancho*scale/t.rows;
+  rk.forEach(x=>{const fs=Math.min(12,rowH*(x.to-x.from+1)*0.8);html+=`<span class="rackbar" style="grid-row:${x.from}/${x.to+1};grid-column:1/-1;font-size:${fs}px" data-rack="${esc(x.l)}" data-b="${n}" data-side="${side}">${fs>=6?esc(x.l):''}</span>`});
+  for(let r=1;r<=t.rows;r++){
+    if(rackRow.has(r))continue;
+    let rowAllOff=true;for(let c=1;c<=t.cols;c++)if(!off.has(r+'-'+c)){rowAllOff=false;break}
+    const colAllOff=c=>{for(let rr=1;rr<=t.rows;rr++)if(!off.has(rr+'-'+c))return false;return true};
+    let col=1;
+    for(let c=1;c<=t.cols;c++){
+      const k=r+'-'+c,isOff=off.has(k);
+      const cls=isOff?((rowAllOff||colAllOff(c))&&!editing?'aisle':'off'):'on '+cfgKey;
+      html+=`<span class="cell ${cls}" style="grid-row:${r};grid-column:${col}" data-b="${n}" data-side="${side}" data-k="${k}" data-off="${isOff?1:0}"></span>`;
+      col++; if(gaps.has(c)&&c<t.cols)col++;
+    }
+  }
+  return html+'</div>';
+}
+
+function geo(){
+  const N=S.blocks.length, L=S.dims.sur.largo, nav=S.nave;
+  const central=nav.ancho-S.dims.sur.ancho-S.dims.norte.ancho;
+  const sobra=nav.largo-S.prep-N*L;
+  const gap=N>1?sobra/(N-1):0;
+  return {N,L,central,sobra,gap};
+}
+function playaHTML(w,sc,surEnd,norteStart){
+  const n=S.dars.n, H=S.nave.ancho, half1=Math.ceil(n/2), half2=n-half1;
+  const dw=3.5, depth=Math.min(14,w*0.4,H*0.25);
+  let h=`<div class="playa" style="left:0;width:${w*sc}px">`, k=0;
+  const door=(cx,cy,vert)=>{k++;
+    if(vert){ // puerta en la pared del frente (izquierda)
+      h+=`<div class="puerta" style="left:0;top:${(cy-dw/2)*sc}px;width:4px;height:${dw*sc}px"></div>
+         <div class="carril" style="left:4px;top:${(cy-dw/2)*sc}px;width:${depth*sc}px;height:${dw*sc}px"></div>
+         <div class="dlab" style="left:${(depth/2)*sc+4}px;top:${cy*sc}px">D${k}</div>`;
+    }else{ const top=cy===0;
+      h+=`<div class="puerta" style="left:${(cx-dw/2)*sc}px;${top?'top:0':'bottom:0'};height:4px;width:${dw*sc}px"></div>
+         <div class="carril" style="left:${(cx-dw/2)*sc}px;${top?'top:4px':'bottom:4px'};width:${dw*sc}px;height:${depth*sc}px"></div>
+         <div class="dlab" style="left:${cx*sc}px;top:${(top?depth/2:H-depth/2)*sc}px">D${k}</div>`;}
+  };
+  if(S.dars.ubic==='frente'){
+    for(let i=0;i<half1;i++)door(0,(i+.5)*surEnd/half1,true);
+    for(let i=0;i<half2;i++)door(0,norteStart+(i+.5)*(H-norteStart)/half2,true);
+  }else{
+    for(let i=0;i<half1;i++)door((i+.5)*w/half1,0,false);
+    for(let i=0;i<half2;i++)door((i+.5)*w/half2,H,false);
+  }
+  return h+`<div class="tag"><div><b>Preparación de pedidos · ${fmt(w)} m</b><br>${n} dársenas de carga y descarga (${half1} + ${half2})</div></div></div>`;
+}
+function renderNave(){
+  const g=geo(), nav=S.nave, plan=document.querySelector('.plan');
+  const avail=(plan.clientWidth||1200)-96;
+  const sc=Math.max(4,Math.min(9,avail/nav.largo));
+  const label=k=>k==='N'?'Sin asignar':(S.cfg[k].corto||S.cfg[k].nombre);
+  const W=nav.largo*sc, H=nav.ancho*sc, cTop=S.dims.sur.ancho*sc, cH=Math.max(0,g.central)*sc;
+  let h=`<div class="dim h">${fmt(nav.largo)} m</div><div class="dim v"><span>${fmt(nav.ancho)} m</span></div>
+    <div class="lado" style="top:0;height:${cTop}px">SUR ${S.dims.sur.ancho} m</div>
+    <div class="lado" style="top:${cTop}px;height:${cH}px">PASILLO ${fmt(g.central)} m</div>
+    <div class="lado" style="top:${cTop+cH}px;height:${S.dims.norte.ancho*sc}px">NORTE ${S.dims.norte.ancho} m</div>
+    <div class="central" style="top:${cTop}px;height:${cH}px"></div>`;
+  const off=S.prep, gp=Math.max(0,g.gap);
+  if(off>0) h+=playaHTML(off,sc,cTop/sc,(cTop+cH)/sc);
+  if(gp>0) for(let i=1;i<g.N;i++){const x=off+i*g.L+(i-1)*gp;
+    h+=`<div class="trans" style="left:${x*sc}px;width:${gp*sc}px">${gp*sc>=12?`<span>PASILLO ${gp.toLocaleString('es-AR',{maximumFractionDigits:2})} m</span>`:''}</div>`;}
+  S.blocks.forEach((b,i)=>{
+    const st=blockStats(b.cfg);
+    h+=`<button type="button" class="blk${b.n===sel?' sel':''}" data-blk="${b.n}" style="left:${(off+i*(g.L+gp))*sc}px;width:${g.L*sc}px" aria-label="Bloque ${b.n}, ${label(b.cfg)}">
+      ${halfHTML(b.n,b.cfg,'sur',sc,false)}
+      <div class="blk-info"><b>BLOQUE ${b.n}</b><span class="chip ${b.cfg}">${label(b.cfg)}</span>${cH>54?`<span class="num">${fmt(st.real)} neum.</span>`:''}</div>
+      ${halfHTML(b.n,b.cfg,'norte',sc,false)}</button>`;
+  });
+  const el=document.getElementById('nave');
+  el.style.width=W+'px'; el.style.height=H+'px'; el.innerHTML=h;
+}
+function renderKpis(){
+  let t={racks:0,neu:0,real:0,pos:0,rp:0},by={N:0};Object.keys(S.cfg).forEach(k=>by[k]=0);
+  S.blocks.forEach(b=>{const s=blockStats(b.cfg);t.racks+=s.racks;t.neu+=s.neu;t.real+=s.real;t.pos+=s.pos;t.rp+=s.rackPos;by[b.cfg]++});
+  document.getElementById('kpis').innerHTML=
+    [['Posiciones',t.pos,`${Object.keys(S.cfg).map(k=>by[k]+' '+k).join(' · ')} · ${by.N} sin asignar`],['Racks',t.racks,`apilado de ${S.apilado}`],['Neumáticos teóricos',t.neu,'sin pérdida'],['Neumáticos reales',t.real,'con pérdida por config'],...(t.rp?[['Rack selectivo',t.rp,'posiciones · Mapa Racks']]:[])]
+    .map(([l,v,s])=>`<div class="kpi"><div class="lbl">${l}</div><div class="v">${fmt(v)}</div><div class="s">${s}</div></div>`).join('');
+}
+
+function renderFicha(){
+  const b=S.blocks.find(x=>x.n===sel), s=blockStats(b.cfg);
+  const editable=b.cfg!=='N';
+  const tr=(l,a,c,cls='')=>`<tr class="${cls}"><td>${l}</td><td>${fmt(a)}</td><td>${fmt(c)}</td><td>${fmt(a+c)}</td></tr>`;
+  const tipo=b.cfg==='N'?'':`${S.cfg[b.cfg].tipo.toLowerCase()} · ${S.cap[S.cfg[b.cfg].tipo]} por rack · pérdida ${S.cfg[b.cfg].perdida}%`;
+  const t=b.cfg==='N'?null:S.cfg[b.cfg];
+  document.getElementById('ficha').innerHTML=`
+    <div class="ph"><h2>Bloque ${b.n}</h2>
+      <div class="seg" role="group" aria-label="Configuración del bloque">
+        ${[...Object.keys(S.cfg).filter(k=>!S.cfg[k].fijo||b.n===1||b.cfg===k),'N'].map(k=>`<button type="button" class="${k}" data-set="${k}" aria-pressed="${b.cfg===k}">${k==='N'?'Sin asignar':S.cfg[k].nombre}</button>`).join('')}
+      </div></div>
+    <div class="note">${b.cfg==='N'?'Bloque sin configuración: no suma capacidad.':esc(t.uso)+' · '+tipo}</div>
+    <div class="detail">
+      <div class="dside"><div class="lbl">Lado Sur · ${S.dims.sur.largo} × ${S.dims.sur.ancho} m</div>${halfHTML(b.n,b.cfg,'sur',11,edit&&editable)}
+        ${t?`<div class="note num">${t.sur.rows} filas × ${t.sur.cols} col · ${s.sur.pos} posiciones${t.sur.racks?' · racks '+t.sur.racks.map(x=>x.l).join(', '):''}</div>`:''}</div>
+      <div class="dside"><div class="lbl">Lado Norte · ${S.dims.norte.largo} × ${S.dims.norte.ancho} m</div>${halfHTML(b.n,b.cfg,'norte',11,edit&&editable)}
+        ${t?`<div class="note num">${t.norte.rows} filas × ${t.norte.cols} col · ${s.norte.pos} posiciones</div>`:''}</div>
+    </div>
+    ${editable?`<div class="foot"><button type="button" class="btn${edit?' on':''}" id="editBtn" aria-pressed="${edit}">${edit?'Terminar edición':'Editar posiciones de '+t.nombre}</button>
+      <span class="note">${edit?'Tocá una celda para marcarla como posición o sin posición. El cambio aplica a todos los bloques con '+t.nombre+'.':'El dibujo respeta los conteos de tu planilla; ajustalo si no coincide con el piso.'}</span></div>
+      ${edit?`<div class="dims">${['sur','norte'].map(sd=>`<span class="lbl">${sd}</span> filas <input type="number" min="1" max="30" id="r-${sd}" value="${t[sd].rows}"> columnas <input type="number" min="1" max="30" id="c-${sd}" value="${t[sd].cols}">`).join('&nbsp;&nbsp;')}</div>`:''}`:''}
+    <div class="tbl"><table><thead><tr><th></th><th>Sur</th><th>Norte</th><th>Bloque</th></tr></thead><tbody>
+      ${tr('Posiciones',s.sur.pos,s.norte.pos)}${tr('Racks',s.sur.racks,s.norte.racks)}${tr('Neumáticos',s.sur.neu,s.norte.neu)}${tr('Neumáticos reales',s.sur.real,s.norte.real,'tot')}
+    </tbody></table></div>
+    ${s.rackPos?`<div class="row"><span><b>Rack selectivo</b> · filas ${['sur','norte'].map(sd=>(t[sd].racks||[]).map(x=>x.l).join(', ')).filter(Boolean).join(' / ')}</span><span class="num">${fmt(s.rackPos)} posiciones</span></div><div class="note">Las posiciones del rack se gestionan en Mapa Racks del WMS. La tabla de arriba cuenta solo el piso libre del lado Sur.</div>`:''}
+    <div><label class="lbl" for="obs">Observaciones</label><textarea id="obs" placeholder="Notas de este bloque">${esc(b.obs)}</textarea></div>`;
+}
+
+function renderCfgs(){
+  document.getElementById('cfgs').innerHTML=Object.keys(S.cfg).map(k=>{const c=S.cfg[k],s=blockStats(k);return `
+    <div class="cfg ${k}"><div class="row"><h3 style="font-size:1.15rem">${c.nombre}</h3><span class="note">${esc(c.uso)}</span></div>
+      <div class="row"><label for="tipo-${k}">Neumático del cálculo</label><select id="tipo-${k}" data-cfg="${k}" data-f="tipo">${Object.keys(S.cap).map(t=>`<option ${t===c.tipo?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="row"><label for="perd-${k}">Pérdida real %</label><input id="perd-${k}" type="number" min="0" max="100" data-cfg="${k}" data-f="perdida" value="${c.perdida}"></div>
+      <div class="row"><span>Por bloque</span><span class="num">${fmt(s.racks)} racks · ${fmt(s.real)} reales</span></div>
+      ${c.rackPos!=null?`<div class="row"><label for="rp-${k}">Posiciones de rack</label><input id="rp-${k}" type="number" min="0" data-cfg="${k}" data-f="rackPos" value="${c.rackPos}"></div>`:''}
+      <div class="note">Sugerido: ${esc(c.sugerido)}</div></div>`}).join('');
+  document.getElementById('params').innerHTML=Object.keys(S.cap).map(t=>`<div class="row"><label for="cap-${t}">${t[0]+t.slice(1).toLowerCase()}</label><input id="cap-${t}" type="number" min="1" data-cap="${t}" value="${S.cap[t]}"></div>`).join('')+
+    `<div class="row"><label for="apil">Racks apilados</label><input id="apil" type="number" min="1" max="20" value="${S.apilado}"></div>`;
+}
+function bestPlan(){
+  const ks=Object.keys(S.cfg).filter(k=>!S.cfg[k].fijo);
+  const libres=S.blocks.filter(b=>!(S.cfg[b.cfg]&&S.cfg[b.cfg].fijo)), N=libres.length;
+  const best=(list,f)=>list.reduce((a,k)=>a===null||blockStats(k)[f]>blockStats(a)[f]?k:a,null);
+  const out=pick=>S.blocks.map(b=>S.cfg[b.cfg]&&S.cfg[b.cfg].fijo?b.cfg:pick(libres.indexOf(b)));
+  if(S.objetivo==='racks'){const k=best(ks,'racks');return {asig:out(()=>k),kA:k,kB:null,nB:0,N,fijos:S.blocks.length-N}}
+  const cam=ks.filter(k=>S.cfg[k].tipo==='CAMION'), aut=ks.filter(k=>S.cfg[k].tipo!=='CAMION');
+  const kA=best(aut.length?aut:ks,'real'), kB=best(cam,'real');
+  let nB=kB&&blockStats(kB).real>0?Math.ceil(S.minCamion/blockStats(kB).real):0; nB=Math.min(N,Math.max(0,nB));
+  return {asig:out(i=>i>=N-nB?kB:kA),kA,kB,nB,N,fijos:S.blocks.length-N};
+}
+function renderNaveDims(){
+  const g=geo();
+  const f=(id,l,v,step)=>`<div class="row"><label for="${id}">${l}</label><input id="${id}" type="number" min="1" step="${step||1}" value="${v}"></div>`;
+  document.getElementById('naveDims').innerHTML=
+    f('nv-largo','Nave largo (m)',S.nave.largo)+f('nv-ancho','Nave ancho (m)',S.nave.ancho)+
+    f('bl-largo','Bloque largo (m)',S.dims.sur.largo)+f('bl-sur','Lado Sur ancho (m)',S.dims.sur.ancho)+f('bl-norte','Lado Norte ancho (m)',S.dims.norte.ancho)+
+    `<div class="row"><span>Pasillo central</span><span class="num${g.central<0?' warn':''}">${fmt(g.central)} m</span></div>`+
+    `<div class="row"><label for="dars-n">Dársenas</label><input id="dars-n" type="number" min="0" max="20" value="${S.dars.n}"></div>`+
+    `<div class="row"><label for="dars-u">Ubicación</label><select id="dars-u" style="width:auto"><option value="frente" ${S.dars.ubic==='frente'?'selected':''}>Pared del frente</option><option value="lat" ${S.dars.ubic==='lat'?'selected':''}>Paredes laterales</option></select></div>`+
+    `<div class="row"><label for="prep">Zona de preparación (m)</label><input id="prep" type="number" min="0" step="0.5" value="${S.prep}"></div>`+
+    `<div class="row"><span>Pasillo entre bloques</span><span class="num${g.gap<0?' warn':''}">${g.gap.toLocaleString('es-AR',{maximumFractionDigits:2})} m</span></div>`+
+    (g.central<0?`<div class="warn" style="grid-column:1/-1">Sur + Norte superan el ancho de la nave.</div>`:'')+
+    (g.sobra<0?`<div class="warn" style="grid-column:1/-1">Preparación + ${g.N} bloques suman ${fmt(S.prep+g.N*g.L)} m y la nave mide ${fmt(S.nave.largo)} m: no entran.</div>`:'');
+  const p=bestPlan(), nm=k=>S.cfg[k].nombre;
+  const tot=a=>a.reduce((t,k)=>{const s=blockStats(k);return {neu:t.neu+s.real,racks:t.racks+s.racks}},{neu:0,racks:0});
+  const t=tot(p.asig), cur=tot(S.blocks.map(b=>b.cfg));
+  document.getElementById('opt').innerHTML=`
+    <div class="row"><label for="objetivo">Maximizar</label><select id="objetivo" style="width:auto">
+      <option value="neu" ${S.objetivo==='neu'?'selected':''}>Neumáticos reales</option>
+      <option value="racks" ${S.objetivo==='racks'?'selected':''}>Racks (posiciones)</option></select></div>
+    ${S.objetivo==='neu'?`<div class="row"><label for="minCam">Mínimo de camión a guardar (neum.)</label><input id="minCam" type="number" min="0" step="100" value="${S.minCamion}"></div>`:''}
+    <div class="res note">Por bloque: ${Object.keys(S.cfg).filter(k=>!S.cfg[k].fijo).map(k=>{const x=blockStats(k);return `${nm(k)} = <span class="num">${fmt(x.real)}</span> neum. / <span class="num">${fmt(x.racks)}</span> racks`}).join(' · ')}.</div>
+    <div class="res">Mejor reparto${p.fijos?` (sin tocar ${p.fijos===1?'el bloque fijo':p.fijos+' bloques fijos'})`:''}: <b>${p.N-p.nB} bloques ${nm(p.kA)}</b>${p.nB?` + <b>${p.nB} ${nm(p.kB)}</b>`:''} → <span class="num">${fmt(t.neu)}</span> neum. reales, <span class="num">${fmt(t.racks)}</span> racks.
+      ${cur.neu===t.neu&&cur.racks===t.racks?'<span class="note">(es el reparto actual)</span>':`<span class="note">Actual: ${fmt(cur.neu)} neum., ${fmt(cur.racks)} racks.</span>`}</div>
+    <div><button type="button" class="btn" id="aplicarOpt">Aplicar mejor reparto</button></div>`;
+}
+function renderAll(){renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
+
+document.addEventListener('click',e=>{
+  const blk=e.target.closest('[data-blk]'); if(blk){sel=+blk.dataset.blk;edit=false;renderNave();renderFicha();return}
+  const set=e.target.closest('[data-set]'); if(set){S.blocks.find(x=>x.n===sel).cfg=set.dataset.set;edit=false;save();renderAll();return}
+  if(e.target.id==='editBtn'){edit=!edit;renderFicha();return}
+  if(e.target.id==='aplicarOpt'){const p=bestPlan();S.blocks.forEach((b,i)=>b.cfg=p.asig[i]);save();renderAll();msg('Reparto aplicado');return}
+  const cell=e.target.closest('#ficha .half.editing .cell'); if(cell){
+    const b=S.blocks.find(x=>x.n===sel),t=S.cfg[b.cfg][cell.dataset.side],k=cell.dataset.k;
+    const i=t.off.indexOf(k); if(i>=0)t.off.splice(i,1); else t.off.push(k);
+    save();renderKpis();renderNave();renderFicha();renderCfgs();return}
+  if(e.target.id==='reset'){const r=e.target;if(r.dataset.armed){S=structuredClone(DEF);sel=2;edit=false;save();renderAll();msg('Valores originales restablecidos');delete r.dataset.armed;r.textContent='Restablecer valores originales'}else{r.dataset.armed=1;r.textContent='Tocá de nuevo para confirmar';setTimeout(()=>{delete r.dataset.armed;r.textContent='Restablecer valores originales'},4000)}return}
+  if(e.target.id==='copy'){
+    const rows=[['Bloque','Configuración','Posiciones','Racks','Neumáticos','Neumáticos reales','Observaciones']];
+    S.blocks.forEach(b=>{const s=blockStats(b.cfg);rows.push([b.n,b.cfg==='N'?'Sin asignar':S.cfg[b.cfg].nombre,s.pos,s.racks,s.neu,s.real,b.obs])});
+    const txt=rows.map(r=>r.join('\t')).join('\n');
+    navigator.clipboard.writeText(txt).then(()=>msg('Resumen copiado: pegalo en Excel')).catch(()=>msg('No se pudo copiar desde este visor'));return}
+});
+document.addEventListener('change',e=>{
+  const el=e.target;
+  if(el.dataset.cfg){const c=S.cfg[el.dataset.cfg];c[el.dataset.f]=el.dataset.f==='perdida'?Math.min(100,Math.max(0,+el.value||0)):el.dataset.f==='rackPos'?Math.max(0,+el.value||0):el.value}
+  else if(el.dataset.cap){S.cap[el.dataset.cap]=Math.max(1,+el.value||1)}
+  else if(el.id==='apil'){S.apilado=Math.max(1,+el.value||1)}
+  else if(el.id==='nv-largo'){S.nave.largo=Math.max(1,+el.value||1)}
+  else if(el.id==='nv-ancho'){S.nave.ancho=Math.max(1,+el.value||1)}
+  else if(el.id==='bl-largo'){const v=Math.max(1,+el.value||1);S.dims.sur.largo=v;S.dims.norte.largo=v}
+  else if(el.id==='bl-sur'){S.dims.sur.ancho=Math.max(1,+el.value||1)}
+  else if(el.id==='bl-norte'){S.dims.norte.ancho=Math.max(1,+el.value||1)}
+  else if(el.id==='objetivo'){S.objetivo=el.value}
+  else if(el.id==='dars-n'){S.dars.n=Math.min(20,Math.max(0,+el.value||0))}
+  else if(el.id==='dars-u'){S.dars.ubic=el.value}
+  else if(el.id==='prep'){S.prep=Math.max(0,+el.value||0)}
+  else if(el.id==='minCam'){S.minCamion=Math.max(0,+el.value||0)}
+  else if(/^[rc]-(sur|norte)$/.test(el.id)){const b=S.blocks.find(x=>x.n===sel),[f,sd]=el.id.split('-');S.cfg[b.cfg][sd][f==='r'?'rows':'cols']=Math.min(30,Math.max(1,+el.value||1))}
+  else return;
+  save();renderAll();
+});
+document.addEventListener('input',e=>{if(e.target.id==='obs'){S.blocks.find(x=>x.n===sel).obs=e.target.value;save()}});
+const tip=document.getElementById('tip');
+document.addEventListener('mousemove',e=>{
+  const rb=e.target.closest('.rackbar');
+  if(rb){tip.textContent=`B${rb.dataset.b} · ${rb.dataset.side==='sur'?'Sur':'Norte'} · Rack selectivo ${rb.dataset.rack}`;tip.hidden=false;tip.style.left=Math.min(e.clientX+12,innerWidth-tip.offsetWidth-8)+'px';tip.style.top=(e.clientY+14)+'px';return}
+  const c=e.target.closest('.cell');
+  if(!c){tip.hidden=true;return}
+  const b=S.blocks.find(x=>x.n===+c.dataset.b),[r,cc]=c.dataset.k.split('-');
+  const side=c.dataset.side==='sur'?'Sur':'Norte';
+  let t=`B${b.n} · ${side} · Fila ${r} · Col ${cc}`;
+  if(c.dataset.off==='1')t+=' · sin posición';
+  else if(b.cfg!=='N'){const cap=S.cap[S.cfg[b.cfg].tipo];t+=` · ${S.apilado} racks · ${S.apilado*cap} neum.`}
+  tip.textContent=t;tip.hidden=false;
+  const x=Math.min(e.clientX+12,innerWidth-tip.offsetWidth-8);tip.style.left=x+'px';tip.style.top=(e.clientY+14)+'px';
+});
+function msg(t){const m=document.getElementById('msg');m.textContent=t;setTimeout(()=>{m.textContent=''},3500)}
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(renderNave,150)});
+renderAll();
+try{if(window.parent!==window){const ro=new ResizeObserver(()=>parent.postMessage({tipo:'plano-cap-alto',h:document.documentElement.scrollHeight},'*'));ro.observe(document.body)}}catch(e){}
+<\/script>
+</body></html></script>
 </body>
 </html>
