@@ -2338,8 +2338,8 @@ var _DATA_BASE_BLOQUE = {};
   // Aplicar movimientos encima del stock base del Excel
   DATA.forEach(function(r){
     if(movs[r.art] !== undefined){
-      r.stock = Math.max(0, (r.stock||0) + movs[r.art]);
-      r.pall = Math.floor(r.stock / (r.max_pos||32));
+      r.stock = (r.stock||0) + movs[r.art]; // sin recortar: la ficha de pila puede traer negativos
+      r.pall = Math.max(0, Math.floor(Math.max(0,r.stock) / (r.max_pos||32)));
       recalcularCond(r);
     }
   });
@@ -2464,93 +2464,132 @@ function renderDisc(){
 }
 
 
-function procesarStockPaste(){
-  const texto = document.getElementById('stock-paste').value.trim();
-  if(!texto){ showToast('❌ Pegá el inventario primero'); return; }
-
-  const lineas = texto.split('\n');
-  let updated = 0;
-  let skipped = 0;
-
-  lineas.forEach(linea=>{
-    const cols = linea.split('\t');
-    if(cols.length < 14) return;
-
-    // Skip header lines
-    const suc = cols[0].trim();
-    if(!suc || suc==='Suc.' || isNaN(parseInt(suc))) return;
-
-    const art = parseInt(cols[2]);
-    if(!art) return;
-
-    // Clean stock value (remove commas)
-    const stockVal = parseFloat(String(cols[13]||'0').replace(/,/g,'').trim());
-    if(isNaN(stockVal)) return;
-    const stock = Math.max(0, Math.round(stockVal));
-
-    const idx = DATA.findIndex(r=>r.art==art);
-    if(idx>=0){
-      DATA[idx].stock = stock;
-      updated++;
-    } else {
-      skipped++;
-    }
-  });
-
-  if(!updated){ showToast('❌ No se actualizó ningún artículo'); return; }
-
-  document.getElementById('stock-paste').value='';
-  document.getElementById('update-bar').classList.remove('visible');
-  render();
-  // Save stock and last update time
-  saveDataStock();
-  const ahora = new Date();
-  localStorage.setItem('wms_last_update', ahora.toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
-  actualizarUltimaFecha();
-  showToast('⚡ Stock actualizado — '+updated+' arts · '+skipped+' no encontrados');
+// ===== FICHA DE PILA → STOCK =====
+// El stock del WMS tiene que quedar IGUAL a la ficha de pila:
+//  · artículos de la ficha → su stock tal cual (incluidos negativos)
+//  · artículos del WMS que NO vienen en la ficha → stock 0
+//  · artículos nuevos de la ficha → se agregan a la base (sin bloque)
+function _numFicha(v){
+  if(v==null||v==='') return 0;
+  if(typeof v==='number') return v;
+  var t=String(v).trim().replace(/\s/g,'');
+  if(/^-?[\d,]+(\.\d+)?$/.test(t)) t=t.replace(/,/g,'');        // 1,051 / 70,381.00
+  else if(/^-?[\d.]+(,\d+)?$/.test(t)) t=t.replace(/\./g,'').replace(',','.'); // 1.051 / 1.051,5
+  var n=parseFloat(t); return isNaN(n)?0:n;
 }
-
+function aplicarFichaPila(filas, origen){
+  var ficha={}, totalFicha=0, neg=0, negArts=0;
+  filas.forEach(function(f){
+    var k=String(f.art).trim(); if(!k) return;
+    if(!ficha[k]) ficha[k]=Object.assign({},f,{stock:0});
+    ficha[k].stock+=Math.round(f.stock);
+  });
+  Object.keys(ficha).forEach(function(k){ var st=ficha[k].stock; totalFicha+=st; if(st<0){neg+=st;negArts++;} });
+  var antes=DATA.reduce(function(a,r){return a+(r.stock||0);},0);
+  var act=0, cambiados=0, ceros=[], nuevos=[];
+  var idx={}; DATA.forEach(function(r){ idx[String(r.art)]=r; });
+  DATA.forEach(function(r){
+    var f=ficha[String(r.art)], prev=r.stock||0, nuevo=f?f.stock:0;
+    if(f) act++; else if(prev!==0) ceros.push({art:r.art,med:r.med,diseno:r.diseno,prov:r.prov,bloque:r.bloque,prev:prev});
+    if(nuevo!==prev){ r.stock=nuevo; cambiados++; }
+    r.pall=Math.max(0,Math.floor(Math.max(0,r.stock)/(r.max_pos||32)));
+    try{ recalcularCond(r); }catch(e){}
+  });
+  Object.keys(ficha).forEach(function(k){
+    if(idx[k]) return;
+    var f=ficha[k];
+    var art=/^\d+$/.test(k)?parseInt(k,10):k;
+    var med=[f.diam,f.secc,f.llanta].map(function(x){return String(x==null?'':x).trim();}).filter(Boolean).join(' ');
+    var row={art:art,prov:String(f.prov||''),med:med,tipo:String(f.tipo||''),diseno:String(f.diseno||''),uso:'',stock:f.stock,pall:0,pallx2:0,rot:0,cond:'',wms:'',max_pos:0,bloque:''};
+    DATA.push(row); nuevos.push(row);
+  });
+  if(nuevos.length){
+    try{
+      if(typeof __BASE!=='undefined' && __BASE && __BASE.datos){
+        __BASE.datos.DATA=__BASE.datos.DATA.concat(nuevos.map(function(r){ var c=Object.assign({},r); c.stock=0; return c; }));
+        nuevos.forEach(function(r){ _DATA_BASE[r.art]=0; _DATA_BASE_BLOQUE[r.art]=''; });
+        wmsBaseGuardar(__BASE);
+      }
+    }catch(e){ console.warn('No se pudieron guardar los artículos nuevos en la base', e); }
+  }
+  saveDataStock();
+  var despues=DATA.reduce(function(a,r){return a+(r.stock||0);},0);
+  var resumen={fecha:new Date().toLocaleString('es-AR'),origen:origen,totalFicha:totalFicha,artsFicha:Object.keys(ficha).length,antes:antes,despues:despues,
+    actualizados:act,cambiados:cambiados,ceros:ceros.length,cerosUn:ceros.reduce(function(a,c){return a+c.prev;},0),nuevos:nuevos.length,nuevosUn:nuevos.reduce(function(a,r){return a+r.stock;},0),neg:neg,negArts:negArts};
+  try{ localStorage.setItem('wms_ficha_ultima', JSON.stringify(resumen)); }catch(e){}
+  localStorage.setItem('wms_last_update', new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
+  try{ actualizarUltimaFecha(); }catch(e){}
+  try{ init(); }catch(e){ try{ render(); }catch(e2){} }
+  setTimeout(function(){ mostrarResumenFicha(resumen, ceros, nuevos); }, 120);
+  return resumen;
+}
+function mostrarResumenFicha(R, ceros, nuevos){
+  var n=function(x){ return Math.round(x).toLocaleString('es-AR'); };
+  var ok=R.despues===R.totalFicha;
+  var fila=function(l,v,c){ return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:13px"><span>'+l+'</span><b style="'+(c?'color:'+c:'')+'">'+v+'</b></div>'; };
+  var lista=function(tit,arr,campo){ if(!arr.length) return ''; arr=arr.slice().sort(function(a,b){return Math.abs(b[campo])-Math.abs(a[campo]);});
+    return '<div style="font-size:12px;font-weight:700;margin:12px 0 4px">'+tit+'</div><div style="max-height:170px;overflow:auto;font-size:12px">'+arr.slice(0,40).map(function(r){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid #f5f5f7"><span>'+r.art+' — '+(r.med||'')+' '+(r.diseno||'')+(r.bloque?' · '+r.bloque:'')+'</span><b>'+n(r[campo])+'</b></div>'; }).join('')+(arr.length>40?'<div style="color:#86868b;padding:4px 0">…y '+(arr.length-40)+' más</div>':'')+'</div>'; };
+  document.getElementById('modal-content').innerHTML=
+    '<div class="modal-pos">📋 Ficha de pila cargada</div>'+
+    '<div class="modal-medida" style="font-size:18px">'+(ok?'✅ El stock coincide con la ficha':'⚠️ Revisar diferencia')+'</div>'+
+    '<div class="modal-sub">'+R.fecha+' · '+R.artsFicha+' artículos en la ficha</div>'+
+    '<div style="margin-top:10px">'+
+      fila('Total de la ficha de pila', n(R.totalFicha))+
+      fila('Stock del WMS antes', n(R.antes), '#86868b')+
+      fila('Stock del WMS ahora', n(R.despues), ok?'#1c7c2c':'#d70015')+
+      fila('Artículos actualizados', n(R.actualizados)+' ('+n(R.cambiados)+' cambiaron)')+
+      fila('No vienen en la ficha → puestos en 0', n(R.ceros)+' arts · '+n(R.cerosUn)+' un.', R.ceros?'#d70015':'')+
+      fila('Nuevos (no estaban en el WMS)', n(R.nuevos)+' arts · '+n(R.nuevosUn)+' un.', R.nuevos?'#0071e3':'')+
+      fila('Negativos en la ficha', n(R.negArts)+' arts · '+n(R.neg)+' un.', R.neg?'#ff9500':'')+
+    '</div>'+
+    lista('Puestos en 0 (tenían stock en el WMS y no están en la ficha)', ceros, 'prev')+
+    lista('Agregados desde la ficha (quedan sin bloque: ubicalos en 🏭 Nave)', nuevos, 'stock')+
+    '<button class="btn-secondary" onclick="closeModalDirect()" style="margin-top:12px">Cerrar</button>';
+  document.getElementById('modal-bg').classList.add('show');
+}
+function procesarStockPaste(){
+  var texto=document.getElementById('stock-paste').value.trim();
+  if(!texto){ showToast('❌ Pegá la ficha de pila primero'); return; }
+  var filas=[];
+  texto.split('\n').forEach(function(linea){
+    var c=linea.replace(/\r$/,'').split('\t');
+    if(c.length<14) return;
+    var suc=c[0].trim();
+    if(!suc||suc==='Suc.'||isNaN(parseInt(suc,10))) return;
+    var art=String(c[2]||'').trim(); if(!art) return;
+    filas.push({art:art,prov:c[1],diam:c[3],secc:c[4],tipo:c[5],llanta:c[6],diseno:c[7],stock:_numFicha(c[13])});
+  });
+  if(!filas.length){ showToast('❌ No reconocí ninguna fila de la ficha de pila'); return; }
+  document.getElementById('stock-paste').value='';
+  var ub=document.getElementById('update-bar'); if(ub) ub.classList.remove('visible');
+  aplicarFichaPila(filas,'pegado');
+}
 function handleStockUpdate(file){
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
+  var reader=new FileReader();
+  reader.onload=function(e){
     try{
-      const wb = XLSX.read(e.target.result,{type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-
-      // Buscar header row (fila con "Articulo" y "Stock")
-      let headerRow = -1;
-      for(let i=0;i<rows.length;i++){
-        if(rows[i] && rows[i].includes('Articulo') && rows[i].includes('Stock')){
-          headerRow = i; break;
-        }
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+      var h=-1;
+      for(var i=0;i<rows.length;i++){ var r=(rows[i]||[]).map(function(x){return String(x==null?'':x).trim();}); if(r.indexOf('Articulo')>=0&&r.indexOf('Stock')>=0){ h=i; break; } }
+      if(h<0){ showToast('❌ No encontré los encabezados Articulo / Stock'); return; }
+      var H=rows[h].map(function(x){return String(x==null?'':x).trim();});
+      var col=function(n){ return H.indexOf(n); };
+      var cA=col('Articulo'), cS=col('Stock');
+      var filas=[];
+      for(var j=h+1;j<rows.length;j++){
+        var r2=rows[j]; if(!r2) continue;
+        var art=String(r2[cA]==null?'':r2[cA]).trim(); if(!art) continue;
+        var g=function(n){ var k=col(n); return k>=0?r2[k]:''; };
+        filas.push({art:art,prov:g('Proveedor'),diam:g('Diametro'),secc:g('Seccion'),tipo:g('Tipo'),llanta:g('Llanta'),diseno:g('Diseno'),stock:_numFicha(r2[cS])});
       }
-      if(headerRow === -1){ showToast('❌ No encontré los headers Articulo/Stock'); return; }
-
-      const headers = rows[headerRow];
-      const colArt = headers.indexOf('Articulo');
-      const colStock = headers.indexOf('Stock');
-
-      let updated = 0;
-      for(let i=headerRow+1; i<rows.length; i++){
-        const r = rows[i];
-        if(!r||!r[colArt]) continue;
-        const art = parseInt(r[colArt]);
-        const stock = parseInt(r[colStock]||0);
-        if(!art) continue;
-        const idx = DATA.findIndex(d=>d.art==art);
-        if(idx >= 0){
-          DATA[idx].stock = stock;
-          updated++;
-        }
-      }
-
-      document.getElementById('update-bar').classList.remove('visible');
       document.getElementById('stock-input').value='';
-      render();
-      showToast('⚡ Stock actualizado — '+updated+' artículos');
-    }catch(err){ showToast('❌ Error al leer el stock'); console.error(err); }
+      var ub=document.getElementById('update-bar'); if(ub) ub.classList.remove('visible');
+      if(!filas.length){ showToast('❌ El archivo no tiene artículos'); return; }
+      aplicarFichaPila(filas,'archivo');
+    }catch(err){ showToast('❌ Error al leer la ficha de pila'); console.error(err); }
   };
   reader.readAsArrayBuffer(file);
 }
@@ -11115,6 +11154,7 @@ function dashNaveCard(){
     ['A reubicar',R.reubArts+' arts fuera del plano',n(R.reubicar),R.reubicar?'#d70015':'#34c759'],
     ['Sin ubicación',R.sinArts+' arts sin bloque',n(R.sinUbic),R.sinUbic?'#ff9500':'#34c759']
   ];
+  if(R.neg) tiles.push(['Negativos',R.negArts+' arts en negativo en la ficha',n(R.neg),'#ff9500']);
   var bar=function(lbl,d){
     if(!d.cap&&!d.stock) return '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#86868b"><span style="width:14px">'+lbl+'</span>—</div>';
     var w=d.f===Infinity?100:Math.min(100,Math.round(d.f*100));
@@ -17477,10 +17517,10 @@ function calcOcc(){
   const enRack={},enPunt={};
   const as=API.asign()||{};Object.keys(as).forEach(k=>{const v=as[k];if(!v)return;if(v.art!=null)enRack[v.art]=(enRack[v.art]||0)+(v.unidades||0);(v.compartidos||[]).forEach(c=>{enRack[c.art]=(enRack[c.art]||0)+(c.unidades||0)})});
   const pu=API.punteras()||{};Object.keys(pu).forEach(k=>(pu[k]||[]).forEach(it=>{enPunt[it.art]=(enPunt[it.art]||0)+(it.unidades||0)}));
-  const o={b:{},fuera:{stock:0,pall:0,arts:0,codes:new Set(),list:[]},sin:{stock:0,arts:0},total:0,rack:0,punt:0,dif:0,difArts:0};
+  const o={b:{},fuera:{stock:0,pall:0,arts:0,codes:new Set(),list:[]},sin:{stock:0,arts:0},total:0,rack:0,punt:0,dif:0,difArts:0,neg:0,negArts:0};
   S.blocks.forEach(b=>o.b[b.n]={sur:{stock:0,pall:0,arts:[]},norte:{stock:0,pall:0,arts:[]},nada:{stock:0,pall:0,arts:[]}});
   data.forEach(r=>{
-    const st=Math.max(0,r.stock||0); o.total+=st;
+    const raw=r.stock||0, st=Math.max(0,raw); o.total+=raw; if(raw<0){o.neg+=raw;o.negArts++}
     const rp=enPunt[r.art]||0, rr=enRack[r.art]||0;
     const pC=Math.min(rp,st), rC=Math.min(rr,st-pC), resto=st-pC-rC;
     o.punt+=pC; o.rack+=rC;
@@ -17696,6 +17736,7 @@ function renderKpis(){
        ['En racks',OCC.rack,'Mapa Racks'],['En punteras',OCC.punt,'parrillas'],
        ['A reubicar',OCC.fuera.stock,OCC.fuera.arts?OCC.fuera.arts+' arts con bloque fuera del plano':'todo en el plano'],
        ['Sin ubicación',OCC.sin.stock,OCC.sin.arts+' arts sin bloque'],
+       ...(OCC.neg?[['Negativos',OCC.neg,OCC.negArts+' arts en negativo en la ficha']]:[]),
        ...(OCC.dif?[['Registrado de más',OCC.dif,OCC.difArts+' arts con más en rack/puntera que en la ficha']]:[])]})():[])]
     .map(([l,v,s])=>`<div class="kpi"><div class="lbl">${l}</div><div class="v">${fmt(v)}</div><div class="s">${s}</div></div>`).join('');
 }
@@ -17799,7 +17840,7 @@ window.planoResumen=function(){
     return {n:b.n,cfg:b.cfg,nombre:b.cfg==='N'?'Sin asignar':(S.cfg[b.cfg].corto||S.cfg[b.cfg].nombre),cap:bs.real,racks:bs.racks,pos:bs.pos,sur:sd('sur'),norte:sd('norte')}});
   const cap=bloques.reduce((a,b)=>a+b.cap,0), enB=bloques.reduce((a,b)=>a+b.sur.stock+b.norte.stock,0);
   let rackOcc=0;if(API){const as=API.asign()||{};rackOcc=Object.keys(as).filter(k=>as[k]).length}
-  return {bloques,cap,enBloques:enB,total:OCC?OCC.total:0,rack:OCC?OCC.rack:0,punt:OCC?OCC.punt:0,reubicar:OCC?OCC.fuera.stock:0,reubArts:OCC?OCC.fuera.arts:0,sinUbic:OCC?OCC.sin.stock:0,sinArts:OCC?OCC.sin.arts:0,dif:OCC?OCC.dif:0,
+  return {bloques,cap,enBloques:enB,total:OCC?OCC.total:0,rack:OCC?OCC.rack:0,punt:OCC?OCC.punt:0,reubicar:OCC?OCC.fuera.stock:0,reubArts:OCC?OCC.fuera.arts:0,sinUbic:OCC?OCC.sin.stock:0,sinArts:OCC?OCC.sin.arts:0,dif:OCC?OCC.dif:0,neg:OCC?OCC.neg:0,negArts:OCC?OCC.negArts:0,
     rackPos:(S.cfg.B1&&S.cfg.B1.rackPos)||0,rackOcc,pedidos:API?pedidosAbiertos().length:0};
 };
 // Informe corto del plano, listo para imprimir o guardar como PDF.
@@ -17820,8 +17861,8 @@ window.planoInformeHTML=function(){
   const rows=R.bloques.map(b=>`<tr><td>Bloque ${b.n}</td><td>${esc(b.nombre)}</td><td>${fmt(b.sur.stock)} / ${fmt(b.sur.cap)}</td><td style="color:${col(b.sur.f)}">${b.sur.cap?pc(b.sur.f):'—'}</td><td>${fmt(b.norte.stock)} / ${fmt(b.norte.cap)}</td><td style="color:${col(b.norte.f)}">${b.norte.cap?pc(b.norte.f):'—'}</td><td>${fmt(b.sur.stock+b.norte.stock)} / ${fmt(b.cap)}</td><td style="color:${col(b.cap?(b.sur.stock+b.norte.stock)/b.cap:0)}"><b>${b.cap?pc((b.sur.stock+b.norte.stock)/b.cap):'—'}</b></td></tr>`).join('');
   const reub=OCC?OCC.fuera.list.slice().sort((a,b)=>b._u-a._u).slice(0,15):[];
   const peds=API?pedidosAbiertos():[];
-  const kp=[['Stock total (ficha de pila)',R.total],['En bloques',R.enBloques],['Capacidad real bloques',R.cap],['Ocupación bloques',R.cap?Math.round(R.enBloques/R.cap*100)+'%':'—'],['En racks',R.rack],['Racks ocupados',R.rackOcc+' / '+R.rackPos],['En punteras',R.punt],['A reubicar',R.reubicar],['Sin ubicación',R.sinUbic]];
-  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plano de nave '+fecha+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px;margin:0}h1{font-size:18px;margin:0}h2{font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:#444}.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px}.k{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-top:10px}.k div{border:1px solid #ccc;border-radius:4px;padding:5px}.k b{display:block;font-size:14px;margin-top:2px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:3px 5px;text-align:right}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}th{font-size:9px;text-transform:uppercase;color:#555}.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.n{color:#666;font-size:9px}</style></head><body>'+
+  const kp=[['Stock total (ficha de pila)',R.total],['En bloques',R.enBloques],['Capacidad real bloques',R.cap],['Ocupación bloques',R.cap?Math.round(R.enBloques/R.cap*100)+'%':'—'],['En racks',R.rack],['Racks ocupados',R.rackOcc+' / '+R.rackPos],['En punteras',R.punt],['A reubicar',R.reubicar],['Sin ubicación',R.sinUbic],...(R.neg?[['Negativos',R.neg]]:[])];
+  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plano de nave '+fecha+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px;margin:0}h1{font-size:18px;margin:0}h2{font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:#444}.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px}.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px;margin-top:10px}.k div{border:1px solid #ccc;border-radius:4px;padding:5px}.k b{display:block;font-size:14px;margin-top:2px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:3px 5px;text-align:right}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}th{font-size:9px;text-transform:uppercase;color:#555}.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.n{color:#666;font-size:9px}</style></head><body>'+
     `<div class="top"><div><div class="n">HALPERN NEUMÁTICOS · DEPÓSITO MENDOZA</div><h1>Plano de nave · cómo va quedando</h1></div><div>${fecha}</div></div>`+
     `<div class="k">${kp.map(([l,v])=>`<div>${l}<b>${typeof v==='number'?fmt(v):v}</b></div>`).join('')}</div>`+
     (R.dif?`<div class="n" style="margin-top:4px;color:#d03a2f">Hay ${fmt(R.dif)} un. registradas en rack/puntera por encima de la ficha de pila: revisar.</div>`:'')+
