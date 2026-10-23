@@ -1953,6 +1953,7 @@ function renderDash(){
     const topRot = [...DATA].filter(r=>r.rot>0).sort((a,b)=>b.rot-a.rot).slice(0,5);
 
     content.innerHTML = `
+      ${dashNaveCard()}
       <div class="chart-card">
         <div class="chart-title">🔥 Top 5 Mayor Rotación</div>
         ${topRot.map((r,i)=>`<div class="top-row">
@@ -1961,41 +1962,6 @@ function renderDash(){
           <div class="top-val" style="color:#0071e3">${r.rot.toLocaleString('es-AR')}/mes</div>
         </div>`).join('')}
       </div>
-      ${(()=>{
-        const {total, cats} = calcContenedores();
-        const maxC = Math.max(...Object.values(cats));
-        const colores = ['#0071e3','#34c759','#ff9500','#af52de','#ff3b30'];
-        const entries = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
-        return `<div class="chart-card">
-          <div class="chart-title">🚢 Equivalente en Contenedores — Total: <strong>${total}</strong></div>
-          ${entries.map(([label,val],i)=>`
-            <div class="bar-row">
-              <div class="bar-label">${label}</div>
-              <div class="bar-track">
-                <div class="bar-fill" style="width:${maxC?Math.round((val/maxC)*100):0}%;background:${colores[i%colores.length]}">${(Math.round(val*10)/10).toLocaleString('es-AR')}</div>
-              </div>
-              <div class="bar-val">${(Math.round(val*10)/10).toLocaleString('es-AR')}</div>
-            </div>`).join('')}
-          <div style="margin-top:10px;padding-top:8px;border-top:1px solid #e5e5ea;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-            <div style="text-align:center;background:#f5f5f7;border-radius:8px;padding:8px">
-              <div style="font-size:10px;color:#86868b">Capacidad total</div>
-              <div style="font-size:20px;font-weight:700">160</div>
-              <div style="font-size:10px;color:#86868b">contenedores</div>
-            </div>
-            <div style="text-align:center;background:#ffd6d9;border-radius:8px;padding:8px">
-              <div style="font-size:10px;color:#d70015">Ocupado</div>
-              <div style="font-size:20px;font-weight:700;color:#d70015">${total.toFixed(1)}</div>
-              <div style="font-size:10px;color:#d70015">${Math.round(total/160*100)}% del depósito</div>
-            </div>
-            <div style="text-align:center;background:#d4edda;border-radius:8px;padding:8px">
-              <div style="font-size:10px;color:#1c7c2c">Espacio libre</div>
-              <div style="font-size:20px;font-weight:700;color:#1c7c2c">${(160-total).toFixed(1)}</div>
-              <div style="font-size:10px;color:#1c7c2c">${Math.round((160-total)/160*100)}% disponible</div>
-            </div>
-          </div>
-          <div style="font-size:10px;color:#86868b;margin-top:6px">Factores: 22.5+/295/275=265 un · 17.5/19.5=350 un · Speedway=100 un · Resto=1000 un por contenedor</div>
-        </div>`;
-      })()}
       ${(()=>{
         const cats = calcCategorias();
         const coloresCat = {PCR:'#0071e3', TBR:'#ff9500', OTR:'#34c759'};
@@ -5016,6 +4982,7 @@ function renderPedido(conPuntera, conRack, conBloque, sinUbic, todos){
 
   // Store for export
   window._pedidoActual = {puntera:conPuntera, rack:conRack, bloque:conBloque, sin:sinUbic, todos, volumenPedido};
+  try{ pedidoAvisoNave(todos); }catch(e){}
 
   // Add to cola de pedidos automatically
   agregarPedidoCola(window._pedidoActual);
@@ -7829,11 +7796,11 @@ function generarInforme(){
   </div>
 
   <div class="grid" style="margin-bottom:8px;grid-template-columns:repeat(5,1fr)">
-    <div class="kpi verde"><div class="kpi-val">${ocupadas}/462</div><div class="kpi-lbl">Posiciones rack ocupadas</div></div>
-    <div class="kpi"><div class="kpi-val">${Math.round(ocupadas/462*100)}%</div><div class="kpi-lbl">% Ocupación rack</div></div>
+    <div class="kpi verde"><div class="kpi-val">${ocupadas}/${(planoDatos()||{}).rackPos||448}</div><div class="kpi-lbl">Posiciones rack ocupadas</div></div>
+    <div class="kpi"><div class="kpi-val">${Math.round(ocupadas/((planoDatos()||{}).rackPos||448)*100)}%</div><div class="kpi-lbl">% Ocupación rack</div></div>
     <div class="kpi rojo"><div class="kpi-val">${criticos}</div><div class="kpi-lbl">Reposición crítica hoy</div></div>
-    <div class="kpi"><div class="kpi-val">${(()=>{const {total}=calcContenedores();return total;})()} cont.</div><div class="kpi-lbl">Equiv. contenedores total</div></div>
-    <div class="kpi verde"><div class="kpi-val">${(()=>{const {total}=calcContenedores();return (160-total).toFixed(1);})()} cont.</div><div class="kpi-lbl">Espacio libre (de 160)</div></div>
+    <div class="kpi"><div class="kpi-val">${(()=>{const R=planoDatos();return R&&R.cap?Math.round(R.enBloques/R.cap*100)+'%':'—';})()}</div><div class="kpi-lbl">Ocupación bloques (plano)</div></div>
+    <div class="kpi verde"><div class="kpi-val">${(()=>{const R=planoDatos();return R?Math.max(0,Math.round(R.cap-R.enBloques)).toLocaleString('es-AR'):'—';})()}</div><div class="kpi-lbl">Lugar libre en bloques (neum.)</div></div>
   </div>
 
   <!-- Gráficos -->
@@ -11028,16 +10995,18 @@ function termoClickZona(zid){
 }
 
 // ===== PLANO DE NAVE (plano de capacidad + operaciones de bloques) =====
-// Reemplaza al plano operativo anterior. El planificador vive en
-// <script type="text/plain" id="plano-cap-src"> y corre en un iframe propio
-// (mismo origen: comparte localStorage, clave wms_plano_capacidad).
+// Reemplaza al plano operativo anterior. El planificador vive en el bloque
+// de texto con id "plano-cap-src" al final del archivo y corre en un iframe
+// propio (mismo origen: comparte localStorage, clave wms_plano_capacidad).
 // Lee y modifica el stock solo a través de WMS_API.
 window.WMS_API = {
   data: function(){ return DATA; },
   asign: function(){ return ASIGN; },
   punteras: function(){ return getPunteras(); },
+  transitos: function(){ return transitoGetAll(); },
   save: function(){ saveDataStock(); },
   toast: function(m){ showToast(m); },
+  imprimir: function(html){ _wmsPrint(html); },
   ir: function(tab){
     var btn = document.getElementById('row2tab-'+tab) || document.querySelector('.tab[onclick*="\''+tab+'\'"]');
     switchTab(tab, btn || document.querySelectorAll('.tab')[0]);
@@ -11059,6 +11028,128 @@ function renderNave(){
   f.srcdoc = src.textContent.replace(/<\\\/script>/g,'</'+'script>');
   cont.appendChild(f);
 }
+// Aviso al armar el pedido + dársena sugerida, según el plano de nave.
+function _planoCfg(){
+  var d={n:9,dars:8};
+  try{ var o=JSON.parse(localStorage.getItem('wms_plano_capacidad')||'null');
+    if(o){ if(o.blocks&&o.blocks.length) d.n=o.blocks.length; if(o.dars&&o.dars.n!=null) d.dars=o.dars.n; } }catch(e){}
+  return d;
+}
+function _ubicPlano(code, n){
+  var t=String(code||'').toUpperCase().trim();
+  if(t.indexOf('/')>=0) return null;
+  var m=t.match(/^(\d+)([SN])(?![A-Z0-9])/);
+  if(!m) return null;
+  var b=parseInt(m[1],10);
+  return (b>=1&&b<=n) ? {b:b, side:m[2]} : null;
+}
+function pedidoAvisoNave(todos){
+  var el=document.getElementById('ped-resultado'); if(!el) return;
+  var cfg=_planoCfg(), reub=[], sinU=[], sur=0, norte=0;
+  (todos||[]).forEach(function(it){
+    (it.fuentes||[]).forEach(function(f){
+      if(f.tipo==='sinubic'){ sinU.push(it); return; }
+      if(f.tipo!=='bloque') return;
+      var u=_ubicPlano(f.ubic, cfg.n);
+      if(!u) reub.push({it:it, f:f});
+      else if(u.side==='S') sur+=f.cant; else norte+=f.cant;
+    });
+  });
+  var h1=Math.ceil(cfg.dars/2), docks=[], ladoTxt='';
+  if(sur+norte>0 && cfg.dars>0){
+    var esSur = sur>=norte;
+    for(var k=(esSur?1:h1+1); k<=(esSur?h1:cfg.dars); k++) docks.push('D'+k);
+    ladoTxt = esSur ? 'Sur' : 'Norte';
+  }
+  var html='<div id="ped-aviso-nave" style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:13px">';
+  if(reub.length||sinU.length){
+    html+='<div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:8px;padding:8px 10px;margin-bottom:8px;color:#664d03">⚠️ <b>Antes de mandar a tránsito:</b> ';
+    if(reub.length) html+=reub.length+' artículo(s) salen de un bloque que no está en el plano ('+reub.map(function(x){return x.it.art+' → '+x.f.ubic;}).slice(0,8).join(', ')+(reub.length>8?'…':'')+'). ';
+    if(sinU.length) html+=sinU.length+' artículo(s) no tienen ubicación. ';
+    html+='Reubicalos en 🏭 Nave → A reubicar.</div>';
+  }
+  if(docks.length){
+    html+='<div>🚚 <b>Dársena sugerida: lado '+ladoTxt+'</b> — del bloque salen '+sur.toLocaleString('es-AR')+' un. del Sur y '+norte.toLocaleString('es-AR')+' del Norte. '+
+      docks.map(function(d){ return '<button onclick="document.getElementById(\'ped-darsena\').value=\''+d+'\';showToast(\'Dársena '+d+'\')" style="margin:2px 2px 0 0;padding:4px 10px;border-radius:14px;border:1px solid #af52de;background:#fff;color:#7a3fb0;font-weight:700;cursor:pointer">'+d+'</button>'; }).join('')+'</div>';
+  } else if(!reub.length && !sinU.length){
+    html+='<div style="color:#6e6e73">Todo sale de puntera o rack: elegí la dársena que te quede más cómoda.</div>';
+  }
+  html+='</div>';
+  var prev=document.getElementById('ped-aviso-nave'); if(prev) prev.remove();
+  el.insertAdjacentHTML('afterbegin', html);
+}
+// Abre un informe en una ventana nueva para imprimir / guardar como PDF.
+// (generarInforme y otros informes ya la llamaban pero no estaba definida.)
+if(typeof window._wmsPrint!=='function'){
+  window._wmsPrint = function(html){
+    var w = window.open('','_blank');
+    if(!w){ showToast('⚠️ Permití las ventanas emergentes para ver el informe'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    if(html.indexOf('window.print')<0) setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 600);
+  };
+}
+// Datos del plano de nave (los mismos que muestra la pestaña Nave). Si el plano
+// todavía no cargó, lo monta y vuelve a dibujar el Dashboard cuando está listo.
+function planoDatos(){
+  var f=document.querySelector('#nave-capacidad iframe');
+  if(!f){
+    renderNave();
+    f=document.querySelector('#nave-capacidad iframe');
+    if(f) f.addEventListener('load', function(){ var v=document.getElementById('view-dash'); if(v&&v.classList.contains('active')) renderDash(); }, {once:true});
+    return null;
+  }
+  try{ return (f.contentWindow&&f.contentWindow.planoResumen) ? f.contentWindow.planoResumen() : null; }catch(e){ return null; }
+}
+function dashNaveCard(){
+  var R=planoDatos(), n=function(x){ return Math.round(x||0).toLocaleString('es-AR'); };
+  var hora=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(!R) return '<div class="chart-card"><div class="chart-title">🏭 Ocupación de la nave</div><div style="color:#86868b;font-size:13px">Cargando el plano…</div></div>';
+  var col=function(f){ return (f===Infinity||f>=0.9)?'#d70015':(f>=0.65?'#ff9500':'#34c759'); };
+  var pc=function(f){ return f===Infinity?'s/cap':Math.round(f*100)+'%'; };
+  var ocB=R.cap?R.enBloques/R.cap:0;
+  var tiles=[
+    ['Stock total','ficha de pila',n(R.total),'#1d1d1f'],
+    ['En bloques',pc(ocB)+' de '+n(R.cap)+' de capacidad',n(R.enBloques),col(ocB)],
+    ['En racks',R.rackOcc+' / '+R.rackPos+' posiciones',n(R.rack),'#0071e3'],
+    ['En punteras','parrillas',n(R.punt),'#7a3fb0'],
+    ['A reubicar',R.reubArts+' arts fuera del plano',n(R.reubicar),R.reubicar?'#d70015':'#34c759'],
+    ['Sin ubicación',R.sinArts+' arts sin bloque',n(R.sinUbic),R.sinUbic?'#ff9500':'#34c759']
+  ];
+  var bar=function(lbl,d){
+    if(!d.cap&&!d.stock) return '<div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#86868b"><span style="width:14px">'+lbl+'</span>—</div>';
+    var w=d.f===Infinity?100:Math.min(100,Math.round(d.f*100));
+    return '<div style="display:flex;align-items:center;gap:6px;font-size:10px"><span style="width:14px;color:#6e6e73;font-weight:700">'+lbl+'</span>'+
+      '<div style="flex:1;height:10px;background:#f0f0f2;border-radius:5px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:'+col(d.f)+'"></div></div>'+
+      '<span style="width:92px;text-align:right;color:#1d1d1f">'+pc(d.f)+' · '+n(d.stock)+'</span></div>';
+  };
+  return '<div class="chart-card">'+
+    '<div class="chart-title" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>🏭 Ocupación de la nave <span style="font-size:11px;font-weight:600;color:#34c759">● en vivo · '+hora+'</span></span>'+
+      '<button onclick="switchTab(\'nave\',document.getElementById(\'row2tab-nave\'))" style="padding:5px 12px;border-radius:14px;border:1px solid #0071e3;background:#fff;color:#0071e3;font-size:12px;font-weight:600;cursor:pointer">Ver plano</button></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px">'+
+      tiles.map(function(t){ return '<div style="background:#f5f5f7;border-radius:10px;padding:8px 10px"><div style="font-size:10px;color:#86868b">'+t[0]+'</div><div style="font-size:19px;font-weight:700;color:'+t[3]+'">'+t[2]+'</div><div style="font-size:10px;color:#86868b">'+t[1]+'</div></div>'; }).join('')+
+    '</div>'+
+    (R.dif?'<div style="font-size:11px;color:#d70015;margin-bottom:8px">⚠️ '+n(R.dif)+' un. registradas en rack/puntera por encima de la ficha de pila</div>':'')+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px 18px">'+
+      R.bloques.map(function(b){ return '<div><div style="font-size:12px;font-weight:700;margin-bottom:3px">Bloque '+b.n+' <span style="font-weight:500;color:#86868b">· '+b.nombre+'</span></div>'+bar('S',b.sur)+bar('N',b.norte)+'</div>'; }).join('')+
+    '</div>'+
+    '<div style="font-size:10px;color:#86868b;margin-top:8px">Stock en bloque = stock de la ficha de pila menos lo registrado en punteras y Mapa Racks. Capacidad = neumáticos reales según la configuración de cada bloque en el plano.'+(R.pedidos?' · '+R.pedidos+' pedido(s) en tránsito de salida.':'')+'</div>'+
+  '</div>';
+}
+// Dashboard en vivo: se redibuja solo cuando cambian stock, ubicaciones,
+// racks, punteras, tránsitos o el plano (chequeo liviano cada 4 s).
+function _dashFirma(){
+  var h=DATA.length;
+  for(var i=0;i<DATA.length;i++){ var r=DATA[i]; h=(h*31+(r.stock||0))|0; var b=r.bloque||''; for(var j=0;j<b.length;j++) h=(h*31+b.charCodeAt(j))|0; }
+  var ls=function(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } };
+  return h+'|'+JSON.stringify(ASIGN).length+'|'+ls('wms_punteras').length+'|'+ls('wms_transito').length+'|'+ls('wms_plano_capacidad').length;
+}
+var _dashSig='';
+setInterval(function(){
+  var v=document.getElementById('view-dash');
+  if(!v||!v.classList.contains('active')||document.hidden) return;
+  var sig=_dashFirma();
+  if(sig!==_dashSig){ _dashSig=sig; try{ renderDash(); }catch(e){} }
+}, 4000);
 window.addEventListener('message', function(ev){
   var d = ev.data;
   if(!d || d.tipo!=='plano-cap-alto') return;
@@ -17150,6 +17241,15 @@ header.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justif
 .mv input{width:110px}
 .side-tag{font-family:var(--display);font-weight:700;font-size:.7rem;letter-spacing:.06em;padding:1px 5px;border-radius:3px;background:var(--floor);color:var(--muted)}
 .bad{font-size:.7rem;color:#d03a2f;font-weight:600}
+.dlab.dsel{background:#8e44c9;color:#fff;padding:1px 4px;border-radius:3px}
+.pedtag{font-family:var(--mono);font-size:.68rem;font-weight:600;color:#fff;background:#8e44c9;border-radius:3px;padding:1px 5px;align-self:flex-start;white-space:nowrap}
+.ruta{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:5px;margin-top:8px}
+.parada{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:start;padding:9px 10px;border-bottom:1px solid var(--line)}
+.parada:last-child{border-bottom:0}
+.parada .nro{width:26px;height:26px;border-radius:50%;background:#8e44c9;color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:600;font-size:.8rem}
+.parada.warn .nro{background:#d03a2f}
+.parada .lugar{font-weight:600}
+.parada .items{font-size:.82rem;color:var(--muted)}
 .link{background:none;border:0;padding:0;color:var(--c1);cursor:pointer;font:inherit;text-decoration:underline}
 .playa{position:absolute;top:0;bottom:0;background:var(--surface);border-right:1px solid var(--line)}
 .playa .tag{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;pointer-events:none}
@@ -17212,6 +17312,7 @@ textarea{width:100%;min-height:54px;resize:vertical;background:var(--bg);border:
       <div class="sub">Cada celda es una posición con racks apilados. Tocá un bloque para ver su ficha, su stock o cambiarle la configuración.</div>
     </div>
     <div class="kpis" id="kpis"></div>
+    <button type="button" class="btn pri" id="infBtn" hidden>📄 Informe PDF</button>
   </header>
 
   <div class="legend">
@@ -17236,6 +17337,9 @@ textarea{width:100%;min-height:54px;resize:vertical;background:var(--bg);border:
   <section class="plan" aria-label="Plano de la nave"><div class="nave" id="nave"></div></section>
   <section class="panel" id="opsPanel" hidden>
     <div class="ph"><h2>Operaciones</h2><span class="note" id="opsInfo"></span></div>
+    <div class="op" style="margin-bottom:12px"><h3>🚚 Pedido en el plano</h3>
+      <div class="foot"><select id="pedSel" aria-label="Pedido en tránsito" style="flex:1;min-width:220px"></select><button type="button" class="btn" id="pedClear">Quitar del plano</button></div>
+      <div id="pedOut"></div></div>
     <div class="ops">
       <div class="op"><h3>🔎 Buscar ubicación</h3>
         <input id="q" type="search" placeholder="Código, medida, diseño o proveedor (ej: KUMHO, 295 80 22.5)">
@@ -17253,6 +17357,7 @@ textarea{width:100%;min-height:54px;resize:vertical;background:var(--bg);border:
         <div class="foot"><button type="button" class="btn pri" id="maBtn">Mover artículo</button></div></div>
     </div>
     <div id="opsOut"></div>
+    <div id="reubOut"></div>
   </section>
   <datalist id="codigos"></datalist>
 
@@ -17313,27 +17418,79 @@ const DEF={
 let S=load(); let sel=2; let edit=false;
 // ===== Conexión con el WMS (solo cuando el plano corre dentro del WMS) =====
 const API=(()=>{try{return window.parent!==window&&parent.WMS_API?parent.WMS_API:null}catch(e){return null}})();
-let hl=new Set(), vista='cfg', OCC=null, pendRep=null, movArt=null;
+let hl=new Set(), vista='cfg', OCC=null, pendRep=null, movArt=null, PED=null;
+function pedidosAbiertos(){try{return (API.transitos()||[]).filter(t=>t.flujo==='salida'&&t.estado==='transito')}catch(e){return []}}
+function fuentesItem(r){
+  const tot=r.cantReal||r.cant||0, pD=r.punteraDetalle||[], dp=pD.reduce((a,d)=>a+(d.unidades||0),0);
+  const rD=(r.rackDetalle&&r.rackDetalle.length)?r.rackDetalle:(r.posRack?[{id:r.posRack,unidades:r.rackRestante||0}]:[]);
+  const dr=rD.reduce((a,d)=>a+(d.unidades||0),0);
+  return {pD,dp,rD,dr,resto:Math.max(0,tot-dp-dr)};
+}
+function ladoDarsena(d){const m=String(d||'').match(/\d+/);if(!m)return null;const k=+m[0],h1=Math.ceil(S.dars.n/2);return k>=1&&k<=S.dars.n?{k,side:k<=h1?'sur':'norte'}:null}
+// Recorrido desde la dársena: punteras → rack (Bloque 1) → bloques 1…9, empezando
+// en cada bloque por el lado de la dársena. Lo que tiene un bloque fuera del plano va al final.
+function armarRuta(tr){
+  const ds=ladoDarsena(tr.darsena), first=ds?ds.side:'sur';
+  const stops={}, add=(key,ord,lugar,warn,it,cant,extra)=>{(stops[key]=stops[key]||{ord,lugar,warn,items:[],cant:0,b:null,side:null});stops[key].items.push({it,cant,extra});stops[key].cant+=cant;return stops[key]};
+  (tr.items||[]).forEach(it=>{
+    const f=fuentesItem(it);
+    f.pD.forEach(d=>{const z=(String(d.id).match(/^P(\d+)/)||[])[1]||'?';add('P'+z,100+(+z||0),'Puntera pasillo '+z,false,it,d.unidades||0,d.id)});
+    if(f.dr>0)add('RACK',200,'Mapa Racks · Bloque 1',false,it,f.dr,f.rD.map(d=>d.id).join(' + '));
+    if(f.resto>0){
+      const u=parseUbic(it.bloque)[0];
+      if(u.b){const o=u.side===first?0:1,st=add(u.b+u.side,1000+u.b*10+o,'Bloque '+u.b+' · '+(u.side==='sur'?'Sur':'Norte')+' ('+u.raw+')',false,it,f.resto);st.b=u.b;st.side=u.side}
+      else add('X'+(it.bloque||'-'),9000,it.bloque?'Bloque '+it.bloque+' · no está en el plano':'Sin ubicación',true,it,f.resto);
+    }
+  });
+  return {ds,lista:Object.values(stops).sort((a,b)=>a.ord-b.ord)};
+}
+function renderPedidos(){
+  const sl=document.getElementById('pedSel');if(!sl||!API)return;
+  const L=pedidosAbiertos();
+  if(PED&&!L.some(t=>t.id===PED))PED=null;
+  sl.innerHTML='<option value="">'+(L.length?'Elegí un pedido en tránsito ('+L.length+')':'No hay pedidos en tránsito de salida')+'</option>'+
+    L.map(t=>`<option value="${esc(t.id)}" ${t.id===PED?'selected':''}>${esc(t.nroContenedor||t.id)} · ${esc(t.destino||'')} · ${(t.items||[]).length} arts${t.darsena?' · dárs. '+esc(t.darsena):''}</option>`).join('');
+  const out=document.getElementById('pedOut');
+  if(!PED){out.innerHTML='';return}
+  const tr=L.find(t=>t.id===PED), R=armarRuta(tr), tot=R.lista.reduce((a,s)=>a+s.cant,0), malos=R.lista.filter(s=>s.warn);
+  out.innerHTML=`<div class="note" style="padding-top:6px">${esc(tr.tipoLabel||'Pedido')} ${esc(tr.nroContenedor||'')} · ${esc(tr.destino||'')} · ${fmt(tot)} un. en ${R.lista.length} parada(s) · ${R.ds?'Dársena D'+R.ds.k+' (lado '+(R.ds.side==='sur'?'Sur':'Norte')+')':'<span class="bad">sin dársena cargada</span>'}${tr.preparador?' · preparador '+esc(tr.preparador):''}</div>
+    ${malos.length?`<div class="bad" style="padding-top:4px">⚠️ ${malos.reduce((a,s)=>a+s.items.length,0)} artículo(s) salen de un lugar que no está en el plano: revisalos en "A reubicar".</div>`:''}
+    <div class="ruta">${R.lista.map((st,i)=>`<div class="parada${st.warn?' warn':''}"><span class="nro">${i+1}</span><div style="min-width:0"><div class="lugar">${esc(st.lugar)}</div><div class="items">${st.items.map(x=>`${esc(x.it.art)} ${esc(x.it.med||'')} ${esc(x.it.diseno||'')} × <b>${fmt(x.cant)}</b>${x.extra?' <span class="side-tag">'+esc(x.extra)+'</span>':''}`).join('<br>')}</div></div><span class="num">${fmt(st.cant)} un.</span></div>`).join('')}</div>`;
+}
+function pedidoEnMapa(){if(!API||!PED)return null;const tr=pedidosAbiertos().find(t=>t.id===PED);if(!tr)return null;const R=armarRuta(tr),m={};R.lista.forEach(s=>{if(s.b)m[s.b]=(m[s.b]||0)+s.cant;if(s.ord===200)m[1]=(m[1]||0)+s.cant});return {m,ds:R.ds}}
 try{vista=localStorage.getItem('wms_plano_vista')||(API?'ocu':'cfg')}catch(e){}
+// Solo cuenta lo que existe en el plano: un bloque del 1 al 9 con su lado (ej. "4S", "4N", "4S PICKING").
+// Compartidos ("2N/3N"), sin lado ("2") o bloques que no están (10) quedan "A reubicar".
 function parseUbic(code){
-  const toks=String(code||'').toUpperCase().split('/').map(t=>t.trim()).filter(Boolean),out=[];
-  toks.forEach(t=>{const m=t.match(/^(\d+)\s*([SN])?/);out.push(m?{b:+m[1],side:m[2]==='S'?'sur':m[2]==='N'?'norte':null,raw:t}:{b:null,side:null,raw:t})});
-  return out;
+  const t=String(code||'').toUpperCase().trim();
+  const m=t.includes('/')?null:t.match(/^(\d+)([SN])(?![A-Z0-9])/);
+  const b=m?+m[1]:null, ok=m&&S.blocks.some(x=>x.n===b);
+  return [ok?{b,side:m[2]==='S'?'sur':'norte',raw:t}:{b:null,side:null,raw:t}];
 }
 function tokensDe(code){return String(code||'').toUpperCase().split('/').map(t=>t.trim()).filter(Boolean)}
+// Reparte el stock de cada artículo (el de la ficha de pila, DATA.stock) entre
+// puntera, rack y bloque, sin contar nada dos veces: primero lo registrado en
+// punteras, después en Mapa Racks, y el resto es lo que está en el bloque.
 function calcOcc(){
   if(!API){OCC=null;return}
-  const data=API.data(), nB=S.blocks.length;
-  const o={b:{},fuera:{stock:0,pall:0,arts:0,codes:new Set()},sin:{stock:0,arts:0},total:0};
+  const data=API.data();
+  const enRack={},enPunt={};
+  const as=API.asign()||{};Object.keys(as).forEach(k=>{const v=as[k];if(!v)return;if(v.art!=null)enRack[v.art]=(enRack[v.art]||0)+(v.unidades||0);(v.compartidos||[]).forEach(c=>{enRack[c.art]=(enRack[c.art]||0)+(c.unidades||0)})});
+  const pu=API.punteras()||{};Object.keys(pu).forEach(k=>(pu[k]||[]).forEach(it=>{enPunt[it.art]=(enPunt[it.art]||0)+(it.unidades||0)}));
+  const o={b:{},fuera:{stock:0,pall:0,arts:0,codes:new Set(),list:[]},sin:{stock:0,arts:0},total:0,rack:0,punt:0,dif:0,difArts:0};
   S.blocks.forEach(b=>o.b[b.n]={sur:{stock:0,pall:0,arts:[]},norte:{stock:0,pall:0,arts:[]},nada:{stock:0,pall:0,arts:[]}});
   data.forEach(r=>{
-    const st=r.stock||0, pl=r.pall||0; o.total+=st;
-    if(!r.bloque){o.sin.stock+=st;o.sin.arts++;return}
-    const u=parseUbic(r.bloque), w=1/u.length;
-    u.forEach(x=>{
-      if(x.b&&o.b[x.b]){const k=x.side||'nada',c=o.b[x.b][k];c.stock+=st*w;c.pall+=pl*w;c.arts.push({r,side:x.side,raw:x.raw})}
-      else{o.fuera.stock+=st*w;o.fuera.pall+=pl*w;o.fuera.arts++;o.fuera.codes.add(x.raw)}
-    });
+    const st=Math.max(0,r.stock||0); o.total+=st;
+    const rp=enPunt[r.art]||0, rr=enRack[r.art]||0;
+    const pC=Math.min(rp,st), rC=Math.min(rr,st-pC), resto=st-pC-rC;
+    o.punt+=pC; o.rack+=rC;
+    if(rp+rr>pC+rC){o.dif+=rp+rr-pC-rC;o.difArts++}
+    if(resto<=0) return;
+    const pl=st>0?(r.pall||0)*resto/st:0;
+    if(!r.bloque){o.sin.stock+=resto;o.sin.arts++;return}
+    const x=parseUbic(r.bloque)[0];
+    if(x.b&&o.b[x.b]){const c=o.b[x.b][x.side];c.stock+=resto;c.pall+=pl;c.arts.push({r,side:x.side,raw:x.raw,u:resto,pl})}
+    else{o.fuera.stock+=resto;o.fuera.pall+=pl;o.fuera.arts++;o.fuera.codes.add(x.raw);o.fuera.list.push(Object.assign(Object.create(r),{_u:resto}))}
   });
   OCC=o;
 }
@@ -17346,7 +17503,7 @@ function ocSide(n,side){ // fracción ocupada de un lado (stock / capacidad real
 function ocBlock(n){if(!OCC)return null;const b=S.blocks.find(x=>x.n===n),cap=blockStats(b.cfg).real,o=OCC.b[n],st=o.sur.stock+o.norte.stock+o.nada.stock;return {st,cap,f:cap>0?st/cap:(st>0?Infinity:0),pall:o.sur.pall+o.norte.pall+o.nada.pall}}
 const nivel=f=>f>=.9?'hi':f>=.65?'mid':'ok';
 const pctTxt=f=>f===Infinity?'sin cap.':Math.round(f*100)+'%';
-function codigosDestino(){const set=new Set();S.blocks.forEach(b=>{set.add(b.n+'S');set.add(b.n+'N')});if(API)API.data().forEach(r=>tokensDe(r.bloque).forEach(t=>set.add(t)));return [...set].sort((a,b)=>parseInt(a)-parseInt(b)||a.localeCompare(b))}
+function codigosDestino(){const a=[];S.blocks.forEach(b=>{a.push(b.n+'S');a.push(b.n+'N')});return a}
 function despuesDeMover(txt,destinos){API.save();calcOcc();hl=new Set(destinos.map(d=>parseUbic(d)[0]).filter(x=>x&&x.b).map(x=>x.b));renderAll();API.toast(txt);opsMsg(txt)}
 function opsMsg(t,isErr){document.getElementById('opsOut').innerHTML=t?`<div class="note${isErr?' warn':''}" style="padding:6px 0">${esc(t)}</div>`:''}
 function ubicacionesDe(a){
@@ -17366,11 +17523,12 @@ function buscar(){
     (arts.length>40?`<div class="res-item u">…y ${arts.length-40} más</div>`:'')+'</div>';
   const first=[...hl][0];if(first)sel=first,renderFicha();
 }
-function afectadosDiseno(dis,ori){return API.data().filter(r=>r.diseno&&String(r.diseno).toUpperCase()===dis&&tokensDe(r.bloque).includes(ori))}
+function afectadosDiseno(dis,ori){return API.data().filter(r=>r.diseno&&String(r.diseno).toUpperCase()===dis&&(String(r.bloque||'').toUpperCase().trim()===ori||parseUbic(r.bloque)[0].raw===ori||(enPlano(ori)&&parseUbic(r.bloque)[0].b===parseUbic(ori)[0].b&&parseUbic(r.bloque)[0].side===parseUbic(ori)[0].side)))}
 function moverDiseno(){
   const dis=v('mdDis').toUpperCase(),ori=v('mdOri').toUpperCase(),des=v('mdDes').toUpperCase();
   if(!dis||!ori||!des)return opsMsg('Completá diseño, bloque de origen y bloque de destino.',true);
   if(ori===des)return opsMsg('El origen y el destino son el mismo bloque.',true);
+  if(!enPlano(des))return noPlano(des);
   const af=afectadosDiseno(dis,ori);if(!af.length)return opsMsg('No hay artículos del diseño '+dis+' en el bloque '+ori+'.',true);
   if(!confirm('¿Mover '+af.length+' artículo(s) del diseño '+dis+' de '+ori+' a '+des+'?'))return;
   af.forEach(r=>r.bloque=des);['mdDis','mdOri','mdDes'].forEach(i=>document.getElementById(i).value='');
@@ -17379,6 +17537,7 @@ function moverDiseno(){
 function armarReparto(){
   const dis=v('rpDis').toUpperCase(),ori=v('rpOri').toUpperCase(),des=v('rpDes').toUpperCase().split(',').map(x=>x.trim()).filter(Boolean);
   if(!dis||!ori||des.length<2)return opsMsg('Completá diseño, origen y al menos 2 bloques de destino separados por coma.',true);
+  const malo=des.find(d=>!enPlano(d));if(malo)return noPlano(malo);
   const af=afectadosDiseno(dis,ori).sort((a,b)=>(b.pall||0)-(a.pall||0));if(!af.length)return opsMsg('No hay artículos del diseño '+dis+' en el bloque '+ori+'.',true);
   pendRep={dis,ori,des,arts:af.map(r=>String(r.art))};
   document.getElementById('opsOut').innerHTML=`<div class="note" style="padding:6px 0">${af.length} artículo(s) de ${esc(dis)} repartidos parejo entre ${des.map(esc).join(' / ')}. Cambiá el destino que quieras y confirmá.</div><div class="res-list">`+
@@ -17394,6 +17553,7 @@ function confirmarReparto(){
 function moverArticulo(cod,des){
   cod=String(cod).trim();des=String(des).trim().toUpperCase();
   if(!cod||!des)return opsMsg('Completá código de artículo y bloque de destino.',true);
+  if(!enPlano(des))return noPlano(des);
   const a=API.data().find(r=>String(r.art).toUpperCase()===cod.toUpperCase());if(!a)return opsMsg('No hay ningún artículo con código '+cod+'.',true);
   const ori=a.bloque||'(sin bloque)';if((a.bloque||'').trim().toUpperCase()===des)return opsMsg('El artículo ya está en '+des+'.',true);
   if(!confirm('¿Mover el artículo '+a.art+' ('+(a.diseno||'')+' '+(a.med||'')+') de '+ori+' a '+des+'?'))return;
@@ -17401,12 +17561,14 @@ function moverArticulo(cod,des){
 }
 function vaciar(n,side){
   const code=n+(side==='sur'?'S':'N');
-  const af=API.data().filter(r=>tokensDe(r.bloque).includes(code));
+  const af=API.data().filter(r=>{const u=parseUbic(r.bloque)[0];return u.b===n&&u.side===side});
   if(!af.length)return API.toast('No hay artículos cargados en '+code);
   if(!confirm('¿Vaciar '+code+'? Se le saca el bloque a '+af.length+' artículo(s) y quedan sin ubicación hasta relevarlos de nuevo. No se puede deshacer.'))return;
   af.forEach(r=>r.bloque='');API.save();calcOcc();renderAll();API.toast(code+' vaciado: '+af.length+' artículo(s) sin bloque');
 }
 const v=id=>(document.getElementById(id).value||'').trim();
+const enPlano=c=>!!parseUbic(c)[0].b;
+const noPlano=c=>opsMsg(c+' no es un bloque del plano. Usá bloque y lado, del 1S/1N al '+S.blocks.length+'S/'+S.blocks.length+'N.',true);
 function fichaStockHTML(n){
   if(!OCC)return '';const o=OCC.b[n],b=S.blocks.find(x=>x.n===n),oc=ocBlock(n);
   const rows=[...o.sur.arts,...o.norte.arts,...o.nada.arts].sort((a,b)=>(b.r.rot||0)-(a.r.rot||0));
@@ -17419,7 +17581,7 @@ function fichaStockHTML(n){
       ${o.nada.stock?`<tr><td>Sin lado (cargado como "${n}")</td><td>${fmt(o.nada.stock)}</td><td>${fmt(o.nada.pall)}</td><td>—</td><td>—</td><td></td></tr>`:''}
     </tbody></table></div>${racks}
     <div class="res-list">${list.length?list.slice(0,80).map(x=>{const r=x.r,mv=movArt===String(r.art);return `<div class="art-row"><div style="min-width:0"><div>${esc(r.med||'')} — ${esc(r.diseno||'')} <span class="side-tag">${esc(x.raw)}</span></div><div class="meta">${esc(r.art)} · ${esc(r.prov||'')} · rot ${r.rot||0}/mes${r.cond==='bajo stock'?' · <span class="bad">bajo stock</span>':''}</div></div>
-      <div class="num" style="text-align:right">${r.pall||0} pall.<div class="meta">${fmt(r.stock||0)} un.</div></div><button type="button" class="btn" data-mover="${esc(r.art)}">Mover</button>
+      <div class="num" style="text-align:right">${fmt(x.u)} un.<div class="meta">${(x.pl||0).toLocaleString('es-AR',{maximumFractionDigits:1})} pall.${x.u<(r.stock||0)?' · total '+fmt(r.stock||0):''}</div></div><button type="button" class="btn" data-mover="${esc(r.art)}">Mover</button>
       ${mv?`<div class="mv"><input id="mvDes" list="codigos" placeholder="A bloque (ej: 4S)" aria-label="Bloque destino"><button type="button" class="btn pri" data-mvok="${esc(r.art)}">Mover</button><button type="button" class="btn" data-mvcancel="1">Cancelar</button></div>`:''}</div>`}).join('')+(list.length>80?`<div class="res-item u">…y ${list.length-80} más</div>`:''):'<div class="res-item u">No hay artículos cargados en este bloque.</div>'}</div>`;
 }
 function load(){try{const t=localStorage.getItem(KEY);if(t){const o=JSON.parse(t);o.dars=o.dars||structuredClone(DEF.dars);o.prep=o.prep??DEF.prep;for(const k in DEF.cfg)if(!o.cfg[k])o.cfg[k]=structuredClone(DEF.cfg[k]);if(!o.mig1){const n=o.cfg.C1&&o.cfg.C1.norte;if(n&&n.cols===7&&n.off.length===18)o.cfg.C1.norte=structuredClone(DEF.cfg.C1.norte);o.mig1=1}if(o.cfg.B1&&!o.cfg.B1.corto)o.cfg.B1.corto='Racks';if(!o.mig2){const b=o.blocks.find(x=>x.n===1);if(b)b.cfg='B1';o.mig2=1}return o}}catch(e){}return structuredClone(DEF)}
@@ -17474,7 +17636,7 @@ function geo(){
   const gap=N>1?sobra/(N-1):0;
   return {N,L,central,sobra,gap};
 }
-function playaHTML(w,sc,surEnd,norteStart){
+function playaHTML(w,sc,surEnd,norteStart,dSel){
   const n=S.dars.n, H=S.nave.ancho, half1=Math.ceil(n/2), half2=n-half1;
   const dw=3.5, depth=Math.min(14,w*0.4,H*0.25);
   let h=`<div class="playa" style="left:0;width:${w*sc}px">`, k=0;
@@ -17482,11 +17644,11 @@ function playaHTML(w,sc,surEnd,norteStart){
     if(vert){ // puerta en la pared del frente (izquierda)
       h+=`<div class="puerta" style="left:0;top:${(cy-dw/2)*sc}px;width:4px;height:${dw*sc}px"></div>
          <div class="carril" style="left:4px;top:${(cy-dw/2)*sc}px;width:${depth*sc}px;height:${dw*sc}px"></div>
-         <div class="dlab" style="left:${(depth/2)*sc+4}px;top:${cy*sc}px">D${k}</div>`;
+         <div class="dlab${k===dSel?' dsel':''}" style="left:${(depth/2)*sc+4}px;top:${cy*sc}px">D${k}</div>`;
     }else{ const top=cy===0;
       h+=`<div class="puerta" style="left:${(cx-dw/2)*sc}px;${top?'top:0':'bottom:0'};height:4px;width:${dw*sc}px"></div>
          <div class="carril" style="left:${(cx-dw/2)*sc}px;${top?'top:4px':'bottom:4px'};width:${dw*sc}px;height:${depth*sc}px"></div>
-         <div class="dlab" style="left:${cx*sc}px;top:${(top?depth/2:H-depth/2)*sc}px">D${k}</div>`;}
+         <div class="dlab${k===dSel?' dsel':''}" style="left:${cx*sc}px;top:${(top?depth/2:H-depth/2)*sc}px">D${k}</div>`;}
   };
   if(S.dars.ubic==='frente'){
     for(let i=0;i<half1;i++)door(0,(i+.5)*surEnd/half1,true);
@@ -17508,16 +17670,16 @@ function renderNave(){
     <div class="lado" style="top:${cTop}px;height:${cH}px">PASILLO ${fmt(g.central)} m</div>
     <div class="lado" style="top:${cTop+cH}px;height:${S.dims.norte.ancho*sc}px">NORTE ${S.dims.norte.ancho} m</div>
     <div class="central" style="top:${cTop}px;height:${cH}px"></div>`;
-  const off=S.prep, gp=Math.max(0,g.gap);
-  if(off>0) h+=playaHTML(off,sc,cTop/sc,(cTop+cH)/sc);
+  const off=S.prep, gp=Math.max(0,g.gap), PM=pedidoEnMapa();
+  if(off>0) h+=playaHTML(off,sc,cTop/sc,(cTop+cH)/sc,PM&&PM.ds?PM.ds.k:0);
   if(gp>0) for(let i=1;i<g.N;i++){const x=off+i*g.L+(i-1)*gp;
     h+=`<div class="trans" style="left:${x*sc}px;width:${gp*sc}px">${gp*sc>=12?`<span>PASILLO ${gp.toLocaleString('es-AR',{maximumFractionDigits:2})} m</span>`:''}</div>`;}
   S.blocks.forEach((b,i)=>{
     const st=blockStats(b.cfg);
     const oc=ocBlock(b.n);
-    h+=`<button type="button" class="blk${b.n===sel?' sel':''}${hl.has(b.n)?' hl':''}" data-blk="${b.n}" style="left:${(off+i*(g.L+gp))*sc}px;width:${g.L*sc}px" aria-label="Bloque ${b.n}, ${label(b.cfg)}">
+    h+=`<button type="button" class="blk${b.n===sel?' sel':''}${hl.has(b.n)||(PM&&PM.m[b.n])?' hl':''}" data-blk="${b.n}" style="left:${(off+i*(g.L+gp))*sc}px;width:${g.L*sc}px" aria-label="Bloque ${b.n}, ${label(b.cfg)}">
       ${halfHTML(b.n,b.cfg,'sur',sc,false)}
-      <div class="blk-info"><b>BLOQUE ${b.n}</b><span class="chip ${b.cfg}">${label(b.cfg)}</span>${oc&&vista==='ocu'?`<span class="pct ${nivel(oc.f)}">${pctTxt(oc.f)} · ${fmt(oc.st)} un.</span>`:(cH>54?`<span class="num">${fmt(st.real)} neum.</span>`:'')}</div>
+      <div class="blk-info"><b>BLOQUE ${b.n}</b><span class="chip ${b.cfg}">${label(b.cfg)}</span>${PM&&PM.m[b.n]?`<span class="pedtag">🚚 ${fmt(PM.m[b.n])} un.</span>`:''}${oc&&vista==='ocu'?`<span class="pct ${nivel(oc.f)}">${pctTxt(oc.f)} · ${fmt(oc.st)} un.</span>`:(cH>54?`<span class="num">${fmt(st.real)} neum.</span>`:'')}</div>
       ${halfHTML(b.n,b.cfg,'norte',sc,false)}</button>`;
   });
   const el=document.getElementById('nave');
@@ -17528,7 +17690,13 @@ function renderKpis(){
   S.blocks.forEach(b=>{const s=blockStats(b.cfg);t.racks+=s.racks;t.neu+=s.neu;t.real+=s.real;t.pos+=s.pos;t.rp+=s.rackPos;by[b.cfg]++});
   document.getElementById('kpis').innerHTML=
     [['Posiciones',t.pos,`${Object.keys(S.cfg).map(k=>by[k]+' '+k).join(' · ')} · ${by.N} sin asignar`],['Racks',t.racks,`apilado de ${S.apilado}`],['Neumáticos teóricos',t.neu,'sin pérdida'],['Neumáticos reales',t.real,'con pérdida por config'],...(t.rp?[['Rack selectivo',t.rp,'posiciones · Mapa Racks']]:[]),
-     ...(OCC?(()=>{const enB=Object.values(OCC.b).reduce((a,o)=>a+o.sur.stock+o.norte.stock+o.nada.stock,0);return [['Stock en bloques',enB,`${t.real?Math.round(enB/t.real*100):0}% de la capacidad real`],['Fuera del plano',OCC.fuera.stock,OCC.fuera.codes.size?'bloques '+[...OCC.fuera.codes].slice(0,6).join(', '):'todo ubicado'],['Sin bloque',OCC.sin.stock,OCC.sin.arts+' artículos']]})():[])]
+     ...(OCC?(()=>{const enB=Object.values(OCC.b).reduce((a,o)=>a+o.sur.stock+o.norte.stock+o.nada.stock,0);return [
+       ['Stock total',OCC.total,'ficha de pila · '+fmt(API.data().length)+' artículos'],
+       ['En bloques',enB,`${t.real?Math.round(enB/t.real*100):0}% de la capacidad real`],
+       ['En racks',OCC.rack,'Mapa Racks'],['En punteras',OCC.punt,'parrillas'],
+       ['A reubicar',OCC.fuera.stock,OCC.fuera.arts?OCC.fuera.arts+' arts con bloque fuera del plano':'todo en el plano'],
+       ['Sin ubicación',OCC.sin.stock,OCC.sin.arts+' arts sin bloque'],
+       ...(OCC.dif?[['Registrado de más',OCC.dif,OCC.difArts+' arts con más en rack/puntera que en la ficha']]:[])]})():[])]
     .map(([l,v,s])=>`<div class="kpi"><div class="lbl">${l}</div><div class="v">${fmt(v)}</div><div class="s">${s}</div></div>`).join('');
 }
 
@@ -17609,25 +17777,77 @@ function renderNaveDims(){
       ${cur.neu===t.neu&&cur.racks===t.racks?'<span class="note">(es el reparto actual)</span>':`<span class="note">Actual: ${fmt(cur.neu)} neum., ${fmt(cur.racks)} racks.</span>`}</div>
     <div><button type="button" class="btn" id="aplicarOpt">Aplicar mejor reparto</button></div>`;
 }
-function renderVista(){const bar=document.getElementById('vistaBar');bar.hidden=!API;document.querySelectorAll('[data-vista]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.vista===vista));document.getElementById('ocuLegend').hidden=vista!=='ocu';
+function renderVista(){const bar=document.getElementById('vistaBar');bar.hidden=!API;document.getElementById('infBtn').hidden=!API;document.querySelectorAll('[data-vista]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.vista===vista));document.getElementById('ocuLegend').hidden=vista!=='ocu';
   document.getElementById('opsPanel').hidden=!API;if(API){document.getElementById('codigos').innerHTML=codigosDestino().map(c=>`<option value="${esc(c)}">`).join('');document.getElementById('opsInfo').textContent=fmt(API.data().length)+' artículos en el WMS'}}
-function renderAll(){renderVista();renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
+function renderReub(){
+  const el=document.getElementById('reubOut');if(!el)return;
+  if(!OCC||!OCC.fuera.list.length){el.innerHTML='';return}
+  const L=OCC.fuera.list.slice().sort((a,b)=>String(a.bloque).localeCompare(String(b.bloque))||(b.stock||0)-(a.stock||0));
+  el.innerHTML=`<div class="ph" style="margin-top:6px"><h2>A reubicar</h2><span class="note">${L.length} artículo(s) · ${fmt(OCC.fuera.stock)} un. · bloques ${[...OCC.fuera.codes].map(esc).join(', ')}</span></div>
+    <div class="note">Tienen cargado un bloque que no existe en el plano. Asignales un bloque y lado (ej. 4S, 4N).</div>
+    <div class="res-list">${L.slice(0,150).map(r=>{const mv=movArt===String(r.art);return `<div class="art-row"><div style="min-width:0"><div>${esc(r.med||'')} — ${esc(r.diseno||'')} <span class="side-tag">${esc(r.bloque)}</span></div><div class="meta">${esc(r.art)} · ${esc(r.prov||'')} · rot ${r.rot||0}/mes</div></div>
+      <div class="num" style="text-align:right">${fmt(r._u)} un.<div class="meta">${r._u<(r.stock||0)?'total '+fmt(r.stock||0):''}</div></div><button type="button" class="btn" data-mover="${esc(r.art)}">Mover</button>
+      ${mv?`<div class="mv"><input id="mvDes" list="codigos" placeholder="A bloque (ej: 4S)" aria-label="Bloque destino"><button type="button" class="btn pri" data-mvok="${esc(r.art)}">Mover</button><button type="button" class="btn" data-mvcancel="1">Cancelar</button></div>`:''}</div>`}).join('')}${L.length>150?`<div class="res-item u">…y ${L.length-150} más</div>`:''}</div>`;
+}
+function renderAll(){renderVista();renderReub();renderPedidos();renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
 window.planoRefrescar=function(){calcOcc();renderAll()};
+// Resumen para el Dashboard del WMS: mismos números que ve este plano.
+window.planoResumen=function(){
+  calcOcc();
+  const bloques=S.blocks.map(b=>{const bs=blockStats(b.cfg),o=OCC?OCC.b[b.n]:null;
+    const sd=side=>{const cap=sideStats(b.cfg,side).real,st=o?o[side].stock:0;return {cap,stock:st,pall:o?o[side].pall:0,f:cap>0?st/cap:(st>0?Infinity:0)}};
+    return {n:b.n,cfg:b.cfg,nombre:b.cfg==='N'?'Sin asignar':(S.cfg[b.cfg].corto||S.cfg[b.cfg].nombre),cap:bs.real,racks:bs.racks,pos:bs.pos,sur:sd('sur'),norte:sd('norte')}});
+  const cap=bloques.reduce((a,b)=>a+b.cap,0), enB=bloques.reduce((a,b)=>a+b.sur.stock+b.norte.stock,0);
+  let rackOcc=0;if(API){const as=API.asign()||{};rackOcc=Object.keys(as).filter(k=>as[k]).length}
+  return {bloques,cap,enBloques:enB,total:OCC?OCC.total:0,rack:OCC?OCC.rack:0,punt:OCC?OCC.punt:0,reubicar:OCC?OCC.fuera.stock:0,reubArts:OCC?OCC.fuera.arts:0,sinUbic:OCC?OCC.sin.stock:0,sinArts:OCC?OCC.sin.arts:0,dif:OCC?OCC.dif:0,
+    rackPos:(S.cfg.B1&&S.cfg.B1.rackPos)||0,rackOcc,pedidos:API?pedidosAbiertos().length:0};
+};
+// Informe corto del plano, listo para imprimir o guardar como PDF.
+window.planoInformeHTML=function(){
+  const R=planoResumen(), f=new Date(), fecha=f.toLocaleDateString('es-AR')+' '+f.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  const col=x=>x===Infinity||x>=.9?'#d03a2f':x>=.65?'#e39b16':'#2f9e57', pc=x=>x===Infinity?'s/cap':Math.round(x*100)+'%';
+  const g=geo(), W=1000, sc=W/S.nave.largo, H=S.nave.ancho*sc, gp=Math.max(0,g.gap);
+  let svg=`<svg viewBox="0 0 ${W} ${H+16}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Arial" font-size="9"><rect x="0" y="0" width="${W}" height="${H}" fill="#fff" stroke="#222" stroke-width="2"/>`;
+  svg+=`<rect x="0" y="0" width="${S.prep*sc}" height="${H}" fill="#f1f1f1"/><text x="${S.prep*sc/2}" y="${H/2}" text-anchor="middle" fill="#555">Prep.</text>`;
+  const sH=S.dims.sur.ancho*sc, nY=(S.dims.sur.ancho+Math.max(0,g.central))*sc, nH=S.dims.norte.ancho*sc;
+  R.bloques.forEach((b,i)=>{const x=(S.prep+i*(g.L+gp))*sc,w=g.L*sc;
+    [['sur',0,sH],['norte',nY,nH]].forEach(([sd,y,h])=>{const d=b[sd],fill=d.cap>0||d.stock>0?col(d.f):'#ddd',fr=d.f===Infinity?1:Math.min(1,d.f);
+      svg+=`<rect x="${x+1}" y="${y+1}" width="${w-2}" height="${h-2}" fill="#f4f4f4" stroke="#999"/>`;
+      if(d.cap>0||d.stock>0)svg+=`<rect x="${x+1}" y="${y+1+(h-2)*(1-fr)}" width="${w-2}" height="${(h-2)*fr}" fill="${fill}" opacity=".85"/>`;
+      svg+=`<text x="${x+w/2}" y="${y+h/2+3}" text-anchor="middle" font-weight="bold" fill="#111">${d.cap>0?pc(d.f):(b.n===1&&sd==='norte'?'Racks':'—')}</text>`;});
+    svg+=`<text x="${x+w/2}" y="${sH+Math.max(0,g.central)*sc/2+3}" text-anchor="middle" fill="#333">B${b.n} · ${esc(b.nombre)}</text>`;});
+  svg+=`<text x="0" y="${H+12}" fill="#666">Sur arriba · Norte abajo · dársenas a la izquierda · relleno = % ocupado del lado</text></svg>`;
+  const rows=R.bloques.map(b=>`<tr><td>Bloque ${b.n}</td><td>${esc(b.nombre)}</td><td>${fmt(b.sur.stock)} / ${fmt(b.sur.cap)}</td><td style="color:${col(b.sur.f)}">${b.sur.cap?pc(b.sur.f):'—'}</td><td>${fmt(b.norte.stock)} / ${fmt(b.norte.cap)}</td><td style="color:${col(b.norte.f)}">${b.norte.cap?pc(b.norte.f):'—'}</td><td>${fmt(b.sur.stock+b.norte.stock)} / ${fmt(b.cap)}</td><td style="color:${col(b.cap?(b.sur.stock+b.norte.stock)/b.cap:0)}"><b>${b.cap?pc((b.sur.stock+b.norte.stock)/b.cap):'—'}</b></td></tr>`).join('');
+  const reub=OCC?OCC.fuera.list.slice().sort((a,b)=>b._u-a._u).slice(0,15):[];
+  const peds=API?pedidosAbiertos():[];
+  const kp=[['Stock total (ficha de pila)',R.total],['En bloques',R.enBloques],['Capacidad real bloques',R.cap],['Ocupación bloques',R.cap?Math.round(R.enBloques/R.cap*100)+'%':'—'],['En racks',R.rack],['Racks ocupados',R.rackOcc+' / '+R.rackPos],['En punteras',R.punt],['A reubicar',R.reubicar],['Sin ubicación',R.sinUbic]];
+  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plano de nave '+fecha+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px;margin:0}h1{font-size:18px;margin:0}h2{font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:#444}.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px}.k{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-top:10px}.k div{border:1px solid #ccc;border-radius:4px;padding:5px}.k b{display:block;font-size:14px;margin-top:2px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:3px 5px;text-align:right}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}th{font-size:9px;text-transform:uppercase;color:#555}.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.n{color:#666;font-size:9px}</style></head><body>'+
+    `<div class="top"><div><div class="n">HALPERN NEUMÁTICOS · DEPÓSITO MENDOZA</div><h1>Plano de nave · cómo va quedando</h1></div><div>${fecha}</div></div>`+
+    `<div class="k">${kp.map(([l,v])=>`<div>${l}<b>${typeof v==='number'?fmt(v):v}</b></div>`).join('')}</div>`+
+    (R.dif?`<div class="n" style="margin-top:4px;color:#d03a2f">Hay ${fmt(R.dif)} un. registradas en rack/puntera por encima de la ficha de pila: revisar.</div>`:'')+
+    `<h2>Plano</h2>${svg}`+
+    `<h2>Ocupación por bloque (stock / capacidad real, en unidades)</h2><table><thead><tr><th>Bloque</th><th>Config.</th><th>Sur</th><th>%</th><th>Norte</th><th>%</th><th>Total</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `<div class="cols"><div><h2>A reubicar (top ${reub.length} de ${R.reubArts})</h2>${reub.length?`<table><thead><tr><th>Art.</th><th>Descripción</th><th>Bloque cargado</th><th>Un.</th></tr></thead><tbody>${reub.map(r=>`<tr><td>${esc(r.art)}</td><td>${esc(r.med||'')} ${esc(r.diseno||'')}</td><td>${esc(r.bloque)}</td><td>${fmt(r._u)}</td></tr>`).join('')}</tbody></table>`:'<div class="n">Todo el stock en bloque está ubicado en el plano.</div>'}</div>`+
+    `<div><h2>Pedidos en tránsito de salida (${peds.length})</h2>${peds.length?`<table><thead><tr><th>Pedido</th><th>Destino</th><th>Dársena</th><th>Arts</th><th>Un.</th></tr></thead><tbody>${peds.slice(0,15).map(t=>`<tr><td>${esc(t.nroContenedor||t.id)}</td><td>${esc(t.destino||'')}</td><td>${esc(t.darsena||'—')}</td><td>${(t.items||[]).length}</td><td>${fmt((t.items||[]).reduce((a,r)=>a+(r.cantReal||r.cant||0),0))}</td></tr>`).join('')}</tbody></table>`:'<div class="n">No hay pedidos en tránsito.</div>'}</div></div>`+
+    '<scr'+'ipt>setTimeout(function(){window.print()},400)<'+'/scr'+'ipt></body></html>';
+};
 
 document.addEventListener('click',e=>{
   const vb=e.target.closest('[data-vista]'); if(vb){vista=vb.dataset.vista;try{localStorage.setItem('wms_plano_vista',vista)}catch(_){}renderVista();renderNave();return}
   if(API){
     const id=e.target.id;
     if(id==='qBtn')return buscar();
+    if(id==='infBtn')return API.imprimir(planoInformeHTML());
+    if(id==='pedClear'){PED=null;renderPedidos();return renderNave()}
     if(id==='qClear'){document.getElementById('q').value='';return buscar()}
     if(id==='mdBtn')return moverDiseno();
     if(id==='rpBtn')return armarReparto();
     if(id==='rpOk')return confirmarReparto();
     if(id==='rpCancel'){pendRep=null;return opsMsg('')}
     if(id==='maBtn'){moverArticulo(v('maArt'),v('maDes'));if(!movArt){document.getElementById('maArt').value='';document.getElementById('maDes').value=''}return}
-    const mv=e.target.closest('[data-mover]'); if(mv){movArt=mv.dataset.mover;renderFicha();const i=document.getElementById('mvDes');if(i)i.focus();return}
+    const mv=e.target.closest('[data-mover]'); if(mv){movArt=mv.dataset.mover;renderFicha();renderReub();const i=document.getElementById('mvDes');if(i)i.focus();return}
     const ok=e.target.closest('[data-mvok]'); if(ok)return moverArticulo(ok.dataset.mvok,v('mvDes'));
-    if(e.target.closest('[data-mvcancel]')){movArt=null;return renderFicha()}
+    if(e.target.closest('[data-mvcancel]')){movArt=null;renderReub();return renderFicha()}
     const va=e.target.closest('[data-vaciar]'); if(va){const [n,sd]=va.dataset.vaciar.split('|');return vaciar(+n,sd)}
     const ir=e.target.closest('[data-ir]'); if(ir)return API.ir(ir.dataset.ir);
   }
@@ -17648,6 +17868,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
   const el=e.target;
+  if(el.id==='pedSel'){PED=el.value||null;renderPedidos();renderNave();if(PED){const pm=pedidoEnMapa();const ks=pm?Object.keys(pm.m).map(Number):[];if(ks.length){sel=Math.min(...ks);renderFicha()}}return}
   if(el.dataset.cfg){const c=S.cfg[el.dataset.cfg];c[el.dataset.f]=el.dataset.f==='perdida'?Math.min(100,Math.max(0,+el.value||0)):el.dataset.f==='rackPos'?Math.max(0,+el.value||0):el.value}
   else if(el.dataset.cap){S.cap[el.dataset.cap]=Math.max(1,+el.value||1)}
   else if(el.id==='apil'){S.apilado=Math.max(1,+el.value||1)}
