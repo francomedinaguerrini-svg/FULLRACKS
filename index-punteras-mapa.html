@@ -817,7 +817,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   <div class="metrics">
     <div class="metric"><div class="metric-label">Bajo stock</div><div class="metric-value rojo" id="m-bajo">—</div></div>
     <div class="metric"><div class="metric-label">Pallets en FP</div><div class="metric-value" id="m-pall">—</div></div>
-    <div class="metric"><div class="metric-label">Stock total FP</div><div class="metric-value" id="m-stock">—</div></div>
+    <div class="metric" onclick="fichaConciliacion()" style="cursor:pointer" title="Comparar con la última ficha de pila"><div class="metric-label">Stock total FP <span style="font-size:10px;color:#0071e3">· comparar con ficha</span></div><div class="metric-value" id="m-stock">—</div></div>
   </div>
   <!-- Discontinuos -->
   <div style="margin:10px 12px 0">
@@ -2517,6 +2517,8 @@ function aplicarFichaPila(filas, origen){
   var resumen={fecha:new Date().toLocaleString('es-AR'),origen:origen,totalFicha:totalFicha,artsFicha:Object.keys(ficha).length,antes:antes,despues:despues,
     actualizados:act,cambiados:cambiados,ceros:ceros.length,cerosUn:ceros.reduce(function(a,c){return a+c.prev;},0),nuevos:nuevos.length,nuevosUn:nuevos.reduce(function(a,r){return a+r.stock;},0),neg:neg,negArts:negArts};
   try{ localStorage.setItem('wms_ficha_ultima', JSON.stringify(resumen)); }catch(e){}
+  try{ var _snap={}; Object.keys(ficha).forEach(function(k){ _snap[k]=ficha[k].stock; });
+    localStorage.setItem('wms_ficha_snap', JSON.stringify({ts:Date.now(), fecha:resumen.fecha, total:totalFicha, stock:_snap})); }catch(e){}
   localStorage.setItem('wms_last_update', new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
   try{ actualizarUltimaFecha(); }catch(e){}
   try{ init(); }catch(e){ try{ render(); }catch(e2){} }
@@ -2544,6 +2546,54 @@ function mostrarResumenFicha(R, ceros, nuevos){
     '</div>'+
     lista('Puestos en 0 (tenían stock en el WMS y no están en la ficha)', ceros, 'prev')+
     lista('Agregados desde la ficha (quedan sin bloque: ubicalos en 🏭 Nave)', nuevos, 'stock')+
+    '<button class="btn-secondary" onclick="closeModalDirect()" style="margin-top:12px">Cerrar</button>';
+  document.getElementById('modal-bg').classList.add('show');
+}
+
+// ===== Conciliación: stock del WMS contra la última ficha de pila cargada =====
+// La ficha es una foto del momento en que se exportó. Después el WMS sigue moviendo el
+// stock (pedidos a tránsito, cargas, descargas). Esto separa lo que se explica por esos
+// movimientos de lo que no.
+function fichaConciliacion(){
+  var snap=null; try{ snap=JSON.parse(localStorage.getItem('wms_ficha_snap')||'null'); }catch(e){}
+  if(!snap){ showToast('Todavía no se cargó ninguna ficha de pila con esta versión'); return; }
+  var n=function(x){ return Math.round(x).toLocaleString('es-AR'); };
+  var sal={}, ent={}, tr=[]; try{ tr=transitoGetAll(); }catch(e){}
+  tr.forEach(function(t){
+    var ts=parseInt(String(t.id||'').replace(/\D/g,''),10)||0; if(ts<snap.ts) return;
+    (t.items||[]).forEach(function(it){
+      if(t.flujo==='salida'&&t.descontado){ var c=(t.estado==='confirmado'&&it.cantReal!=null)?it.cantReal:it.cant; sal[it.art]=(sal[it.art]||0)+(c||0); }
+      else if(t.flujo!=='salida'&&t.estado==='confirmado'){ ent[it.art]=(ent[it.art]||0)+(it.cantReal||it.cant||0); }
+    });
+  });
+  var filas=[], totW=0, totF=snap.total, explS=0, explE=0, idx={};
+  DATA.forEach(function(r){ idx[String(r.art)]=r; totW+=(r.stock||0); });
+  var arts={}; Object.keys(snap.stock).forEach(function(k){arts[k]=1;}); Object.keys(idx).forEach(function(k){arts[k]=1;});
+  Object.keys(arts).forEach(function(k){
+    var f=snap.stock[k]||0, w=idx[k]?(idx[k].stock||0):0; if(f===w) return;
+    var s_=sal[k]||sal[+k]||0, e_=ent[k]||ent[+k]||0, sinExp=(w-f)+s_-e_;
+    explS+=Math.min(s_,Math.max(0,f-w+e_)); explE+=e_;
+    filas.push({art:k, med:idx[k]?idx[k].med:'', diseno:idx[k]?idx[k].diseno:'', f:f, w:w, sal:s_, ent:e_, sinExp:sinExp});
+  });
+  var sinExpTot=filas.reduce(function(a,x){return a+x.sinExp;},0);
+  filas.sort(function(a,b){ return Math.abs(b.sinExp)-Math.abs(a.sinExp) || Math.abs(b.w-b.f)-Math.abs(a.w-a.f); });
+  var fila=function(l,v,c){ return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:13px"><span>'+l+'</span><b style="'+(c?'color:'+c:'')+'">'+v+'</b></div>'; };
+  var sinE=filas.filter(function(x){return x.sinExp!==0;});
+  document.getElementById('modal-content').innerHTML=
+    '<div class="modal-pos">🔍 Stock contra la ficha de pila</div>'+
+    '<div class="modal-medida" style="font-size:18px">'+(totW===totF?'✅ Coincide con la ficha':'Diferencia: '+(totW-totF>0?'+':'')+n(totW-totF)+' un.')+'</div>'+
+    '<div class="modal-sub">Ficha cargada el '+snap.fecha+'</div>'+
+    '<div style="margin-top:10px">'+
+      fila('Total de la ficha', n(totF))+fila('Stock del WMS hoy', n(totW))+
+      fila('Pedidos mandados a tránsito desde entonces (ya descontados)', '−'+n(Object.keys(sal).reduce(function(a,k){return a+sal[k];},0)), '#0071e3')+
+      fila('Ingresos recibidos desde entonces', '+'+n(Object.keys(ent).reduce(function(a,k){return a+ent[k];},0)), '#1c7c2c')+
+      fila('Sin explicar por movimientos', (sinExpTot>0?'+':'')+n(sinExpTot), sinExpTot?'#d70015':'#1c7c2c')+
+    '</div>'+
+    (sinE.length?'<div style="font-size:12px;font-weight:700;margin:12px 0 4px">Artículos con diferencia sin explicar ('+sinE.length+')</div><div style="max-height:220px;overflow:auto;font-size:12px">'+
+      '<div style="display:grid;grid-template-columns:1fr 54px 54px 60px;gap:6px;color:#86868b;padding:3px 0"><span>Artículo</span><span style="text-align:right">Ficha</span><span style="text-align:right">WMS</span><span style="text-align:right">Sin expl.</span></div>'+
+      sinE.slice(0,60).map(function(x){ return '<div style="display:grid;grid-template-columns:1fr 54px 54px 60px;gap:6px;padding:3px 0;border-bottom:1px solid #f5f5f7"><span>'+x.art+' — '+(x.med||'')+' '+(x.diseno||'')+'</span><span style="text-align:right">'+n(x.f)+'</span><span style="text-align:right">'+n(x.w)+'</span><b style="text-align:right;color:#d70015">'+(x.sinExp>0?'+':'')+n(x.sinExp)+'</b></div>'; }).join('')+
+      (sinE.length>60?'<div style="color:#86868b;padding:4px 0">…y '+(sinE.length-60)+' más</div>':'')+'</div>':'')+
+    '<div style="font-size:11px;color:#86868b;margin-top:8px">Para volver a igualar, cargá la ficha de pila nueva (pegada o por archivo).</div>'+
     '<button class="btn-secondary" onclick="closeModalDirect()" style="margin-top:12px">Cerrar</button>';
   document.getElementById('modal-bg').classList.add('show');
 }
@@ -5513,6 +5563,13 @@ function pedidoEnviarTransito(){
   var lista = transitoGetAll();
   lista.unshift(transito);
   transitoSave(lista);
+  // El stock ya se descontó acá: marcar la entrada de la cola de pedidos para que
+  // al confirmarla en Productividad NO se vuelva a descontar (antes se descontaba dos veces).
+  try{
+    var _cid = window._pedidoActual && window._pedidoActual._colaId;
+    if(_cid){ var _cola = getColaPedidos(); var _ce = _cola.find(function(c){ return c.id===_cid; });
+      if(_ce){ _ce.descontado = true; _ce.transitoId = transito.id; saveColaPedidos(_cola); } }
+  }catch(e){ console.warn('No se pudo marcar la cola', e); }
 
   limpiarPedido();
   transitoBadge();
@@ -10268,8 +10325,10 @@ function agregarPedidoCola(pedido){
   const totalUnid = [...puntera,...pedido.rack,...pedido.bloque,...pedido.sin].reduce((s,r)=>s+r.cant,0);
   const totalArts = puntera.length + pedido.rack.length + pedido.bloque.length + pedido.sin.length;
 
+  const _colaId = Date.now();
+  try{ pedido._colaId = _colaId; }catch(e){}
   cola.push({
-    id: Date.now(),
+    id: _colaId,
     nroPed,
     destino,
     tipo,
@@ -10404,7 +10463,9 @@ function confirmarColaPedido(idx){
   localStorage.setItem(mesKey, JSON.stringify(hist));
 
   // ── DESCONTAR STOCK GENERAL (Mapa Racks/Punteras se cargan a mano) ──
-  if(p.pedidoData){
+  // Si el pedido ya se mandó a tránsito, el stock ya se descontó ahí: no repetir.
+  var _yaDesc = p.descontado || (p.pedidoData && p.pedidoData._colaId && (function(){ try{ return transitoGetAll().some(function(t){ return t.nroContenedor===p.nroPed && t.descontado; }); }catch(e){ return false; } })());
+  if(p.pedidoData && !_yaDesc){
     const puntera = p.pedidoData.puntera || [];
     const items = [...puntera, ...(p.pedidoData.rack||[]), ...(p.pedidoData.bloque||[]), ...(p.pedidoData.sin||[])];
     const escala = p.unidReal / Math.max(1, items.reduce((s,r)=>s+r.cant,0));
