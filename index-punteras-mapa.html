@@ -2597,6 +2597,101 @@ function fichaConciliacion(){
     '<button class="btn-secondary" onclick="closeModalDirect()" style="margin-top:12px">Cerrar</button>';
   document.getElementById('modal-bg').classList.add('show');
 }
+
+// ===== RECEPCIÓN → UBICAR EN LA NAVE =====
+// Antes de pedir equipo y horario, cada artículo que va a piso (no al Mapa Racks) se ubica:
+// pallet Arlog o rack, bloque, zona y posiciones — sugeridas de los lugares libres del plano.
+function _planoW(){ var f=document.querySelector('#nave-capacidad iframe'); try{ return f&&f.contentWindow&&f.contentWindow.planoSugerir ? f.contentWindow : null; }catch(e){ return null; } }
+var _ubicTr=null, _ubicRows=[];
+function abrirModalTiempoRecepcion(id){
+  var tr=transitoGetAll().find(function(t){return t.id===id;});
+  if(!tr) return _abrirModalTiempoRecepcionBase(id);
+  var W=_planoW();
+  if(!W){
+    renderNave(); var f=document.querySelector('#nave-capacidad iframe');
+    if(f){ showToast('Cargando el plano de nave…'); f.addEventListener('load', function(){ setTimeout(function(){ abrirModalTiempoRecepcion(id); }, 60); }, {once:true}); return; }
+    return _abrirModalTiempoRecepcionBase(id);
+  }
+  var items=tr.items.filter(function(r){ var t=(r.sugerencia||{}).tipo; return t!=='rack' && t!=='rack_lleno'; });
+  if(!items.length) return _abrirModalTiempoRecepcionBase(id);
+  _ubicTr=id; _ubicRows=[];
+  var excl=[];
+  items.forEach(function(r){
+    var d=W.planoDefaults(r.art, r.cant)||{alm:'PALLET',b:W.planoBloques()[0],z:'sur',need:null};
+    var prev=r.ubicNave;
+    var row={art:r.art, med:r.med, diseno:r.diseno, cant:r.cant, alm:prev?prev.alm:d.alm, b:prev?prev.b:d.b, z:prev?prev.z:d.z, omitir:prev?!!prev.omitir:false, rackTipo:d.rackTipo, maxPos:d.maxPos, codes:[]};
+    if(prev&&prev.codes&&prev.codes.length&&!W.planoValidar(r.art, prev.codes, excl).length) row.codes=prev.codes.slice();
+    else { var sg=W.planoSugerir({art:r.art,cant:r.cant,alm:row.alm,b:row.b,z:row.z,excl:excl}); row.codes=sg.codes; }
+    row.need=W.planoNecesita(r.art, r.cant, row.alm);
+    if(!row.omitir) excl=excl.concat(row.codes);
+    _ubicRows.push(row);
+  });
+  _ubicRender();
+}
+function _ubicExcl(i){ var e=[]; _ubicRows.forEach(function(x,j){ if(j!==i && !x.omitir) e=e.concat(x.codes); }); return e; }
+function _ubicResugerir(i){ var W=_planoW(), x=_ubicRows[i]; var sg=W.planoSugerir({art:x.art,cant:x.cant,alm:x.alm,b:x.b,z:x.z,excl:_ubicExcl(i)}); x.codes=sg.codes; x.need=sg.need; }
+function _ubicCambio(i, campo, val){
+  var x=_ubicRows[i]; if(campo==='b') x.b=+val; else if(campo==='omitir') x.omitir=val; else x[campo]=val;
+  if(campo==='codes'){ x.codes=String(val).toUpperCase().split(/[\s,;]+/).filter(Boolean); }
+  else if(campo!=='omitir') _ubicResugerir(i);
+  _ubicRender();
+}
+function _ubicRender(){
+  var W=_planoW(); var box=document.getElementById('ubic-nave-modal');
+  if(!box){ box=document.createElement('div'); box.id='ubic-nave-modal'; box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 10px'; document.body.appendChild(box); }
+  var bl=W.planoBloques(), ZN={sur:'Sur',norte:'Norte',calle:'Calle central',todo:'Todo el bloque'};
+  var sel='padding:6px 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff';
+  var html='<div style="background:#fff;border-radius:14px;max-width:760px;width:100%;padding:16px 16px 12px;box-shadow:0 10px 40px rgba(0,0,0,.25)">'+
+    '<div style="font-size:17px;font-weight:700">📍 Ubicar en la nave</div>'+
+    '<div style="font-size:12px;color:#86868b;margin:2px 0 12px">Elegí para cada artículo si va en pallet Arlog o en rack, el bloque y la zona. Las posiciones salen sugeridas de los lugares libres; podés editarlas (separadas por coma) o dejar el artículo sin ubicar.</div>';
+  _ubicRows.forEach(function(x,i){
+    var lib=function(b,z){ return W.planoLibres(b,z,x.alm,_ubicExcl(i)); };
+    var ok=x.need==null ? x.codes.length>0 : x.codes.length>=x.need;
+    var errs=x.omitir?[]:W.planoValidar(x.art, x.codes, _ubicExcl(i));
+    html+='<div style="border:1px solid '+(x.omitir?'#e5e5ea':(errs.length?'#ff3b30':(ok?'#34c759':'#ff9500')))+';border-radius:10px;padding:10px;margin-bottom:8px'+(x.omitir?';opacity:.6':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:13px">'+x.art+' — '+(x.med||'')+' '+(x.diseno||'')+'</div><div style="font-size:12px;color:#6e6e73">'+x.cant+' un.</div></div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
+        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'alm\',this.value)"'+(x.omitir?' disabled':'')+'><option value="PALLET"'+(x.alm==='PALLET'?' selected':'')+'>Pallet Arlog</option><option value="RACK"'+(x.alm==='RACK'?' selected':'')+'>Rack '+String(x.rackTipo||'').toLowerCase()+'</option></select>'+
+        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'b\',this.value)"'+(x.omitir?' disabled':'')+'>'+bl.map(function(b){ return '<option value="'+b+'"'+(b===x.b?' selected':'')+'>Bloque '+b+' · '+lib(b,'todo')+' libres</option>'; }).join('')+'</select>'+
+        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'z\',this.value)"'+(x.omitir?' disabled':'')+'>'+['sur','norte','calle','todo'].map(function(z){ return '<option value="'+z+'"'+(z===x.z?' selected':'')+'>'+ZN[z]+' · '+lib(x.b,z)+' libres</option>'; }).join('')+'</select>'+
+        '<label style="font-size:12px;color:#6e6e73;display:flex;gap:4px;align-items:center;margin-left:auto"><input type="checkbox"'+(x.omitir?' checked':'')+' onchange="_ubicCambio('+i+',\'omitir\',this.checked)">No ubicar ahora</label>'+
+      '</div>'+
+      (x.omitir?'':
+      '<div style="font-size:11px;color:#86868b;margin:8px 0 3px">'+(x.alm==='PALLET'?(x.maxPos?'Necesita '+(x.need||0)+' pallet(s) · '+x.maxPos+' cubiertas por pallet':'<span style="color:#ff9500">Sin max_pos: elegí cuántas posiciones</span>'):'Necesita '+(x.need||0)+' pila(s) de racks · cada pila ocupa A y B')+' · elegidas: '+x.codes.length+'</div>'+
+      '<div style="display:flex;gap:6px"><input value="'+x.codes.join(', ')+'" onchange="_ubicCambio('+i+',\'codes\',this.value)" style="flex:1;'+sel+';font-family:monospace;font-size:12px">'+
+      '<button onclick="_ubicResugerir('+i+');_ubicRender()" title="Volver a sugerir" style="'+sel+';cursor:pointer">↻ Sugerir</button></div>'+
+      (errs.length?'<div style="font-size:11px;color:#ff3b30;margin-top:4px">'+errs.slice(0,4).join(' · ')+'</div>':'')+
+      (!ok&&!errs.length?'<div style="font-size:11px;color:#ff9500;margin-top:4px">No alcanzan los lugares libres en esa zona: elegí otra zona o bloque, o sumá posiciones a mano.</div>':''))+
+    '</div>';
+  });
+  html+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button onclick="_ubicCerrar()" style="padding:9px 16px;border-radius:10px;border:1px solid #d2d2d7;background:#fff;cursor:pointer">Cancelar</button>'+
+    '<button onclick="_ubicContinuar()" style="padding:9px 18px;border-radius:10px;border:none;background:#0071e3;color:#fff;font-weight:700;cursor:pointer">Continuar</button></div></div>';
+  box.innerHTML=html; box.style.display='flex';
+}
+function _ubicCerrar(){ var b=document.getElementById('ubic-nave-modal'); if(b) b.style.display='none'; }
+function _ubicContinuar(){
+  var W=_planoW(); var errores=[];
+  _ubicRows.forEach(function(x,i){ if(x.omitir) return; var e=W.planoValidar(x.art,x.codes,_ubicExcl(i)); if(e.length) errores.push(x.art+': '+e[0]); if(!x.codes.length) errores.push(x.art+': sin posiciones (o marcá "No ubicar ahora")'); });
+  if(errores.length){ showToast('❌ '+errores[0]); return; }
+  var lista=transitoGetAll(), tr=lista.find(function(t){return t.id===_ubicTr;}); if(!tr) return _ubicCerrar();
+  _ubicRows.forEach(function(x){ var it=tr.items.find(function(r){return r.art===x.art;}); if(!it) return;
+    it.ubicNave={alm:x.alm,b:x.b,z:x.z,codes:x.omitir?[]:x.codes.slice(),omitir:x.omitir};
+    if(!x.omitir && x.codes.length && (it.sugerencia||{}).tipo==='bloque') it.posConfirmada=x.codes[0];
+  });
+  transitoSave(lista);
+  _ubicCerrar();
+  _abrirModalTiempoRecepcionBase(_ubicTr);
+}
+// Al confirmar la recepción (stock ya sumado): grabar las posiciones elegidas en el plano.
+function aplicarUbicNave(tr){
+  var W=_planoW(); var conUbic=(tr.items||[]).filter(function(r){ return r.ubicNave && !r.ubicNave.omitir && r.ubicNave.codes && r.ubicNave.codes.length; });
+  if(!conUbic.length) return;
+  if(!W){ showToast('⚠️ No se pudo abrir el plano: las posiciones quedan guardadas en el tránsito'); return; }
+  var malos=[];
+  conUbic.forEach(function(r){ var res=W.planoAsignar(r.art, r.ubicNave.codes); if(res.err.length) malos.push(r.art+': '+res.err[0]);
+    var da=DATA.find(function(d){return d.art===r.art;}); if(da && res.ok.length) da.bloque=r.ubicNave.codes[0]; });
+  if(malos.length) showToast('⚠️ '+malos[0]); else showToast('📍 '+conUbic.length+' artículo(s) ubicados en la nave');
+}
 function procesarStockPaste(){
   var texto=document.getElementById('stock-paste').value.trim();
   if(!texto){ showToast('❌ Pegá la ficha de pila primero'); return; }
@@ -12086,7 +12181,7 @@ function cydConfirmarTransito(){
 var _cydTransitoIdPendiente = null;
 var _cydTiempoGrupo = null;
 
-function abrirModalTiempoRecepcion(id){
+function _abrirModalTiempoRecepcionBase(id){
   var lista = transitoGetAll();
   var tr = lista.find(function(t){return t.id===id;});
   if(!tr){ showToast('❌ Tránsito no encontrado'); return; }
@@ -12201,6 +12296,7 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
       huboRack = true;
     }
   });
+  try{ aplicarUbicNave(tr); }catch(e){ console.warn('No se pudo ubicar en la nave', e); }
   saveDataStock();
   if(huboRack && typeof renderMapa==='function') renderMapa();
 
@@ -17430,7 +17526,7 @@ textarea{width:100%;min-height:54px;resize:vertical;background:var(--bg);border:
     <div>
       <div class="lbl">Halpern Neumáticos · Depósito Mendoza</div>
       <h1>Plano de nave</h1>
-      <div class="sub">Cada bloque es una cuadrícula de columnas × filas de rack; cada fila se parte en dos lugares de pallet (A y B). Un pallet Arlog usa un lugar; una pila de racks usa los dos. Tocá un bloque para ver su ficha y su stock, o para dibujar pasillos y racks.</div>
+      <div class="sub">Cada bloque es una cuadrícula de columnas × filas de rack; cada fila se parte en dos lugares de pallet (A y B). Un pallet Arlog usa un lugar; una pila de racks usa los dos. Tocá un bloque para ver su ficha, su stock y armar su distribución.</div>
     </div>
     <div class="kpis" id="kpis"></div>
     <button type="button" class="btn pri" id="infBtn" hidden>📄 Informe PDF</button>
@@ -17557,13 +17653,15 @@ const UBKEY='wms_ubic_nave';
 let UB={};try{UB=JSON.parse(localStorage.getItem(UBKEY)||'{}')||{}}catch(e){UB={}}
 function ubGuardar(){try{localStorage.setItem(UBKEY,JSON.stringify(UB))}catch(e){}}
 function ubBorrar(art){if(UB[art]){delete UB[art];ubGuardar()}}
-let IDX={};function ubIndex(){IDX={};Object.keys(UB).forEach(a=>{const x=UB[a];(x.u||[]).forEach(u=>{IDX[u.b+'|'+u.c+'|'+u.r]=a;if(x.alm==='RACK')IDX[u.b+'|'+u.c+'|'+(u.r+1)]=a})})}
+const almU=(U,u)=>u.alm||U.alm;
+const codU=(U,u)=>almU(U,u)==='RACK'?codigoRack(u.b,u.c,u.r):codigo(u.b,u.c,u.r);
+let IDX={};function ubIndex(){IDX={};Object.keys(UB).forEach(a=>{const x=UB[a];(x.u||[]).forEach(u=>{IDX[u.b+'|'+u.c+'|'+u.r]=a;if(almU(x,u)==='RACK')IDX[u.b+'|'+u.c+'|'+(u.r+1)]=a})})}
 ubIndex();
 const ocupante=(b,c,r)=>IDX[b+'|'+c+'|'+r];
 function rackTipoDe(r){const al=S.alm[catDe(r)];return al&&al!=='PALLET'?al:(catDe(r)==='PCR'?'AUTO':'CAMION')}
 function almDe(r){const x=UB[r.art];if(x&&x.alm)return x.alm;return (S.alm[catDe(r)]||'CAMION')==='PALLET'?'PALLET':'RACK'}
 // Cuántas unidades de almacenaje necesita (pallets o pilas de racks) para u cubiertas
-function necesita(r,u){const al=almDe(r);if(al==='PALLET'){const mp=r.max_pos||0;return mp?Math.ceil(Math.ceil(u/mp)/Math.max(1,S.pallet.apil)):null}return Math.ceil(Math.ceil(u/(S.cap[rackTipoDe(r)]||1))/Math.max(1,S.apilado))}
+function necesita(r,u,alOver){const al=alOver||almDe(r);if(al==='PALLET'){const mp=r.max_pos||0;return mp?Math.ceil(Math.ceil(u/mp)/Math.max(1,S.pallet.apil)):null}return Math.ceil(Math.ceil(u/(S.cap[rackTipoDe(r)]||1))/Math.max(1,S.apilado))}
 function tokensDe(code){return String(code||'').toUpperCase().split('/').map(t=>t.trim()).filter(Boolean)}
 // Cuántas posiciones ocupa un artículo: auto/camioneta en pallets Arlog (1 posición cada max_pos
 // cubiertas, apilados según S.pallet.apil); el resto en racks (cubiertas por rack según tipo,
@@ -17596,9 +17694,9 @@ function calcOcc(){
     if(!r.bloque){o.sin.stock+=resto;o.sin.arts++;return}
     const U=UB[r.art]&&UB[r.art].u&&UB[r.art].u.length?UB[r.art]:null;
     if(U){ // codificado: cada unidad cuenta en su zona exacta, las cubiertas se reparten parejo
-      o.cod.arts++;o.cod.stock+=resto;const per=resto/U.u.length,step=U.alm==='RACK'?2:1;
-      U.u.forEach(u=>{if(!o.b[u.b])return;const z=zonaFila(u.r),c=o.b[u.b][z];c.stock+=per;c.pall+=pl/U.u.length;c.pos+=step;c.codPos+=step;if(U.alm==='RACK')c.rk+=Math.ceil(per/(S.cap[rackTipoDe(r)]||1));else c.pal++;
-        let e=c.arts.find(a=>a.r===r);if(!e){e={r,side:z,raw:'',u:0,pl:0,e:{al:U.alm==='RACK'?'R':'PALLET',pal:0,rk:0,pos:0,sin:0},cod:[]};c.arts.push(e)}e.u+=per;e.e.pos+=step;if(U.alm==='RACK')e.e.rk++;else e.e.pal++;e.cod.push(U.alm==='RACK'?codigoRack(u.b,u.c,u.r):codigo(u.b,u.c,u.r))});
+      o.cod.arts++;o.cod.stock+=resto;const per=resto/U.u.length;
+      U.u.forEach(u=>{if(!o.b[u.b])return;const isR=almU(U,u)==='RACK',step=isR?2:1,z=zonaFila(u.r),c=o.b[u.b][z];c.stock+=per;c.pall+=pl/U.u.length;c.pos+=step;c.codPos+=step;if(isR)c.rk+=Math.ceil(per/(S.cap[rackTipoDe(r)]||1));else c.pal++;
+        let e=c.arts.find(a=>a.r===r);if(!e){e={r,side:z,raw:'',u:0,pl:0,e:{al:isR?'R':'PALLET',pal:0,rk:0,pos:0,sin:0},cod:[]};c.arts.push(e)}e.u+=per;e.e.pos+=step;if(isR)e.e.rk++;else e.e.pal++;e.cod.push(codU(U,u))});
       return;
     }
     const x=parseUbic(r.bloque)[0];
@@ -17729,29 +17827,33 @@ function renderReub(){
 // ===== Codificar un artículo =====
 function ubDe(art){const r=artDe(art);if(!UB[art])UB[art]={alm:almDe(r),u:[]};return UB[art]}
 function libre(b,c,r){const B=S.blocks.find(x=>x.n===b);return B&&r>=1&&r<=gr().rows&&estado(B,c,r)==='pos'&&!ocupante(b,c,r)}
-function syncBloque(art){const r=artDe(art),U=UB[art];if(!r||!U||!U.u.length)return;const u=U.u[0];r.bloque=U.alm==='RACK'?codigoRack(u.b,u.c,u.r):codigo(u.b,u.c,u.r);API.save()}
-function tocarLugar(b,c,r){
-  const art=String(UBSEL), oc=ocupante(b,c,r);
-  if(oc&&oc!==art){const A=artDe(oc);return msg(codigo(b,c,r)+' ya está ocupado por '+oc+(A?' ('+(A.med||'')+' '+(A.diseno||'')+')':''))}
-  const U=ubDe(art);
-  if(oc===art){const i=U.u.findIndex(u=>u.b===b&&u.c===c&&(u.r===r||(U.alm==='RACK'&&u.r+1===r)));if(i>=0)U.u.splice(i,1);if(!U.u.length)delete UB[art]}
-  else if(U.alm==='RACK'){const r0=r%2?r:r-1;if(!libre(b,c,r0)||!libre(b,c,r0+1))return msg('Para una pila de racks tienen que estar libres '+codigo(b,c,r0)+' y '+codigo(b,c,r0+1)+'.');U.u.push({b,c,r:r0})}
-  else{if(!libre(b,c,r))return msg(codigo(b,c,r)+' no es un lugar libre.');U.u.push({b,c,r})}
-  ubGuardar();ubIndex();syncBloque(art);calcOcc();renderCod();renderKpis();renderNave();renderFicha();
-}
-function autoCompletar(){
-  const art=String(UBSEL),r=artDe(art),U=ubDe(art),need=necesita(r,OCC.resto[art]||0);
-  if(need==null)return msg('El artículo no tiene max_pos: no se puede saber cuántos pallets necesita.');
-  const G=gr(),b=sel;let falta=need-U.u.length,n=0;
-  for(let c=1;c<=G.cols&&falta>0;c++)for(let rr=1;rr<=G.rows&&falta>0;rr++){
-    if(ZAUTO!=='todo'&&zonaFila(rr)!==ZAUTO)continue;
-    if(U.alm==='RACK'){if(rr%2===0)continue;if(libre(b,c,rr)&&libre(b,c,rr+1)){U.u.push({b,c,r:rr});IDX[b+'|'+c+'|'+rr]=art;IDX[b+'|'+c+'|'+(rr+1)]=art;falta--;n++}}
-    else if(libre(b,c,rr)){U.u.push({b,c,r:rr});IDX[b+'|'+c+'|'+rr]=art;falta--;n++}
+function syncBloque(art){const r=artDe(art),U=UB[art];if(!r||!U||!U.u.length)return;r.bloque=codU(U,U.u[0]);API.save()}
+// ----- Motor de lugares libres (lo usan este plano y la recepción de descargas del WMS) -----
+function libresLista(b,z,alm,excl,max){
+  const G=gr(),out=[],ex=excl||new Set();
+  for(let c=1;c<=G.cols;c++)for(let r=1;r<=G.rows;r++){
+    if(max&&out.length>=max)return out;
+    if(z&&z!=='todo'&&zonaFila(r)!==z)continue;
+    if(alm==='RACK'){if(r%2===0)continue;if(libre(b,c,r)&&libre(b,c,r+1)&&!ex.has(codigo(b,c,r))&&!ex.has(codigo(b,c,r+1)))out.push(codigoRack(b,c,r))}
+    else{const k=codigo(b,c,r);if(libre(b,c,r)&&!ex.has(k))out.push(k)}
   }
-  if(!U.u.length)delete UB[art];
-  ubGuardar();ubIndex();syncBloque(art);calcOcc();renderAll();
-  msg(n?`${n} ${U.alm==='RACK'?'pila(s) de racks':'pallet(s)'} puestos en el bloque ${b}`+(falta>0?` · faltan ${falta}: no hay más lugar libre en esa zona`:''):'No hay lugares libres en esa zona del bloque '+b);
+  return out;
 }
+function codeToU(code){const m=String(code||'').toUpperCase().trim().match(/^(\d+)-(\d{1,2})-(\d{1,2})([AB])?$/);if(!m)return null;const b=+m[1],c=+m[2],f=+m[3];
+  if(!S.blocks.some(x=>x.n===b)||c<1||c>S.grid.cols||f<1||f>S.grid.filas)return null;return m[4]?{b,c,r:f*2-(m[4]==='A'?1:0),alm:'PALLET'}:{b,c,r:f*2-1,alm:'RACK'}}
+const exclDe=codes=>{const s=new Set();(codes||[]).forEach(k=>{const u=codeToU(k);if(!u)return;s.add(codigo(u.b,u.c,u.r));if(u.alm==='RACK')s.add(codigo(u.b,u.c,u.r+1))});return s};
+function asignar(art,codes){
+  art=String(art);const err=[],ok=[];ubIndex();
+  codes.forEach(k=>{const u=codeToU(k);if(!u){err.push(k+': código inválido');return}
+    const rows=u.alm==='RACK'?[u.r,u.r+1]:[u.r];const bad=rows.find(r=>{const oc=ocupante(u.b,u.c,r);return (oc&&oc!==art)||!(estado(S.blocks.find(x=>x.n===u.b),u.c,r)==='pos')});
+    if(bad){const oc=ocupante(u.b,u.c,bad);err.push(k+(oc&&oc!==art?': ocupado por '+oc:': no es un lugar libre'));return}
+    if(rows.some(r=>ocupante(u.b,u.c,r)===art))return; // ya era suyo
+    const U=ubDe(art);U.u.push({b:u.b,c:u.c,r:u.r,alm:u.alm});rows.forEach(r=>IDX[u.b+'|'+u.c+'|'+r]=art);ok.push(k)});
+  ubGuardar();ubIndex();syncBloque(art);return {ok,err};
+}
+function sacarCodigo(art,code){const U=UB[art];if(!U)return;const i=U.u.findIndex(u=>codU(U,u)===code);if(i>=0)U.u.splice(i,1);if(!U.u.length)delete UB[art];ubGuardar();ubIndex();syncBloque(art)}
+function mejorBloque(alm,z,need,pref){const L=S.blocks.map(b=>({n:b.n,lib:libresLista(b.n,z,alm).length}));if(pref){const p=L.find(x=>x.n===pref);if(p&&p.lib>=(need||1))return pref}L.sort((a,b)=>b.lib-a.lib);return L[0]&&L[0].lib?L[0].n:(pref||S.blocks[0].n)}
+let CF={alm:null,b:null,z:'sur',n:0};
 function renderCod(){
   const el=document.getElementById('codCard');if(!el)return;
   if(!API||!OCC){el.innerHTML='';return}
@@ -17761,29 +17863,37 @@ function renderCod(){
       <div class="prog"><i style="width:${(OCC.cod.arts+L.length)?Math.round(OCC.cod.arts/(OCC.cod.arts+L.length)*100):0}%"></i></div>
       <div class="foot"><input id="codArt" list="artsList" placeholder="Código de artículo" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px"><button type="button" class="btn pri" id="codBtn">Codificar</button></div>
       <datalist id="artsList">${L.slice(0,400).map(x=>`<option value="${esc(x.r.art)}">${esc(x.r.med||'')} ${esc(x.r.diseno||'')}</option>`).join('')}</datalist>
-      <div class="note">Pendientes: artículos con stock en piso (fuera de punteras y Mapa Racks) que todavía no tienen lugar en la cuadrícula. Ordenados por cantidad.</div>
+      <div class="note">Pendientes: artículos con stock en piso (fuera de punteras y Mapa Racks) que todavía no tienen lugar en la cuadrícula. Ordenados por cantidad. Lo que entra por descarga se codifica al recibirlo.</div>
       <div class="res-list" style="max-height:300px">${L.slice(0,120).map(x=>{const r=x.r,al=almDe(r),need=necesita(r,x.resto);return `<div class="art-row"><div style="min-width:0"><div>${esc(r.med||'')} — ${esc(r.diseno||'')} <span class="side-tag">${esc(r.bloque||'sin bloque')}</span></div><div class="meta">${esc(r.art)} · ${esc(r.prov||'')} · ${al==='PALLET'?'pallet Arlog':'rack '+rackTipoDe(r).toLowerCase()}</div></div><div class="num" style="text-align:right">${fmt(x.resto)} un.<div class="meta">${need==null?'<span class="bad">sin max_pos</span>':fmt(need)+(al==='PALLET'?' pallets':' pilas')}</div></div><button type="button" class="btn" data-ubicar="${esc(r.art)}">Codificar</button></div>`}).join('')||'<div class="res-item u">No hay artículos pendientes 🎉</div>'}${L.length>120?`<div class="res-item u">…y ${L.length-120} más (buscalos por código)</div>`:''}</div>`;
     return;
   }
   const art=String(UBSEL),r=artDe(art);if(!r){UBSEL=null;return renderCod()}
-  const al=almDe(r),U=UB[art],puestos=U?U.u.length:0,resto=OCC.resto[art]||0,need=necesita(r,resto);
-  const cods=U?U.u.map(u=>al==='RACK'?codigoRack(u.b,u.c,u.r):codigo(u.b,u.c,u.r)):[];
+  const U=UB[art],puestos=U?U.u:[],resto=OCC.resto[art]||0;
+  const al=CF.alm||almDe(r), need=necesita(r,resto,al), hechos=puestos.filter(u=>almU(U,u)===al).length;
+  const faltan=need==null?1:Math.max(0,need-hechos);
+  if(CF.b==null)CF.b=mejorBloque(al,CF.z,faltan,puestos.length?puestos[0].b:parseUbic(r.bloque)[0].b);
+  const libres=libresLista(CF.b,CF.z,al), cant=Math.min(libres.length,CF.n||faltan), sug=libres.slice(0,cant);
+  const cnt=(b,z)=>libresLista(b,z,al).length;
   el.innerHTML=`<div class="ph"><span class="big">🧩 ${esc(r.art)} — ${esc(r.med||'')} ${esc(r.diseno||'')}</span><span class="note">${esc(r.prov||'')} · ${fmt(resto)} un. en piso${(r.stock||0)>resto?' (de '+fmt(r.stock)+' en total)':''}</span></div>
-    <div class="foot"><span class="lbl">Va en</span><div class="seg" role="group" aria-label="Tipo de almacenaje">
-      <button type="button" class="C1" data-almart="PALLET" aria-pressed="${al==='PALLET'}">Pallet Arlog</button><button type="button" class="C1" data-almart="RACK" aria-pressed="${al==='RACK'}">Rack ${rackTipoDe(r).toLowerCase()}</button></div>
-      <span class="note">${al==='PALLET'?(r.max_pos?fmt(r.max_pos)+' cubiertas por pallet':'<span class="bad">sin max_pos</span>'):fmt(S.cap[rackTipoDe(r)])+' cubiertas por rack · apilados de a '+S.apilado}</span></div>
-    <div><b>${fmt(puestos)}</b> de <b>${need==null?'?':fmt(need)}</b> ${al==='PALLET'?'pallets':'pilas de racks'} puestos${need!=null&&puestos>=need?' ✅':''}</div>
-    <div class="prog"><i style="width:${need?Math.min(100,Math.round(puestos/need*100)):0}%"></i></div>
-    ${cods.length?`<div>${cods.map(c=>`<span class="side-tag">${esc(c)}</span>`).join(' ')}</div>`:''}
-    <div class="note">Tocá lugares libres en la cuadrícula del <b>Bloque ${sel}</b> (ficha de abajo, o elegí otro bloque en el plano). Tocá uno violeta para sacarlo.</div>
-    <div class="foot"><label for="zAuto" class="lbl">Completar en</label><select id="zAuto" style="width:auto">${['sur','norte','calle','todo'].map(z=>`<option value="${z}" ${ZAUTO===z?'selected':''}>${z==='todo'?'Todo el bloque':ZN[z]}</option>`).join('')}</select>
-      <button type="button" class="btn pri" id="autoBtn">Completar automático en bloque ${sel}</button>
-      <button type="button" class="btn danger" id="codClear">Sacar todos</button><button type="button" class="btn" id="codDone">Listo</button></div>`;
+    <div class="params">
+      <div class="row"><label for="cfAlm">Va en</label><select id="cfAlm" style="width:auto"><option value="PALLET" ${al==='PALLET'?'selected':''}>Pallet Arlog</option><option value="RACK" ${al==='RACK'?'selected':''}>Rack ${rackTipoDe(r).toLowerCase()}</option></select></div>
+      <div class="row"><label for="cfB">Bloque</label><select id="cfB" style="width:auto">${S.blocks.map(b=>`<option value="${b.n}" ${b.n===CF.b?'selected':''}>Bloque ${b.n} · ${fmt(cnt(b.n,'todo'))} libres</option>`).join('')}</select></div>
+      <div class="row"><label for="cfZ">Zona</label><select id="cfZ" style="width:auto">${['sur','norte','calle','todo'].map(z=>`<option value="${z}" ${CF.z===z?'selected':''}>${z==='todo'?'Todo el bloque':ZN[z]} · ${fmt(cnt(CF.b,z))} libres</option>`).join('')}</select></div>
+      <div class="row"><label for="cfN">Cuántos ubicar</label><input id="cfN" type="number" min="0" value="${cant}"></div>
+    </div>
+    <div class="note">${al==='PALLET'?(r.max_pos?fmt(r.max_pos)+' cubiertas por pallet':'<span class="bad">sin max_pos: elegí la cantidad a mano</span>'):fmt(S.cap[rackTipoDe(r)])+' cubiertas por rack · apilados de a '+S.apilado+' · cada pila usa A y B'} · necesita <b>${need==null?'?':fmt(need)}</b>, ya tiene <b>${fmt(hechos)}</b>${need!=null&&hechos>=need?' ✅':''}</div>
+    <div class="prog"><i style="width:${need?Math.min(100,Math.round(hechos/need*100)):0}%"></i></div>
+    <div><div class="lbl" style="margin-bottom:4px">Sugeridos (los primeros libres de la zona) — destildá los que no quieras</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${sug.map(k=>`<label class="side-tag" style="display:inline-flex;gap:3px;align-items:center;cursor:pointer"><input type="checkbox" data-sug="${k}" checked>${k}</label>`).join('')||'<span class="bad">No hay lugares libres en esa zona.</span>'}</div></div>
+    <div class="foot"><label for="cfOtra" class="lbl">Sumar otro</label><select id="cfOtra" style="width:auto;max-width:180px"><option value="">Elegir posición…</option>${libres.slice(cant,cant+300).map(k=>`<option>${k}</option>`).join('')}</select>
+      <button type="button" class="btn pri" id="cfOk">Ubicar seleccionados</button></div>
+    ${puestos.length?`<div><div class="lbl" style="margin-bottom:4px">Ya ubicado (${puestos.length})</div><div style="display:flex;flex-wrap:wrap;gap:4px">${puestos.map(u=>{const k=codU(U,u);return `<span class="side-tag">${k} <button type="button" class="link" data-quitar="${k}" aria-label="Sacar ${k}">✕</button></span>`}).join('')}</div></div>`:''}
+    <div class="foot"><button type="button" class="btn danger" id="codClear">Sacar todos</button><button type="button" class="btn" id="codDone">Listo</button></div>`;
 }
 function empezarCod(art){
   art=String(art).trim();const r=artDe(art);if(!r)return msg('No hay ningún artículo con código '+art+'.');
-  UBSEL=String(r.art);const U=UB[UBSEL];let b=U&&U.u.length?U.u[0].b:parseUbic(r.bloque)[0].b;if(b)sel=b;
-  const z=parseUbic(r.bloque)[0].side;if(z)ZAUTO=z;
+  UBSEL=String(r.art);const U=UB[UBSEL],pu=parseUbic(r.bloque)[0];
+  CF={alm:null,b:null,z:U&&U.u.length?zonaFila(U.u[0].r):(pu.side||'sur'),n:0};if(CF.z==='calle'&&!pu.c)CF.z='sur';
   renderCod();renderNave();renderFicha();document.getElementById('codCard').scrollIntoView({behavior:'smooth',block:'start'});
 }
 // ===== Dibujo =====
@@ -17870,10 +17980,19 @@ function renderFicha(){
   const br=[['pos','Posición'],['pas','Pasillo'],['sel','Rack selectivo'],['off','No disponible']];
   document.getElementById('ficha').innerHTML=`
     <div class="ph"><h2>Bloque ${b.n}</h2><span class="note num">${S.grid.cols} columnas × ${S.grid.filas} filas de rack (A/B) · lugar ${g.colW.toLocaleString('es-AR',{maximumFractionDigits:2})} × ${g.rowH.toLocaleString('es-AR',{maximumFractionDigits:2})} m</span></div>
-    ${UBSEL?`<div class="cod" style="margin:0"><div><b>Codificando ${esc(UBSEL)}</b>: tocá un lugar libre para poner ${almDe(artDe(UBSEL))==='PALLET'?'un pallet':'una pila de racks (usa A y B)'}; tocá uno violeta para sacarlo.</div></div>`:''}
-    <div class="foot"${UBSEL?' hidden':''}><span class="lbl">Pincel</span><div class="seg" role="group" aria-label="Pincel">${br.map(([v,t])=>`<button type="button" class="C1" data-brush="${v}" aria-pressed="${brush===v}">${t}</button>`).join('')}</div>
-      <span class="note">Tocá o arrastrá sobre las celdas para pintar.</span></div>
-    <div class="detail" style="overflow:auto">${gridHTML(b,Math.max(8,Math.min(14,560/S.nave.ancho)),true)}</div>
+    <div class="op"><h3>Distribución del bloque</h3>
+      <div class="params">
+        <div class="row"><label for="dEst">Marcar como</label><select id="dEst" style="width:auto">${br.map(([v,t])=>`<option value="${v}" ${brush===v?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="row"><label for="dZona">Atajo</label><select id="dZona" style="width:auto"><option value="">Filas a mano</option><option value="sur">Todo el Sur</option><option value="calle">Toda la calle central</option><option value="norte">Todo el Norte</option><option value="todo">Todo el bloque</option></select></div>
+        <div class="row"><label for="dF1">Filas desde</label><select id="dF1" style="width:auto">${Array.from({length:S.grid.filas},(_,i)=>`<option ${i===0?'selected':''}>${i+1}</option>`).join('')}</select></div>
+        <div class="row"><label for="dF2">hasta</label><select id="dF2" style="width:auto">${Array.from({length:S.grid.filas},(_,i)=>`<option ${i===0?'selected':''}>${i+1}</option>`).join('')}</select></div>
+        <div class="row"><label for="dC1">Columnas desde</label><select id="dC1" style="width:auto">${Array.from({length:S.grid.cols},(_,i)=>`<option ${i===0?'selected':''}>${i+1}</option>`).join('')}</select></div>
+        <div class="row"><label for="dC2">hasta</label><select id="dC2" style="width:auto">${Array.from({length:S.grid.cols},(_,i)=>`<option ${i===S.grid.cols-1?'selected':''}>${i+1}</option>`).join('')}</select></div>
+        <div class="row"><label for="dAB">Lugares</label><select id="dAB" style="width:auto"><option value="AB">A y B</option><option value="A">Solo A</option><option value="B">Solo B</option></select></div>
+      </div>
+      <div class="foot"><button type="button" class="btn pri" id="dAplicar">Aplicar</button><span class="note" id="dInfo">Ej.: un pasillo en la fila 6 de punta a punta → Pasillo, filas 6 a 6, columnas 1 a ${S.grid.cols}.</span></div>
+    </div>
+    <div class="detail" style="overflow:auto">${gridHTML(b,Math.max(8,Math.min(14,560/S.nave.ancho)),false)}</div>
     <div class="note">Código: <b>bloque-columna-fila</b>. Pallet: <span class="side-tag">${b.n}-07-15A</span> o <span class="side-tag">${b.n}-07-15B</span> · pila de racks: <span class="side-tag">${b.n}-07-15</span> (ocupa A y B). Filas ${ZN.sur} 1–${S.grid.sur} · ${ZN.calle} ${S.grid.sur+1}–${S.grid.sur+S.grid.calle} · ${ZN.norte} ${S.grid.sur+S.grid.calle+1}–${S.grid.filas}.</div>
     <div class="tbl"><table><thead><tr><th></th><th>Lugares</th><th>= pallets</th><th>= pilas de rack</th><th>Rack selectivo</th><th>Pasillo</th><th>No disp.</th></tr></thead><tbody>
       ${['sur','calle','norte'].map(z=>`<tr><td>${ZN[z]}</td><td>${fmt(k[z].pos)}</td><td>${fmt(k[z].pos)}</td><td>${fmt(k[z].pos/2)}</td><td>${fmt(k[z].sel)}</td><td>${fmt(k[z].pas)}</td><td>${fmt(k[z].off)}</td></tr>`).join('')}
@@ -17915,6 +18034,21 @@ function renderVista(){const bar=document.getElementById('vistaBar');bar.hidden=
   document.getElementById('opsPanel').hidden=!API;if(API){document.getElementById('codigos').innerHTML=codigosDestino().map(c=>`<option value="${esc(c)}">`).join('');document.getElementById('opsInfo').textContent=fmt(API.data().length)+' artículos en el WMS'}}
 function renderAll(){renderVista();renderCod();renderReub();renderPedidos();renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
 window.planoRefrescar=function(){calcOcc();renderAll()};
+// ----- Para la recepción de descargas del WMS -----
+window.planoBloques=function(){return S.blocks.map(b=>b.n)};
+window.planoZonas=function(){return {sur:ZN.sur,norte:ZN.norte,calle:ZN.calle}};
+window.planoLibres=function(b,z,alm,excl){return libresLista(+b,z,alm,exclDe(excl)).length};
+window.planoDefaults=function(art,cant){
+  const r=artDe(art);if(!r)return null;const al=almDe(r),need=necesita(r,cant,al),U=UB[String(art)],pu=parseUbic(r.bloque)[0];
+  let z=U&&U.u.length?zonaFila(U.u[0].r):(pu.side&&pu.side!=='calle'?pu.side:'sur');
+  const b=mejorBloque(al,z,need||1,U&&U.u.length?U.u[0].b:pu.b);
+  return {alm:al,need,b,z,maxPos:r.max_pos||0,rackTipo:rackTipoDe(r)};
+};
+window.planoNecesita=function(art,cant,alm){const r=artDe(art);return r?necesita(r,cant,alm):null};
+window.planoSugerir=function(o){const r=artDe(o.art);const need=r?necesita(r,o.cant,o.alm):null;const L=libresLista(+o.b,o.z,o.alm,exclDe(o.excl));const n=o.n!=null?o.n:(need==null?1:need);return {need,codes:L.slice(0,n),libres:L.length,faltan:Math.max(0,n-L.length)}};
+window.planoValidar=function(art,codes,excl){ubIndex();const ex=exclDe(excl),err=[];codes.forEach(k=>{const u=codeToU(k);if(!u){err.push(k+': código inválido');return}const rows=u.alm==='RACK'?[u.r,u.r+1]:[u.r];
+  rows.forEach(r=>{const oc=ocupante(u.b,u.c,r);if(oc&&oc!==String(art))err.push(k+': ocupado por '+oc);else if(estado(S.blocks.find(x=>x.n===u.b),u.c,r)!=='pos')err.push(k+': no es un lugar libre');else if(ex.has(codigo(u.b,u.c,r)))err.push(k+': elegido para otro artículo')})});return [...new Set(err)]};
+window.planoAsignar=function(art,codes){const r=asignar(art,codes);calcOcc();renderAll();return r};
 // Resumen para el Dashboard del WMS (mismos números que este plano). "capM2/occM2" quedan por
 // compatibilidad y ahora son posiciones de la cuadrícula.
 window.planoResumen=function(){
@@ -17956,20 +18090,18 @@ window.planoInformeHTML=function(){
 };
 
 // ===== Eventos =====
-let pintando=false;
-function pintar(cell){
-  const b=S.blocks.find(x=>x.n===+cell.dataset.b), c=+cell.dataset.c, r=+cell.dataset.r, k=pad2(c)+'-'+pad2(r);
-  const def=zonaFila(r)==='calle'?'pas':'pos';
-  if(brush===def) delete b.cel[k]; else b.cel[k]=brush;
-  cell.className='cell '+brush+(zonaFila(r)==='calle'?' zc':'');
-}
-document.addEventListener('pointerdown',e=>{const c=e.target.closest('.grid.editing .cell');if(!c)return;e.preventDefault();if(UBSEL&&API){tocarLugar(+c.dataset.b,+c.dataset.c,+c.dataset.r);return}pintando=true;pintar(c)});
-document.addEventListener('pointerover',e=>{if(!pintando)return;const c=e.target.closest('.grid.editing .cell');if(c)pintar(c)});
-document.addEventListener('pointerup',()=>{if(!pintando)return;pintando=false;save();calcOcc();renderKpis();renderNave();renderFicha()});
 document.addEventListener('click',e=>{
   const vb=e.target.closest('[data-vista]'); if(vb){vista=vb.dataset.vista;try{localStorage.setItem('wms_plano_vista',vista)}catch(_){}renderVista();renderNave();return}
-  const bb=e.target.closest('[data-brush]'); if(bb){brush=bb.dataset.brush;document.querySelectorAll('[data-brush]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.brush===brush));return}
   const id=e.target.id;
+  if(id==='dAplicar'){
+    const b=S.blocks.find(x=>x.n===sel),est=v('dEst'),zo=v('dZona'),ab=v('dAB');brush=est;
+    let f1=+v('dF1'),f2=+v('dF2');const c1=Math.min(+v('dC1'),+v('dC2')),c2=Math.max(+v('dC1'),+v('dC2'));
+    if(zo){const G=S.grid;[f1,f2]=zo==='sur'?[1,G.sur]:zo==='calle'?[G.sur+1,G.sur+G.calle]:zo==='norte'?[G.sur+G.calle+1,G.filas]:[1,G.filas]}
+    if(f1>f2)[f1,f2]=[f2,f1];let n=0,ocup=0;ubIndex();
+    for(let c=c1;c<=c2;c++)for(let f=f1;f<=f2;f++)for(const h of (ab==='AB'?['A','B']:[ab])){const r=f*2-(h==='A'?1:0),k=pad2(c)+'-'+pad2(r);
+      if(est!=='pos'&&ocupante(b.n,c,r)){ocup++;continue}
+      const def=zonaFila(r)==='calle'?'pas':'pos';if(est===def)delete b.cel[k];else b.cel[k]=est;n++}
+    save();calcOcc();renderAll();return msg(`${n} lugares del bloque ${b.n} marcados como ${({pos:'posición',pas:'pasillo',sel:'rack selectivo',off:'no disponible'})[est]}`+(ocup?` · ${ocup} no se cambiaron porque tienen mercadería`:''))}
   if(id==='copyBtn'){const t=v('copyTo').toLowerCase(),src=S.blocks.find(x=>x.n===sel);const dest=t==='todos'?S.blocks.filter(x=>x.n!==sel):t.split(/[,\s]+/).map(Number).map(n=>S.blocks.find(x=>x.n===n)).filter(x=>x&&x.n!==sel);
     if(!dest.length)return msg('Escribí a qué bloques copiar (ej: 2,3,4 o todos).');dest.forEach(x=>x.cel=structuredClone(src.cel));save();calcOcc();renderAll();return msg('Distribución del bloque '+sel+' copiada a '+dest.map(x=>x.n).join(', '))}
   if(id==='resetBlk'){const r=e.target;if(r.dataset.armed){const b=S.blocks.find(x=>x.n===sel);b.cel=b.n===1?b1Default(S.grid):{};save();calcOcc();renderAll();msg('Bloque '+sel+' restablecido')}else{r.dataset.armed=1;r.textContent='Tocá de nuevo para confirmar';setTimeout(()=>{delete r.dataset.armed;r.textContent='Restablecer bloque'},4000)}return}
@@ -17977,11 +18109,11 @@ document.addEventListener('click',e=>{
     if(id==='qBtn')return buscar();
     if(id==='codBtn')return empezarCod(v('codArt'));
     if(id==='codDone'){UBSEL=null;renderCod();renderNave();return renderFicha()}
-    if(id==='autoBtn')return autoCompletar();
+    if(id==='cfOk'){const codes=[...document.querySelectorAll('[data-sug]')].filter(x=>x.checked).map(x=>x.dataset.sug);const o=v('cfOtra');if(o)codes.push(o);
+      if(!codes.length)return msg('No hay posiciones seleccionadas.');const res=asignar(UBSEL,codes);calcOcc();CF.n=0;renderAll();return msg(res.ok.length+' ubicado(s)'+(res.err.length?' · '+res.err.join(' · '):''))}
+    const qt=e.target.closest('[data-quitar]'); if(qt&&UBSEL){sacarCodigo(UBSEL,qt.dataset.quitar);calcOcc();return renderAll()}
     if(id==='codClear'){const r=e.target;if(r.dataset.armed){ubBorrar(UBSEL);ubIndex();calcOcc();renderAll();return}r.dataset.armed=1;r.textContent='Tocá de nuevo para sacar todo';setTimeout(()=>{if(r.isConnected){delete r.dataset.armed;r.textContent='Sacar todos'}},4000);return}
     const ub=e.target.closest('[data-ubicar]'); if(ub)return empezarCod(ub.dataset.ubicar);
-    const am=e.target.closest('[data-almart]'); if(am&&UBSEL){const U=UB[UBSEL];if(U&&U.alm===am.dataset.almart)return;if(U&&U.u.length&&!am.dataset.armed){am.dataset.armed=1;return msg('Cambiar el tipo saca los '+U.u.length+' lugares ya puestos. Tocá de nuevo para confirmar.')}
-      UB[UBSEL]={alm:am.dataset.almart,u:[]};ubGuardar();ubIndex();calcOcc();renderAll();return}
     if(id==='infBtn')return API.imprimir(planoInformeHTML());
     if(id==='pedClear'){PED=null;renderPedidos();return renderNave()}
     if(id==='qClear'){document.getElementById('q').value='';return buscar()}
@@ -18005,7 +18137,11 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
   const el=e.target;
-  if(el.id==='zAuto'){ZAUTO=el.value;return}
+  if(el.id==='cfAlm'){CF.alm=el.value;CF.n=0;CF.b=mejorBloque(CF.alm,CF.z,1,CF.b);return renderCod()}
+  if(el.id==='cfB'){CF.b=+el.value;CF.n=0;sel=CF.b;renderCod();renderNave();return renderFicha()}
+  if(el.id==='cfZ'){CF.z=el.value;CF.n=0;return renderCod()}
+  if(el.id==='cfN'){CF.n=Math.max(0,+el.value||0);return renderCod()}
+  if(el.id==='dZona'||el.id==='dEst'||el.id==='dF1'||el.id==='dF2'||el.id==='dC1'||el.id==='dC2'||el.id==='dAB')return;
   if(el.id==='pedSel'){PED=el.value||null;renderPedidos();renderNave();if(PED){const pm=pedidoEnMapa();const ks=pm?Object.keys(pm.m).map(Number):[];if(ks.length){sel=Math.min(...ks);renderFicha()}}return}
   const num=(x,min)=>Math.max(min,+el.value||x);
   if(el.dataset.cap){S.cap[el.dataset.cap]=num(1,1)}
