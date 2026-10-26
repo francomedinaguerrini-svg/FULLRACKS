@@ -2597,11 +2597,11 @@ function fichaConciliacion(){
     '<button class="btn-secondary" onclick="closeModalDirect()" style="margin-top:12px">Cerrar</button>';
   document.getElementById('modal-bg').classList.add('show');
 }
-
 // ===== RECEPCIÓN → UBICAR EN LA NAVE =====
-// Antes de pedir equipo y horario, cada artículo que va a piso (no al Mapa Racks) se ubica:
-// pallet Arlog o rack, bloque, zona y posiciones — sugeridas de los lugares libres del plano.
-function _planoW(){ var f=document.querySelector('#nave-capacidad iframe'); try{ return f&&f.contentWindow&&f.contentWindow.planoSugerir ? f.contentWindow : null; }catch(e){ return null; } }
+// Antes de pedir equipo y horario, cada artículo que va a piso (no al Mapa Racks) se arma y se ubica:
+// armado (cuántos pallets / racks y de cuántas cubiertas), bloque, zona y posiciones sugeridas
+// de los lugares libres del plano. Todo editable antes de confirmar.
+function _planoW(){ var f=document.querySelector('#nave-capacidad iframe'); try{ return f&&f.contentWindow&&f.contentWindow.planoSugerirMix ? f.contentWindow : null; }catch(e){ return null; } }
 var _ubicTr=null, _ubicRows=[];
 function abrirModalTiempoRecepcion(id){
   var tr=transitoGetAll().find(function(t){return t.id===id;});
@@ -2615,68 +2615,90 @@ function abrirModalTiempoRecepcion(id){
   var items=tr.items.filter(function(r){ var t=(r.sugerencia||{}).tipo; return t!=='rack' && t!=='rack_lleno'; });
   if(!items.length) return _abrirModalTiempoRecepcionBase(id);
   _ubicTr=id; _ubicRows=[];
-  var excl=[];
   items.forEach(function(r){
-    var d=W.planoDefaults(r.art, r.cant)||{alm:'PALLET',b:W.planoBloques()[0],z:'sur',need:null};
+    var d=W.planoDefaults(r.art, r.cant)||{alm:'PALLET',b:W.planoBloques()[0],z:'sur'};
     var prev=r.ubicNave;
-    var row={art:r.art, med:r.med, diseno:r.diseno, cant:r.cant, alm:prev?prev.alm:d.alm, b:prev?prev.b:d.b, z:prev?prev.z:d.z, omitir:prev?!!prev.omitir:false, rackTipo:d.rackTipo, maxPos:d.maxPos, codes:[]};
-    if(prev&&prev.codes&&prev.codes.length&&!W.planoValidar(r.art, prev.codes, excl).length) row.codes=prev.codes.slice();
-    else { var sg=W.planoSugerir({art:r.art,cant:r.cant,alm:row.alm,b:row.b,z:row.z,excl:excl}); row.codes=sg.codes; }
-    row.need=W.planoNecesita(r.art, r.cant, row.alm);
-    if(!row.omitir) excl=excl.concat(row.codes);
+    var row={art:r.art, med:r.med, diseno:r.diseno, cant:r.cant, b:prev?prev.b:d.b, z:prev?prev.z:d.z, omitir:prev?!!prev.omitir:false,
+      rackTipo:d.rackTipo, maxPos:d.maxPos, lineas:(prev&&prev.lineas)?prev.lineas:W.planoArmado(r.art, r.cant, d.alm), items:[]};
     _ubicRows.push(row);
   });
+  _ubicRows.forEach(function(x,i){ var prev=(tr.items.find(function(r){return r.art===x.art;})||{}).ubicNave;
+    if(prev&&prev.items&&prev.items.length&&!W.planoValidar(x.art, prev.items.map(function(o){return o.code;}), _ubicExcl(i)).length) x.items=prev.items; else _ubicResugerir(i); });
   _ubicRender();
 }
-function _ubicExcl(i){ var e=[]; _ubicRows.forEach(function(x,j){ if(j!==i && !x.omitir) e=e.concat(x.codes); }); return e; }
-function _ubicResugerir(i){ var W=_planoW(), x=_ubicRows[i]; var sg=W.planoSugerir({art:x.art,cant:x.cant,alm:x.alm,b:x.b,z:x.z,excl:_ubicExcl(i)}); x.codes=sg.codes; x.need=sg.need; }
+function _ubicExcl(i){ var e=[]; _ubicRows.forEach(function(x,j){ if(j!==i && !x.omitir) e=e.concat(x.items.map(function(o){return o.code;})); }); return e; }
+function _ubicTotal(x){ return x.lineas.reduce(function(a,l){ return a+(+l.n||0)*(+l.q||0); },0); }
+function _ubicResugerir(i){ var W=_planoW(), x=_ubicRows[i]; var sg=W.planoSugerirMix({b:x.b,z:x.z,lineas:x.lineas,excl:_ubicExcl(i)}); x.items=sg.items; x.nec=sg; }
 function _ubicCambio(i, campo, val){
-  var x=_ubicRows[i]; if(campo==='b') x.b=+val; else if(campo==='omitir') x.omitir=val; else x[campo]=val;
-  if(campo==='codes'){ x.codes=String(val).toUpperCase().split(/[\s,;]+/).filter(Boolean); }
-  else if(campo!=='omitir') _ubicResugerir(i);
+  var W=_planoW(), x=_ubicRows[i];
+  if(campo==='b') x.b=+val; else if(campo==='z') x.z=val; else if(campo==='omitir') x.omitir=val;
+  else if(campo==='armado'){ x.lineas=W.planoArmado(x.art, x.cant, val); }
+  else if(campo==='codes'){ var cods=String(val).toUpperCase().split(/[\s,;]+/).filter(Boolean); x.items=cods.map(function(c,k){ var o=x.items[k]; return {code:c, q:o?o.q:null}; }); _ubicRender(); return; }
+  if(campo!=='omitir') _ubicResugerir(i);
   _ubicRender();
+}
+function _ubicLinea(i, k, campo, val){
+  var x=_ubicRows[i];
+  if(campo==='del'){ x.lineas.splice(k,1); }
+  else if(campo==='add'){ var t=x.lineas.length?x.lineas[x.lineas.length-1].t:'PALLET'; x.lineas.push({n:1,t:t,q:Math.max(0,x.cant-_ubicTotal(x))||1}); }
+  else { x.lineas[k][campo]= campo==='t' ? val : Math.max(0, parseInt(val,10)||0); }
+  _ubicResugerir(i); _ubicRender();
 }
 function _ubicRender(){
   var W=_planoW(); var box=document.getElementById('ubic-nave-modal');
   if(!box){ box=document.createElement('div'); box.id='ubic-nave-modal'; box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 10px'; document.body.appendChild(box); }
-  var bl=W.planoBloques(), ZN={sur:'Sur',norte:'Norte',calle:'Calle central',todo:'Todo el bloque'};
+  var bl=W.planoBloques(), ap=W.planoApilado(), ZN={sur:'Sur',norte:'Norte',calle:'Calle central',todo:'Todo el bloque'};
   var sel='padding:6px 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff';
-  var html='<div style="background:#fff;border-radius:14px;max-width:760px;width:100%;padding:16px 16px 12px;box-shadow:0 10px 40px rgba(0,0,0,.25)">'+
+  var html='<div style="background:#fff;border-radius:14px;max-width:780px;width:100%;padding:16px 16px 12px;box-shadow:0 10px 40px rgba(0,0,0,.25)">'+
     '<div style="font-size:17px;font-weight:700">📍 Ubicar en la nave</div>'+
-    '<div style="font-size:12px;color:#86868b;margin:2px 0 12px">Elegí para cada artículo si va en pallet Arlog o en rack, el bloque y la zona. Las posiciones salen sugeridas de los lugares libres; podés editarlas (separadas por coma) o dejar el artículo sin ubicar.</div>';
+    '<div style="font-size:12px;color:#86868b;margin:2px 0 12px">Revisá el armado de cada artículo (cuántos pallets / racks y de cuántas cubiertas), elegí bloque y zona y confirmá las posiciones sugeridas. Todo se puede cambiar.</div>';
   _ubicRows.forEach(function(x,i){
-    var lib=function(b,z){ return W.planoLibres(b,z,x.alm,_ubicExcl(i)); };
-    var ok=x.need==null ? x.codes.length>0 : x.codes.length>=x.need;
-    var errs=x.omitir?[]:W.planoValidar(x.art, x.codes, _ubicExcl(i));
-    html+='<div style="border:1px solid '+(x.omitir?'#e5e5ea':(errs.length?'#ff3b30':(ok?'#34c759':'#ff9500')))+';border-radius:10px;padding:10px;margin-bottom:8px'+(x.omitir?';opacity:.6':'')+'">'+
-      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:13px">'+x.art+' — '+(x.med||'')+' '+(x.diseno||'')+'</div><div style="font-size:12px;color:#6e6e73">'+x.cant+' un.</div></div>'+
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
-        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'alm\',this.value)"'+(x.omitir?' disabled':'')+'><option value="PALLET"'+(x.alm==='PALLET'?' selected':'')+'>Pallet Arlog</option><option value="RACK"'+(x.alm==='RACK'?' selected':'')+'>Rack '+String(x.rackTipo||'').toLowerCase()+'</option></select>'+
-        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'b\',this.value)"'+(x.omitir?' disabled':'')+'>'+bl.map(function(b){ return '<option value="'+b+'"'+(b===x.b?' selected':'')+'>Bloque '+b+' · '+lib(b,'todo')+' libres</option>'; }).join('')+'</select>'+
-        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'z\',this.value)"'+(x.omitir?' disabled':'')+'>'+['sur','norte','calle','todo'].map(function(z){ return '<option value="'+z+'"'+(z===x.z?' selected':'')+'>'+ZN[z]+' · '+lib(x.b,z)+' libres</option>'; }).join('')+'</select>'+
-        '<label style="font-size:12px;color:#6e6e73;display:flex;gap:4px;align-items:center;margin-left:auto"><input type="checkbox"'+(x.omitir?' checked':'')+' onchange="_ubicCambio('+i+',\'omitir\',this.checked)">No ubicar ahora</label>'+
-      '</div>'+
+    var tot=_ubicTotal(x), dif=tot-x.cant, lib=function(b,z){ return W.planoLibres(b,z,'PALLET',_ubicExcl(i)); };
+    var nec=x.nec||{necPal:0,necRack:0,faltanPal:0,faltanRack:0};
+    var errs=x.omitir?[]:W.planoValidar(x.art, x.items.map(function(o){return o.code;}), _ubicExcl(i));
+    var falta=nec.faltanPal+nec.faltanRack, ok=!dif&&!errs.length&&!falta&&x.items.length;
+    var armTxt=x.lineas.filter(function(l){return l.n>0;}).map(function(l){ return l.n+' '+(l.t==='RACK'?'rack'+(l.n>1?'s':''):'pallet'+(l.n>1?'s':''))+' de '+l.q; }).join(' + ')||'—';
+    html+='<div style="border:1px solid '+(x.omitir?'#e5e5ea':(errs.length||dif?'#ff3b30':(ok?'#34c759':'#ff9500')))+';border-radius:10px;padding:10px;margin-bottom:8px'+(x.omitir?';opacity:.6':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:13px">'+x.art+' — '+(x.med||'')+' '+(x.diseno||'')+'</div><div style="font-size:12px;color:#6e6e73">'+x.cant+' un.'+(x.maxPos?' · max_pos '+x.maxPos:'')+'</div></div>'+
+      '<label style="font-size:12px;color:#6e6e73;display:flex;gap:4px;align-items:center;margin-top:4px"><input type="checkbox"'+(x.omitir?' checked':'')+' onchange="_ubicCambio('+i+',\'omitir\',this.checked)">No ubicar ahora</label>'+
       (x.omitir?'':
-      '<div style="font-size:11px;color:#86868b;margin:8px 0 3px">'+(x.alm==='PALLET'?(x.maxPos?'Necesita '+(x.need||0)+' pallet(s) · '+x.maxPos+' cubiertas por pallet':'<span style="color:#ff9500">Sin max_pos: elegí cuántas posiciones</span>'):'Necesita '+(x.need||0)+' pila(s) de racks · cada pila ocupa A y B')+' · elegidas: '+x.codes.length+'</div>'+
-      '<div style="display:flex;gap:6px"><input value="'+x.codes.join(', ')+'" onchange="_ubicCambio('+i+',\'codes\',this.value)" style="flex:1;'+sel+';font-family:monospace;font-size:12px">'+
+      '<div style="font-size:12px;font-weight:700;margin:8px 0 4px">Armado: <span style="font-weight:600;color:#0071e3">'+armTxt+'</span> = '+tot+' un. '+(dif?'<span style="color:#ff3b30">('+(dif>0?'sobran ':'faltan ')+Math.abs(dif)+')</span>':'✅')+
+        ' <span style="font-weight:400;color:#86868b">· sugerir todo en </span><button onclick="_ubicCambio('+i+',\'armado\',\'PALLET\')" style="'+sel+';padding:2px 8px;cursor:pointer">Pallets</button> <button onclick="_ubicCambio('+i+',\'armado\',\'RACK\')" style="'+sel+';padding:2px 8px;cursor:pointer">Racks '+String(x.rackTipo||'').toLowerCase()+'</button></div>'+
+      x.lineas.map(function(l,k){ return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'+
+        '<input type="number" min="0" value="'+l.n+'" onchange="_ubicLinea('+i+','+k+',\'n\',this.value)" style="'+sel+';width:70px">'+
+        '<select onchange="_ubicLinea('+i+','+k+',\'t\',this.value)" style="'+sel+'"><option value="PALLET"'+(l.t==='PALLET'?' selected':'')+'>pallet(s) Arlog</option><option value="RACK"'+(l.t==='RACK'?' selected':'')+'>rack(s)</option></select>'+
+        '<span style="font-size:12px;color:#6e6e73">de</span><input type="number" min="0" value="'+l.q+'" onchange="_ubicLinea('+i+','+k+',\'q\',this.value)" style="'+sel+';width:70px"><span style="font-size:12px;color:#6e6e73">cubiertas c/u = '+(l.n*l.q)+'</span>'+
+        '<button onclick="_ubicLinea('+i+','+k+',\'del\')" title="Sacar línea" style="'+sel+';padding:2px 8px;cursor:pointer">✕</button></div>'; }).join('')+
+      '<button onclick="_ubicLinea('+i+',0,\'add\')" style="'+sel+';padding:3px 10px;cursor:pointer;font-size:12px">+ Agregar línea</button>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
+        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'b\',this.value)">'+bl.map(function(b){ return '<option value="'+b+'"'+(b===x.b?' selected':'')+'>Bloque '+b+' · '+lib(b,'todo')+' libres</option>'; }).join('')+'</select>'+
+        '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'z\',this.value)">'+['sur','norte','calle','todo'].map(function(z){ return '<option value="'+z+'"'+(z===x.z?' selected':'')+'>'+ZN[z]+' · '+lib(x.b,z)+' libres</option>'; }).join('')+'</select>'+
+        '<span style="font-size:11px;color:#86868b">Ocupa '+nec.necPal+' lugar(es) de pallet'+(nec.necRack?' + '+nec.necRack+' pila(s) de rack (A y B, '+ap.rack+' racks por pila)':'')+'</span>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;margin-top:6px"><input value="'+x.items.map(function(o){return o.code;}).join(', ')+'" onchange="_ubicCambio('+i+',\'codes\',this.value)" style="flex:1;'+sel+';font-family:monospace;font-size:12px">'+
       '<button onclick="_ubicResugerir('+i+');_ubicRender()" title="Volver a sugerir" style="'+sel+';cursor:pointer">↻ Sugerir</button></div>'+
       (errs.length?'<div style="font-size:11px;color:#ff3b30;margin-top:4px">'+errs.slice(0,4).join(' · ')+'</div>':'')+
-      (!ok&&!errs.length?'<div style="font-size:11px;color:#ff9500;margin-top:4px">No alcanzan los lugares libres en esa zona: elegí otra zona o bloque, o sumá posiciones a mano.</div>':''))+
+      (falta?'<div style="font-size:11px;color:#ff9500;margin-top:4px">Faltan '+falta+' lugar(es) libres en esa zona: elegí otra zona o bloque, o sumá posiciones a mano.</div>':''))+
     '</div>';
   });
   html+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button onclick="_ubicCerrar()" style="padding:9px 16px;border-radius:10px;border:1px solid #d2d2d7;background:#fff;cursor:pointer">Cancelar</button>'+
-    '<button onclick="_ubicContinuar()" style="padding:9px 18px;border-radius:10px;border:none;background:#0071e3;color:#fff;font-weight:700;cursor:pointer">Continuar</button></div></div>';
+    '<button onclick="_ubicContinuar()" style="padding:9px 18px;border-radius:10px;border:none;background:#0071e3;color:#fff;font-weight:700;cursor:pointer">Confirmar armado y continuar</button></div></div>';
   box.innerHTML=html; box.style.display='flex';
 }
 function _ubicCerrar(){ var b=document.getElementById('ubic-nave-modal'); if(b) b.style.display='none'; }
 function _ubicContinuar(){
   var W=_planoW(); var errores=[];
-  _ubicRows.forEach(function(x,i){ if(x.omitir) return; var e=W.planoValidar(x.art,x.codes,_ubicExcl(i)); if(e.length) errores.push(x.art+': '+e[0]); if(!x.codes.length) errores.push(x.art+': sin posiciones (o marcá "No ubicar ahora")'); });
+  _ubicRows.forEach(function(x,i){ if(x.omitir) return;
+    var dif=_ubicTotal(x)-x.cant; if(dif) errores.push(x.art+': el armado suma '+_ubicTotal(x)+' y entran '+x.cant);
+    var e=W.planoValidar(x.art,x.items.map(function(o){return o.code;}),_ubicExcl(i)); if(e.length) errores.push(x.art+': '+e[0]);
+    if(!x.items.length) errores.push(x.art+': sin posiciones (o marcá "No ubicar ahora")'); });
   if(errores.length){ showToast('❌ '+errores[0]); return; }
   var lista=transitoGetAll(), tr=lista.find(function(t){return t.id===_ubicTr;}); if(!tr) return _ubicCerrar();
   _ubicRows.forEach(function(x){ var it=tr.items.find(function(r){return r.art===x.art;}); if(!it) return;
-    it.ubicNave={alm:x.alm,b:x.b,z:x.z,codes:x.omitir?[]:x.codes.slice(),omitir:x.omitir};
-    if(!x.omitir && x.codes.length && (it.sugerencia||{}).tipo==='bloque') it.posConfirmada=x.codes[0];
+    var arm=x.lineas.filter(function(l){return l.n>0;});
+    it.ubicNave={b:x.b,z:x.z,lineas:arm,items:x.omitir?[]:x.items.slice(),omitir:x.omitir};
+    it.armado=arm.map(function(l){ return l.n+(l.t==='RACK'?'r':'p')+' x '+l.q; }).join(' + ');
+    if(!x.omitir && x.items.length && (it.sugerencia||{}).tipo==='bloque') it.posConfirmada=x.items[0].code;
   });
   transitoSave(lista);
   _ubicCerrar();
@@ -2684,12 +2706,12 @@ function _ubicContinuar(){
 }
 // Al confirmar la recepción (stock ya sumado): grabar las posiciones elegidas en el plano.
 function aplicarUbicNave(tr){
-  var W=_planoW(); var conUbic=(tr.items||[]).filter(function(r){ return r.ubicNave && !r.ubicNave.omitir && r.ubicNave.codes && r.ubicNave.codes.length; });
+  var W=_planoW(); var conUbic=(tr.items||[]).filter(function(r){ return r.ubicNave && !r.ubicNave.omitir && r.ubicNave.items && r.ubicNave.items.length; });
   if(!conUbic.length) return;
   if(!W){ showToast('⚠️ No se pudo abrir el plano: las posiciones quedan guardadas en el tránsito'); return; }
   var malos=[];
-  conUbic.forEach(function(r){ var res=W.planoAsignar(r.art, r.ubicNave.codes); if(res.err.length) malos.push(r.art+': '+res.err[0]);
-    var da=DATA.find(function(d){return d.art===r.art;}); if(da && res.ok.length) da.bloque=r.ubicNave.codes[0]; });
+  conUbic.forEach(function(r){ var res=W.planoAsignar(r.art, r.ubicNave.items); if(res.err.length) malos.push(r.art+': '+res.err[0]);
+    var da=DATA.find(function(d){return d.art===r.art;}); if(da && res.ok.length) da.bloque=r.ubicNave.items[0].code; });
   if(malos.length) showToast('⚠️ '+malos[0]); else showToast('📍 '+conUbic.length+' artículo(s) ubicados en la nave');
 }
 function procesarStockPaste(){
@@ -17844,11 +17866,11 @@ function codeToU(code){const m=String(code||'').toUpperCase().trim().match(/^(\d
 const exclDe=codes=>{const s=new Set();(codes||[]).forEach(k=>{const u=codeToU(k);if(!u)return;s.add(codigo(u.b,u.c,u.r));if(u.alm==='RACK')s.add(codigo(u.b,u.c,u.r+1))});return s};
 function asignar(art,codes){
   art=String(art);const err=[],ok=[];ubIndex();
-  codes.forEach(k=>{const u=codeToU(k);if(!u){err.push(k+': código inválido');return}
+  codes.forEach(k0=>{const k=typeof k0==='object'?k0.code:k0,q=typeof k0==='object'?k0.q:null;const u=codeToU(k);if(!u){err.push(k+': código inválido');return}
     const rows=u.alm==='RACK'?[u.r,u.r+1]:[u.r];const bad=rows.find(r=>{const oc=ocupante(u.b,u.c,r);return (oc&&oc!==art)||!(estado(S.blocks.find(x=>x.n===u.b),u.c,r)==='pos')});
     if(bad){const oc=ocupante(u.b,u.c,bad);err.push(k+(oc&&oc!==art?': ocupado por '+oc:': no es un lugar libre'));return}
     if(rows.some(r=>ocupante(u.b,u.c,r)===art))return; // ya era suyo
-    const U=ubDe(art);U.u.push({b:u.b,c:u.c,r:u.r,alm:u.alm});rows.forEach(r=>IDX[u.b+'|'+u.c+'|'+r]=art);ok.push(k)});
+    const U=ubDe(art);const nu={b:u.b,c:u.c,r:u.r,alm:u.alm};if(q!=null)nu.q=q;U.u.push(nu);rows.forEach(r=>IDX[u.b+'|'+u.c+'|'+r]=art);ok.push(k)});
   ubGuardar();ubIndex();syncBloque(art);return {ok,err};
 }
 function sacarCodigo(art,code){const U=UB[art];if(!U)return;const i=U.u.findIndex(u=>codU(U,u)===code);if(i>=0)U.u.splice(i,1);if(!U.u.length)delete UB[art];ubGuardar();ubIndex();syncBloque(art)}
@@ -18048,6 +18070,23 @@ window.planoNecesita=function(art,cant,alm){const r=artDe(art);return r?necesita
 window.planoSugerir=function(o){const r=artDe(o.art);const need=r?necesita(r,o.cant,o.alm):null;const L=libresLista(+o.b,o.z,o.alm,exclDe(o.excl));const n=o.n!=null?o.n:(need==null?1:need);return {need,codes:L.slice(0,n),libres:L.length,faltan:Math.max(0,n-L.length)}};
 window.planoValidar=function(art,codes,excl){ubIndex();const ex=exclDe(excl),err=[];codes.forEach(k=>{const u=codeToU(k);if(!u){err.push(k+': código inválido');return}const rows=u.alm==='RACK'?[u.r,u.r+1]:[u.r];
   rows.forEach(r=>{const oc=ocupante(u.b,u.c,r);if(oc&&oc!==String(art))err.push(k+': ocupado por '+oc);else if(estado(S.blocks.find(x=>x.n===u.b),u.c,r)!=='pos')err.push(k+': no es un lugar libre');else if(ex.has(codigo(u.b,u.c,r)))err.push(k+': elegido para otro artículo')})});return [...new Set(err)]};
+// Armado sugerido: cuántos pallets / racks y de cuántas cubiertas cada uno
+window.planoArmado=function(art,cant,alm){const r=artDe(art);if(!r)return [];const L=[];
+  if(alm==='PALLET'){const mp=r.max_pos||0;if(!mp)return [{n:1,t:'PALLET',q:cant}];const n=Math.floor(cant/mp),rem=cant-n*mp;if(n)L.push({n,t:'PALLET',q:mp});if(rem)L.push({n:1,t:'PALLET',q:rem});return L}
+  const c=S.cap[rackTipoDe(r)]||1,n=Math.floor(cant/c),rem=cant-n*c;if(n)L.push({n,t:'RACK',q:c});if(rem)L.push({n:1,t:'RACK',q:rem});return L};
+window.planoApilado=function(){return {rack:S.apilado,pallet:Math.max(1,S.pallet.apil)}};
+// Posiciones para un armado: un lugar por pila de pallets y dos (A+B) por pila de racks.
+// Devuelve [{code,q}] con las cubiertas que quedan en cada posición.
+window.planoSugerirMix=function(o){
+  const ap=Math.max(1,S.pallet.apil),ar=Math.max(1,S.apilado),pal=[],rk=[];
+  (o.lineas||[]).forEach(l=>{for(let i=0;i<(+l.n||0);i++)(l.t==='RACK'?rk:pal).push(+l.q||0)});
+  const pilas=(arr,h)=>{const out=[];for(let i=0;i<arr.length;i+=h)out.push(arr.slice(i,i+h).reduce((a,b)=>a+b,0));return out};
+  const pP=pilas(pal,ap),pR=pilas(rk,ar),ex=exclDe(o.excl);
+  const cP=libresLista(+o.b,o.z,'PALLET',ex,pP.length+0);
+  const ex2=exclDe([...(o.excl||[]),...cP]);const cR=libresLista(+o.b,o.z,'RACK',ex2,pR.length);
+  const res=[];cP.forEach((k,i)=>res.push({code:k,q:pP[i]}));cR.forEach((k,i)=>res.push({code:k,q:pR[i]}));
+  return {items:res,necPal:pP.length,necRack:pR.length,faltanPal:Math.max(0,pP.length-cP.length),faltanRack:Math.max(0,pR.length-cR.length)};
+};
 window.planoAsignar=function(art,codes){const r=asignar(art,codes);calcOcc();renderAll();return r};
 // Resumen para el Dashboard del WMS (mismos números que este plano). "capM2/occM2" quedan por
 // compatibilidad y ahora son posiciones de la cuadrícula.
