@@ -2719,6 +2719,91 @@ function aplicarUbicNave(tr){
     var da=DATA.find(function(d){return d.art===r.art;}); if(da && res.ok.length) da.bloque=r.ubicNave.items[0].code; });
   if(malos.length) showToast('⚠️ '+malos[0]); else showToast('📍 '+conUbic.length+' artículo(s) ubicados en la nave');
 }
+// ===== SALIDA → SACAR DE LA NAVE =====
+// Previa del pedido: de qué posiciones del plano sale cada artículo y cuántas cubiertas de cada una.
+// Se guarda en el tránsito, sale en la planilla de picking y al despachar se descuenta del plano.
+var _salTr=null, _salRows=[];
+function _salPend(art, menosTrId){ var t=0; try{ transitoGetAll().forEach(function(x){ if(x.flujo==='salida'&&x.descontado&&x.estado==='transito') (x.items||[]).forEach(function(it){ if(it.art===art) t+=(it.cant||0); }); }); }catch(e){} return t; }
+function _salBloqueCant(r, real){
+  var tot=real?(r.cantReal||r.cant):(r.cant||0);
+  var dp=(r.punteraDetalle||[]).reduce(function(s,d){return s+(d.unidades||0);},0);
+  var rD=(r.rackDetalle&&r.rackDetalle.length)?r.rackDetalle:(r.posRack?[{unidades:r.rackRestante||0}]:[]);
+  var dr=rD.reduce(function(s,d){return s+(d.unidades||0);},0);
+  return Math.max(0, tot-dp-dr);
+}
+function abrirArmadoSalida(id){
+  var W=_planoW();
+  if(!W){ renderNave(); var f=document.querySelector('#nave-capacidad iframe'); if(f){ showToast('Cargando el plano de nave…'); f.addEventListener('load', function(){ setTimeout(function(){ abrirArmadoSalida(id); }, 60); }, {once:true}); return; } showToast('❌ No se pudo abrir el plano de nave'); return; }
+  var tr=transitoGetAll().find(function(t){return t.id===id;}); if(!tr) return;
+  _salTr=id; _salRows=[];
+  tr.items.forEach(function(r){
+    var cant=_salBloqueCant(r,false); if(cant<=0) return;
+    var pend=_salPend(r.art), pos=W.planoPosiciones(r.art, pend);
+    var row={art:r.art, med:r.med, diseno:r.diseno, cant:cant, bloque:r.bloque||'', pend:pend, pos:pos, sacar:{}};
+    var prev=r.salidaNave&&r.salidaNave.items;
+    if(prev&&prev.length){ prev.forEach(function(o){ row.sacar[o.code]=o.sacar; }); }
+    else { W.planoSugerirSalida(r.art, cant, pend).items.forEach(function(o){ if(o.sacar) row.sacar[o.code]=o.sacar; }); }
+    _salRows.push(row);
+  });
+  if(!_salRows.length){ showToast('Este pedido sale todo de punteras y Mapa Racks: no hay nada que sacar de bloque'); return; }
+  _salRender();
+}
+function _salSuma(x){ return Object.keys(x.sacar).reduce(function(a,k){ return a+(+x.sacar[k]||0); },0); }
+function _salCambio(i, code, val){ var x=_salRows[i]; var v=Math.max(0, parseInt(val,10)||0); var p=x.pos.find(function(o){return o.code===code;}); if(p) v=Math.min(v,p.q); if(v) x.sacar[code]=v; else delete x.sacar[code]; _salRender(); }
+function _salResugerir(i){ var W=_planoW(), x=_salRows[i]; x.sacar={}; W.planoSugerirSalida(x.art, x.cant, x.pend).items.forEach(function(o){ if(o.sacar) x.sacar[o.code]=o.sacar; }); _salRender(); }
+function _salRender(){
+  var box=document.getElementById('sal-nave-modal');
+  if(!box){ box=document.createElement('div'); box.id='sal-nave-modal'; box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:3000;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 10px'; document.body.appendChild(box); }
+  var inp='padding:5px 7px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff;width:70px';
+  var html='<div style="background:#fff;border-radius:14px;max-width:760px;width:100%;padding:16px 16px 12px;box-shadow:0 10px 40px rgba(0,0,0,.25)">'+
+    '<div style="font-size:17px;font-weight:700">📍 Armado de salida</div>'+
+    '<div style="font-size:12px;color:#86868b;margin:2px 0 12px">De qué posiciones de la nave sale cada artículo (lo que no viene de punteras ni del Mapa Racks). Sugerido: primero las posiciones con menos cubiertas, para liberar lugares. Se guarda en el pedido, sale en la planilla de picking y se descuenta del plano al despachar.</div>';
+  _salRows.forEach(function(x,i){
+    var suma=_salSuma(x), dif=suma-x.cant, ok=!dif;
+    html+='<div style="border:1px solid '+(!x.pos.length?'#ff9500':(ok?'#34c759':'#ff3b30'))+';border-radius:10px;padding:10px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:13px">'+x.art+' — '+(x.med||'')+' '+(x.diseno||'')+'</div><div style="font-size:12px;color:#6e6e73">sale de bloque: <b>'+x.cant+'</b> un.</div></div>';
+    if(!x.pos.length){
+      html+='<div style="font-size:12px;color:#ff9500;margin-top:6px">Sin codificar en la nave: sale de '+(x.bloque||'sin bloque')+'. Codificalo en 🏭 Nave para saber de qué posiciones sacar.</div></div>'; return;
+    }
+    html+='<div style="font-size:12px;margin:6px 0 4px">Sacar: <b>'+suma+'</b> de '+x.cant+' '+(dif?'<span style="color:#ff3b30">('+(dif>0?'sobran ':'faltan ')+Math.abs(dif)+')</span>':'✅')+
+      ' <button onclick="_salResugerir('+i+')" style="padding:2px 8px;border:1px solid #d2d2d7;border-radius:8px;background:#fff;cursor:pointer;font-size:12px">↻ Sugerir</button></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 10px">'+
+      x.pos.map(function(p){ var s_=x.sacar[p.code]||0; return '<div style="display:flex;align-items:center;gap:6px;font-size:12px'+(s_?'':';color:#86868b')+'"><span style="font-family:monospace;min-width:70px">'+p.code+'</span><span>'+(p.alm==='RACK'?'rack':'pallet')+' · '+p.q+' un.</span>'+
+        '<input type="number" min="0" max="'+p.q+'" value="'+s_+'" onchange="_salCambio('+i+',\''+p.code+'\',this.value)" style="'+inp+'"></div>'; }).join('')+'</div></div>';
+  });
+  html+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button onclick="_salCerrar()" style="padding:9px 16px;border-radius:10px;border:1px solid #d2d2d7;background:#fff;cursor:pointer">Cancelar</button>'+
+    '<button onclick="_salGuardar()" style="padding:9px 18px;border-radius:10px;border:none;background:#0071e3;color:#fff;font-weight:700;cursor:pointer">Guardar armado de salida</button></div></div>';
+  box.innerHTML=html; box.style.display='flex';
+}
+function _salCerrar(){ var b=document.getElementById('sal-nave-modal'); if(b) b.style.display='none'; }
+function _salGuardar(){
+  var mal=_salRows.filter(function(x){ return x.pos.length && _salSuma(x)!==x.cant; });
+  if(mal.length){ showToast('❌ '+mal[0].art+': lo que se saca suma '+_salSuma(mal[0])+' y el pedido lleva '+mal[0].cant+' de bloque'); return; }
+  var lista=transitoGetAll(), tr=lista.find(function(t){return t.id===_salTr;}); if(!tr) return _salCerrar();
+  _salRows.forEach(function(x){ var it=tr.items.find(function(r){return r.art===x.art;}); if(!it||!x.pos.length) return;
+    it.salidaNave={items:Object.keys(x.sacar).map(function(k){ return {code:k, sacar:x.sacar[k]}; }), fecha:new Date().toLocaleString('es-AR')}; });
+  transitoSave(lista); _salCerrar(); showToast('📍 Armado de salida guardado: ya podés imprimir el picking'); try{ cydRenderTransito(); }catch(e){}
+}
+// Texto para la planilla de picking: posiciones y cubiertas a sacar (guardado o sugerido)
+function _salTextoPicking(r, cant){
+  var W=_planoW(); if(r.salidaNave&&r.salidaNave.items&&r.salidaNave.items.length) return {txt:r.salidaNave.items.map(function(o){return o.code+' ('+o.sacar+')';}).join(', '), estado:'previo'};
+  if(!W) return null; try{ var sg=W.planoSugerirSalida(r.art, cant, _salPend(r.art)); var it=sg.items.filter(function(o){return o.sacar;}); if(!it.length) return null; return {txt:it.map(function(o){return o.code+' ('+o.sacar+')';}).join(', '), estado:'sugerido'}; }catch(e){ return null; }
+}
+// Al despachar: descontar del plano (lo del armado de salida; si no se hizo, lo sugerido)
+function aplicarSalidaNave(tr){
+  var W=_planoW(); if(!W) return;
+  var n=0, lib=0;
+  (tr.items||[]).forEach(function(r){
+    var cant=_salBloqueCant(r,true); if(cant<=0) return;
+    var pend=_salPend(r.art); // incluye este pedido: todavía figura en tránsito
+    var lista=(r.salidaNave&&r.salidaNave.items)||[];
+    var suma=lista.reduce(function(a,o){return a+(+o.sacar||0);},0);
+    if(suma!==cant) lista=W.planoSugerirSalida(r.art, cant, pend).items.filter(function(o){return o.sacar;});
+    if(!lista.length) return;
+    var res=W.planoSacar(r.art, lista, pend); n++; lib+=res.liberadas;
+  });
+  if(n) showToast('📍 Descontado de la nave en '+n+' artículo(s) · '+lib+' posición(es) liberadas');
+}
 function procesarStockPaste(){
   var texto=document.getElementById('stock-paste').value.trim();
   if(!texto){ showToast('❌ Pegá la ficha de pila primero'); return; }
@@ -5942,6 +6027,7 @@ function cydEjecutarDespacho(id){
     localStorage.setItem('wms_vol_hist', JSON.stringify(histVol.slice(0,100)));
   }
 
+  try{ aplicarSalidaNave(tr); }catch(e){ console.warn('No se pudo descontar de la nave', e); }
   tr.estado = 'confirmado';
   tr.fechaConfirmacion = fecha;
   tr.horaConfirmacion  = hora;
@@ -6131,6 +6217,7 @@ function cydEditarCantTransito(id, artIdx, delta){
 }
 
 function cydPlanillaPicking(id){
+  if(!_planoW()){ renderNave(); var _f=document.querySelector('#nave-capacidad iframe'); if(_f && !_f._esperaPicking){ _f._esperaPicking=1; showToast('Cargando el plano de nave…'); _f.addEventListener('load', function(){ setTimeout(function(){ cydPlanillaPicking(id); }, 60); }, {once:true}); return; } }
   var lista = transitoGetAll();
   var tr = lista.find(function(t){return t.id===id;});
   if(!tr) return;
@@ -6171,7 +6258,8 @@ function cydPlanillaPicking(id){
     }
     var resto = totalCant - dePuntera - rackCant;
     if(resto>0 && r.bloque){
-      fuentes.push({tipo:'bloque', ubic: r.bloque, cant: resto});
+      var _st=null; try{ _st=_salTextoPicking(r, resto); }catch(e){}
+      fuentes.push({tipo:'bloque', ubic: _st ? _st.txt+(_st.estado==='sugerido'?' · sugerido':' ✔') : r.bloque, cant: resto});
     }
     if(!fuentes.length){
       // Sin detalle guardado (tránsito viejo, de antes de este dato) —
@@ -11374,6 +11462,9 @@ setInterval(function(){
   var sig=_dashFirma();
   if(sig!==_dashSig){ _dashSig=sig; try{ renderDash(); }catch(e){} }
 }, 4000);
+// Montar el plano al arrancar, así guardado / picking / recepción lo tienen listo
+// (si se monta recién al tocar un botón, el navegador puede bloquear la ventana del informe).
+window.addEventListener('load', function(){ setTimeout(function(){ try{ renderNave(); }catch(e){} }, 1200); });
 window.addEventListener('message', function(ev){
   var d = ev.data;
   if(!d || d.tipo!=='plano-cap-alto') return;
@@ -12617,6 +12708,10 @@ function cydRenderTransito(){
     if(esSalidaBtn){
       html += '<button onclick="cydPlanillaPicking(&quot;'+tr.id+'&quot;)" style="padding:6px 10px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">🖨️ Picking</button>';
       html += '<button onclick="cydPlanillaDespacho(&quot;'+tr.id+'&quot;)" style="padding:6px 10px;background:#0071e3;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📄 Despacho</button>';
+      if(esPend){
+        var _conSal = (tr.items||[]).some(function(r){ return r.salidaNave && r.salidaNave.items; });
+        html += '<button onclick="abrirArmadoSalida(&quot;'+tr.id+'&quot;)" style="padding:6px 10px;background:'+(_conSal?'#e8f0fe':'#af52de')+';color:'+(_conSal?'#0071e3':'#fff')+';border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📍 '+(_conSal?'Salida armada ✓':'Armar salida')+'</button>';
+      }
       if(esPend){
         html += '<button onclick="cydConfirmarSalidaDesdeTransito(&quot;'+tr.id+'&quot;)" style="padding:6px 10px;background:#d70015;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📤 Despachar</button>';
       }
@@ -18020,7 +18115,9 @@ function fichaStockHTML(n){
 function renderFicha(){
   const b=S.blocks.find(x=>x.n===sel), k=cuenta(b), g=geo();
   const tot=z=>k[z].pos, all=tot('sur')+tot('calle')+tot('norte');
-  const br=[['pos','Posición'],['pas','Pasillo'],['sel','Rack selectivo'],['off','No disponible']];
+  // El rack selectivo (Mapa Racks) es fijo y solo está en el Bloque 1: no se ofrece en los demás.
+  const br=[['pos','Posición (pallet o rack apilable)'],['pas','Pasillo (paso de autoelevador)'],...(b.n===1?[['sel','Rack selectivo (Mapa Racks)']]:[]),['off','No disponible']];
+  if(!br.some(x=>x[0]===brush))brush='pas';
   document.getElementById('ficha').innerHTML=`
     <div class="ph"><h2>Bloque ${b.n}</h2><span class="note num">${S.grid.cols} columnas × ${S.grid.filas} filas de rack (A/B) · lugar ${g.colW.toLocaleString('es-AR',{maximumFractionDigits:2})} × ${g.rowH.toLocaleString('es-AR',{maximumFractionDigits:2})} m</span></div>
     <div class="op"><h3>Distribución del bloque</h3>
@@ -18108,6 +18205,22 @@ window.planoSugerirMix=function(o){
   const res=[];cP.forEach((k,i)=>res.push({code:k,q:pP[i]}));cR.forEach((k,i)=>res.push({code:k,q:pR[i]}));
   return {items:res,necPal:pP.length,necRack:pR.length,faltanPal:Math.max(0,pP.length-cP.length),faltanRack:Math.max(0,pR.length-cR.length)};
 };
+// ----- Salidas: de qué posiciones sacar -----
+// Cubiertas por posición: la que se grabó al ubicar (q) o, si no hay, el stock en piso repartido parejo.
+// pend = cubiertas de este artículo en pedidos ya mandados a tránsito (descontadas del stock pero todavía en la nave)
+function posicionesDe(art,pend){art=String(art);const U=UB[art];if(!U||!U.u.length)return [];calcOcc();const resto=(OCC&&OCC.resto[art]||0)+(+pend||0);
+  const sinQ=U.u.filter(u=>u.q==null),conQ=U.u.reduce((a,u)=>a+(u.q!=null?u.q:0),0),rep=sinQ.length?Math.max(0,resto-conQ)/sinQ.length:0;
+  return U.u.map(u=>({code:codU(U,u),alm:almU(U,u),q:u.q!=null?u.q:Math.round(rep)}))}
+window.planoPosiciones=posicionesDe;
+// Sugerencia: vaciar la mayor cantidad de posiciones posible → primero las que tienen menos cubiertas.
+window.planoSugerirSalida=function(art,cant,pend){const L=posicionesDe(art,pend).filter(p=>p.q>0).sort((a,b)=>a.q-b.q||a.code.localeCompare(b.code));let falta=cant;const out=[];
+  L.forEach(p=>{const s_=Math.min(p.q,Math.max(0,falta));out.push({code:p.code,q:p.q,sacar:s_});falta-=s_});return {items:out,faltan:Math.max(0,falta)}};
+// Descontar de las posiciones; las que quedan en 0 se liberan.
+window.planoSacar=function(art,lista,pend){art=String(art);const U=UB[art];if(!U)return {liberadas:0,sacado:0};let lib=0,tot=0;
+  const pos=posicionesDe(art,pend);
+  lista.forEach(o=>{const i=U.u.findIndex(u=>codU(U,u)===o.code);if(i<0)return;const p=pos.find(x=>x.code===o.code),q=(U.u[i].q!=null?U.u[i].q:(p?p.q:0));const n=Math.min(q,Math.max(0,+o.sacar||0));tot+=n;
+    if(q-n<=0){U.u.splice(i,1);lib++}else U.u[i].q=q-n});
+  if(!U.u.length)delete UB[art];ubGuardar();ubIndex();if(UB[art])syncBloque(art);calcOcc();renderAll();return {liberadas:lib,sacado:tot}};
 window.planoAsignar=function(art,codes){const r=asignar(art,codes);calcOcc();renderAll();return r};
 // Resumen para el Dashboard del WMS (mismos números que este plano). "capM2/occM2" quedan por
 // compatibilidad y ahora son posiciones de la cuadrícula.
