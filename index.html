@@ -1339,7 +1339,8 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
   <div class="prod-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <span style="font-size:13px;font-weight:600;color:#86868b;text-transform:uppercase;letter-spacing:.5px">⚡ Productividad</span>
-      <button onclick="exportarProductividad()" style="padding:6px 12px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">📄 Informe</button>
+      <span style="display:flex;gap:6px;align-items:center"><select id="prod-mes-sel" onchange="prodCambiarMes(this.value)" style="padding:6px 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:12px;background:#fff"></select>
+      <button onclick="exportarProductividad()" style="padding:6px 12px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">📄 Informe</button></span>
     </div>
 
     <!-- Tabs internos -->
@@ -9044,7 +9045,7 @@ function registrarMovProd(tipo, unidades, detalle, grupoReal, inicioReal, finRea
     localStorage.setItem(dayKey, JSON.stringify(movsDia));
 
     var mes = partsFecha.length===3
-      ? (partsFecha[1]+'_'+partsFecha[2])
+      ? (String(partsFecha[1]).padStart(2,'0')+'_'+partsFecha[2])
       : mesKeyHoyZP();
     var histKey = 'prod_hist_'+mes;
     var hist = JSON.parse(localStorage.getItem(histKey)||'[]');
@@ -9076,6 +9077,45 @@ function mesKeyHoyZP(){
   var d = new Date();
   return String(d.getMonth()+1).padStart(2,'0')+'_'+d.getFullYear();
 }
+// ===== Mes elegido en Productividad (Resumen e Informe) =====
+// Antes algunos movimientos se guardaban con otra clave: "9_2026" (mes sin cero, desde la cola de
+// pedidos) o "2026_09" (al cargar con fecha manual). Se unifican todas en "09_2026" al abrir.
+var _prodMesSel = null;
+function prodMesSel(){ return _prodMesSel || mesKeyHoyZP(); }
+function prodUnificarHist(){
+  try{
+    var keys=[]; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('prod_hist_')===0) keys.push(k); }
+    keys.forEach(function(k){
+      var m=k.slice(10), mm=null, yy=null, a;
+      if((a=m.match(/^(\d{1,2})_(\d{4})$/))){ mm=a[1]; yy=a[2]; }
+      else if((a=m.match(/^(\d{4})_(\d{1,2})$/))){ yy=a[1]; mm=a[2]; }
+      else return;
+      var ok='prod_hist_'+String(mm).padStart(2,'0')+'_'+yy; if(ok===k) return;
+      var src=JSON.parse(localStorage.getItem(k)||'[]'), dst=JSON.parse(localStorage.getItem(ok)||'[]');
+      var vistos={}; dst.forEach(function(x){ vistos[JSON.stringify(x)]=1; });
+      src.forEach(function(x){ if(!vistos[JSON.stringify(x)]) dst.push(x); });
+      localStorage.setItem(ok, JSON.stringify(dst)); localStorage.removeItem(k);
+    });
+  }catch(e){ console.warn('No se pudo unificar el historial de productividad', e); }
+}
+function prodMesesDisponibles(){
+  prodUnificarHist();
+  var set={}; set[mesKeyHoyZP()]=1;
+  for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); var a=k&&k.match(/^prod_hist_(\d{2})_(\d{4})$/); if(a){ try{ if(JSON.parse(localStorage.getItem(k)||'[]').length) set[a[1]+'_'+a[2]]=1; }catch(e){} } }
+  return Object.keys(set).sort(function(x,y){ var a=x.split('_'),b=y.split('_'); return (b[1]+b[0]).localeCompare(a[1]+a[0]); });
+}
+function prodMesNombre(k){ var a=k.split('_'); return new Date(+a[1], +a[0]-1, 1).toLocaleDateString('es-AR',{month:'long',year:'numeric'}); }
+function prodRenderMesSel(){
+  var sel=document.getElementById('prod-mes-sel'); if(!sel) return;
+  var cur=prodMesSel();
+  sel.innerHTML=prodMesesDisponibles().map(function(k){ var n=0; try{ n=JSON.parse(localStorage.getItem('prod_hist_'+k)||'[]').length; }catch(e){}
+    return '<option value="'+k+'"'+(k===cur?' selected':'')+'>'+prodMesNombre(k)+(k===mesKeyHoyZP()?' (actual)':'')+' · '+n+' movs</option>'; }).join('');
+}
+function prodCambiarMes(k){
+  _prodMesSel=k;
+  if(typeof _prodTab!=='undefined' && _prodTab!=='resumen'){ var b=document.getElementById('ptab-resumen'); if(b) setProdTab('resumen', b); else renderResumenProd(); }
+  else renderResumenProd();
+}
 
 function getMovimientos(){
   return JSON.parse(localStorage.getItem(getProdKey())||'[]');
@@ -9093,7 +9133,7 @@ function saveMovimiento(mov){
 
   // Historial mensual — también según la fecha del movimiento
   const mes = partsFecha.length===3
-    ? (partsFecha[1]+'_'+partsFecha[2])
+    ? (String(partsFecha[1]).padStart(2,'0')+'_'+partsFecha[2])
     : mesKeyHoyZP();
   const histKey = 'prod_hist_'+mes;
   const hist = JSON.parse(localStorage.getItem(histKey)||'[]');
@@ -9179,7 +9219,7 @@ function guardarMovimientoFecha(){
 
   // Save to monthly history
   const mes = _prodFechaManual 
-    ? _prodFechaManual.substring(0,7).replace('-','_').replace('-','_')
+    ? (_prodFechaManual.substring(5,7)+'_'+_prodFechaManual.substring(0,4))
     : mesKeyHoyZP();
   const histKey = 'prod_hist_'+mes;
   const hist = JSON.parse(localStorage.getItem(histKey)||'[]');
@@ -9404,7 +9444,7 @@ function eliminarMov(id){
   // También sacarlo del historial mensual (de ahí sale el resumen del mes)
   const partsFecha = (eliminado.fecha||'').split('/'); // dd/mm/yyyy
   if(partsFecha.length===3){
-    const mesKey = 'prod_hist_'+partsFecha[1]+'_'+partsFecha[2];
+    const mesKey = 'prod_hist_'+String(partsFecha[1]).padStart(2,'0')+'_'+partsFecha[2];
     const hist = JSON.parse(localStorage.getItem(mesKey)||'[]');
     const hIdx = hist.findIndex(function(m){ return m.id===id; });
     if(hIdx>=0){
@@ -9519,10 +9559,10 @@ function guardarEdicionMov(){
   // Historial mensual: sacar del mes viejo (si corresponde) y reflejar en el mes nuevo
   const partsVieja = fechaVieja.split('/');
   if(partsVieja.length===3){
-    const mesKeyVieja = 'prod_hist_'+partsVieja[1]+'_'+partsVieja[2];
+    const mesKeyVieja = 'prod_hist_'+String(partsVieja[1]).padStart(2,'0')+'_'+partsVieja[2];
     const histVieja = JSON.parse(localStorage.getItem(mesKeyVieja)||'[]');
     const hIdxVieja = histVieja.findIndex(function(m){ return m.id===id; });
-    const mesCambio = cambioFecha && (partsVieja[1]+'_'+partsVieja[2]) !== (fechaNueva.split('/')[1]+'_'+fechaNueva.split('/')[2]);
+    const mesCambio = cambioFecha && (String(partsVieja[1]).padStart(2,'0')+'_'+partsVieja[2]) !== (String(fechaNueva.split('/')[1]).padStart(2,'0')+'_'+fechaNueva.split('/')[2]);
     if(hIdxVieja>=0){
       if(mesCambio){ histVieja.splice(hIdxVieja,1); }
       else { histVieja[hIdxVieja] = mov; }
@@ -9530,7 +9570,7 @@ function guardarEdicionMov(){
     }
     if(mesCambio){
       const partsNueva2 = fechaNueva.split('/');
-      const mesKeyNueva = 'prod_hist_'+partsNueva2[1]+'_'+partsNueva2[2];
+      const mesKeyNueva = 'prod_hist_'+String(partsNueva2[1]).padStart(2,'0')+'_'+partsNueva2[2];
       const histNueva = JSON.parse(localStorage.getItem(mesKeyNueva)||'[]');
       histNueva.push(mov);
       localStorage.setItem(mesKeyNueva, JSON.stringify(histNueva));
@@ -9546,8 +9586,9 @@ function guardarEdicionMov(){
 }
 
 function exportarProductividad(){
-  const mes = new Date().toLocaleDateString('es-AR',{month:'long',year:'numeric'});
-  const mesKey = mesKeyHoyZP();
+  prodUnificarHist();
+  const mesKey = prodMesSel();
+  const mes = prodMesNombre(mesKey);
   const hist = JSON.parse(localStorage.getItem('prod_hist_'+mesKey)||'[]');
   if(!hist.length){ showToast('Sin movimientos para exportar'); return; }
 
@@ -10667,7 +10708,7 @@ function confirmarColaPedido(idx){
 
   // Monthly history
   const partes = p.fecha.split('/');
-  const mesKey = 'prod_hist_'+partes[1]+'_'+partes[2];
+  const mesKey = 'prod_hist_'+String(partes[1]).padStart(2,'0')+'_'+partes[2];
   const hist = JSON.parse(localStorage.getItem(mesKey)||'[]');
   hist.push(mov);
   localStorage.setItem(mesKey, JSON.stringify(hist));
@@ -10710,7 +10751,7 @@ function limpiarColaPedidos(){
 
 // Resumen mensual
 function abrirAjusteGrupo(g){
-  const mes = mesKeyHoyZP();
+  const mes = prodMesSel();
   const hist = JSON.parse(localStorage.getItem('prod_hist_'+mes)||'[]');
   const totalUnid = hist.filter(m=>m.grupo===g).reduce((s,m)=>s+(m.unidades||0),0);
   const totalMin = hist.filter(m=>m.grupo===g).reduce((s,m)=>s+(m.durMin||0),0);
@@ -10726,7 +10767,7 @@ function abrirAjusteGrupo(g){
 function guardarAjusteGrupo(){
   const g = window._ajusteGrupoActual;
   if(!g) return;
-  const mes = mesKeyHoyZP();
+  const mes = prodMesSel();
   const histKey = 'prod_hist_'+mes;
   const hist = JSON.parse(localStorage.getItem(histKey)||'[]');
 
@@ -10773,10 +10814,11 @@ function guardarAjusteGrupo(){
 function renderResumenProd(){
   const el = document.getElementById('prod-resumen-content');
   if(!el) return;
-  const mes = mesKeyHoyZP();
+  prodRenderMesSel();
+  const mes = prodMesSel();
   const hist = JSON.parse(localStorage.getItem('prod_hist_'+mes)||'[]');
 
-  if(!hist.length){ el.innerHTML='<div class="empty">Sin movimientos este mes</div>'; return; }
+  if(!hist.length){ el.innerHTML='<div class="empty">Sin movimientos en '+prodMesNombre(mes)+'</div>'; return; }
 
   // Stats totales
   const totalUnid = hist.reduce((s,m)=>s+m.unidades,0);
@@ -10801,6 +10843,7 @@ function renderResumenProd(){
 
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
+      <div style="grid-column:1/-1;font-size:13px;font-weight:700;text-transform:capitalize">${prodMesNombre(mes)}</div>
       <div class="prod-res-card"><div class="prod-res-val" style="color:#0071e3">${totalUnid.toLocaleString('es-AR')}</div><div style="font-size:10px;color:#86868b">Unidades del mes</div></div>
       <div class="prod-res-card"><div class="prod-res-val">${totalMovs}</div><div style="font-size:10px;color:#86868b">Movimientos</div></div>
       <div class="prod-res-card"><div class="prod-res-val">${dias}</div><div style="font-size:10px;color:#86868b">Días trabajados</div></div>
