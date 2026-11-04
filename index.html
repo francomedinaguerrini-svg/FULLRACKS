@@ -9081,7 +9081,7 @@ function mesKeyHoyZP(){
 // Antes algunos movimientos se guardaban con otra clave: "9_2026" (mes sin cero, desde la cola de
 // pedidos) o "2026_09" (al cargar con fecha manual). Se unifican todas en "09_2026" al abrir.
 var _prodMesSel = null;
-function prodMesSel(){ return _prodMesSel || mesKeyHoyZP(); }
+function prodMesSel(){ var el=document.getElementById('prod-mes-sel'); if(el && el.value) _prodMesSel=el.value; return _prodMesSel || mesKeyHoyZP(); }
 function prodUnificarHist(){
   try{
     var keys=[]; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k && k.indexOf('prod_hist_')===0) keys.push(k); }
@@ -9107,12 +9107,13 @@ function prodMesesDisponibles(){
 function prodMesNombre(k){ var a=k.split('_'); return new Date(+a[1], +a[0]-1, 1).toLocaleDateString('es-AR',{month:'long',year:'numeric'}); }
 function prodRenderMesSel(){
   var sel=document.getElementById('prod-mes-sel'); if(!sel) return;
-  var cur=prodMesSel();
+  var cur=_prodMesSel || mesKeyHoyZP();
   sel.innerHTML=prodMesesDisponibles().map(function(k){ var n=0; try{ n=JSON.parse(localStorage.getItem('prod_hist_'+k)||'[]').length; }catch(e){}
     return '<option value="'+k+'"'+(k===cur?' selected':'')+'>'+prodMesNombre(k)+(k===mesKeyHoyZP()?' (actual)':'')+' · '+n+' movs</option>'; }).join('');
 }
 function prodCambiarMes(k){
   _prodMesSel=k;
+  try{ showToast('📅 '+prodMesNombre(k)+': el Informe sale de este mes'); }catch(e){}
   if(typeof _prodTab!=='undefined' && _prodTab!=='resumen'){ var b=document.getElementById('ptab-resumen'); if(b) setProdTab('resumen', b); else renderResumenProd(); }
   else renderResumenProd();
 }
@@ -9586,7 +9587,7 @@ function guardarEdicionMov(){
 }
 
 function exportarProductividad(){
-  prodUnificarHist();
+  prodUnificarHist(); if(!document.getElementById('prod-mes-sel').options.length) prodRenderMesSel();
   const mesKey = prodMesSel();
   const mes = prodMesNombre(mesKey);
   const hist = JSON.parse(localStorage.getItem('prod_hist_'+mesKey)||'[]');
@@ -11508,6 +11509,9 @@ setInterval(function(){
 // Montar el plano al arrancar, así guardado / picking / recepción lo tienen listo
 // (si se monta recién al tocar un botón, el navegador puede bloquear la ventana del informe).
 window.addEventListener('load', function(){ setTimeout(function(){ try{ renderNave(); }catch(e){} }, 1200); });
+// Llenar el selector de mes apenas se abre Productividad
+(function(){ var _rp=window.renderProductividad; if(typeof _rp==='function'){ window.renderProductividad=function(){ var r=_rp.apply(this,arguments); try{ prodRenderMesSel(); }catch(e){} return r; }; } })();
+document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ try{ prodRenderMesSel(); }catch(e){} }, 500); });
 window.addEventListener('message', function(ev){
   var d = ev.data;
   if(!d || d.tipo!=='plano-cap-alto') return;
