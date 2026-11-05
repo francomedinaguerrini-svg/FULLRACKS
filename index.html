@@ -2658,7 +2658,7 @@ function _ubicRender(){
     '<div style="font-size:17px;font-weight:700">'+(_ubicPrevia?'📍 Armado previo':'📍 Ubicar en la nave')+'</div>'+(_ubicPrevia?'<div style="font-size:12px;color:#0071e3;margin-top:2px">Se guarda en el tránsito y sale en la hoja de guardado. No recibe la mercadería: al tocar Recibir lo vas a ver cargado para confirmar.</div>':'')+
     '<div style="font-size:12px;color:#86868b;margin:2px 0 12px">Revisá el armado de cada artículo (cuántos pallets / racks y de cuántas cubiertas), elegí bloque y zona y confirmá las posiciones sugeridas. Todo se puede cambiar.</div>';
   _ubicRows.forEach(function(x,i){
-    var tot=_ubicTotal(x), dif=tot-x.cant, lib=function(b,z){ return W.planoLibres(b,z,'PALLET',_ubicExcl(i)); };
+    var tot=_ubicTotal(x), dif=tot-x.cant, lib=function(b,z){ var p=W.planoLibres(b,z,'PALLET',_ubicExcl(i)), r=W.planoLibres(b,z,'RACK',_ubicExcl(i)); return (p&&r)?p+' pallet + '+r+' rack':(r?r+' rack':p+' pallet'); };
     var nec=x.nec||{necPal:0,necRack:0,faltanPal:0,faltanRack:0};
     var errs=x.omitir?[]:W.planoValidar(x.art, x.items.map(function(o){return o.code;}), _ubicExcl(i));
     var falta=nec.faltanPal+nec.faltanRack, ok=!dif&&!errs.length&&!falta&&x.items.length;
@@ -2678,7 +2678,7 @@ function _ubicRender(){
       '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
         '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'b\',this.value)">'+bl.map(function(b){ return '<option value="'+b+'"'+(b===x.b?' selected':'')+'>Bloque '+b+' · '+lib(b,'todo')+' libres</option>'; }).join('')+'</select>'+
         '<select style="'+sel+'" onchange="_ubicCambio('+i+',\'z\',this.value)">'+['sur','norte','calle','todo'].map(function(z){ return '<option value="'+z+'"'+(z===x.z?' selected':'')+'>'+ZN[z]+' · '+lib(x.b,z)+' libres</option>'; }).join('')+'</select>'+
-        '<span style="font-size:11px;color:#86868b">Ocupa '+nec.necPal+' lugar(es) de pallet'+(nec.necRack?' + '+nec.necRack+' pila(s) de rack (2 cuadrados c/u, '+ap.rack+' racks por pila)':'')+'</span>'+
+        '<span style="font-size:11px;color:#86868b">Ocupa '+nec.necPal+' lugar(es) de pallet'+(nec.necRack?' + '+nec.necRack+' pila(s) de rack ('+ap.rack+' racks por pila)':'')+'</span>'+
       '</div>'+
       '<div style="display:flex;gap:6px;margin-top:6px"><input value="'+x.items.map(function(o){return o.code;}).join(', ')+'" onchange="_ubicCambio('+i+',\'codes\',this.value)" style="flex:1;'+sel+';font-family:monospace;font-size:12px">'+
       '<button onclick="_ubicResugerir('+i+');_ubicRender()" title="Volver a sugerir" style="'+sel+';cursor:pointer">↻ Sugerir</button></div>'+
@@ -17719,6 +17719,20 @@ details.adv[open]>summary{margin-bottom:12px}
 #cellMenu button:hover{border-color:var(--fg)} #cellMenu button[aria-pressed="true"]{background:var(--c1);border-color:var(--c1);color:#fff}
 
 .cell.pos{background:#c0392b} .grid .cell.occ.ocr{background:#123f6b} .grid .cell.occ{background:#7a1c13} .grid .cell.occ.mine{background:var(--occ-sel)}
+.fpanel{display:flex;flex-direction:column;gap:3px;flex:none}
+.zhead1{font-family:var(--display);font-weight:600;font-size:.72rem;letter-spacing:.08em;color:var(--muted);text-align:center;border-bottom:2px solid var(--line);padding-bottom:2px;display:flex;flex-direction:column;line-height:1.1}
+.zhead1 small{font-family:var(--mono,monospace);font-weight:400;letter-spacing:0;font-size:.62rem}
+.zhead1.zc{border-color:var(--safety)}
+#cellMenu .cm-lado{grid-column:1/-1;font-size:.72rem;opacity:.85;border-top:1px solid var(--line);margin-top:2px}
+.aisle{background:repeating-linear-gradient(90deg,transparent 0 6px,color-mix(in srgb,var(--safety) 35%,transparent) 6px 8px);border-radius:2px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.lgrid .aisle{background:color-mix(in srgb,var(--safety) 14%,transparent)}
+.aisle span{writing-mode:vertical-rl;font-family:var(--display);font-size:.62rem;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+.grid .ctr{display:block;background:color-mix(in srgb,var(--safety) 16%,transparent);border-radius:1px;pointer-events:none}
+.ficha-grid .ctr{background:repeating-linear-gradient(90deg,color-mix(in srgb,var(--safety) 22%,transparent) 0 3px,transparent 3px 6px)}
+.rotov{position:absolute;left:0;right:0;pointer-events:none;display:flex;align-items:center;justify-content:center;z-index:2}
+.rotov.rot-ok{background:rgb(47 158 87 / var(--a))} .rotov.rot-mid{background:rgb(227 155 22 / var(--a))} .rotov.rot-hi{background:rgb(208 58 47 / var(--a))}
+.rotov span{font-family:var(--display);font-weight:700;font-size:.95rem;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.vrot .grid .cell{filter:grayscale(1);opacity:.3}
 
 </style></head><body>
 
@@ -17727,7 +17741,7 @@ details.adv[open]>summary{margin-bottom:12px}
     <div>
       <div class="lbl">Halpern Neumáticos · Depósito Mendoza</div>
       <h1>Plano de nave</h1>
-      <div class="sub">Cada bloque es una cuadrícula de 35 columnas (Norte, calle, Sur) × 18 filas. Cada cuadrado es un pallet; un rack apilable ocupa 2 cuadrados. Tocá un bloque para ver su ficha, su stock y armar su distribución.</div>
+      <div class="sub">Cada bloque tiene 3 lados (Norte, calle, Sur) armados en líneas de pallets o de racks a su medida real. Pallets de a 2 con pasada humana de 0,5 m (Sur 18 líneas, Norte 14). Racks a lo ancho: Sur 11, Norte 9; a lo largo en filas de a 2 espalda con espalda con calle transversal de 3,5 m entre pares (8 filas por bloque). Cada cuadrado es un lugar: un pallet o una pila de racks. Tocá un bloque para ver su ficha, su stock y armar su distribución.</div>
     </div>
     <div class="kpis" id="kpis"></div>
     <button type="button" class="btn pri" id="infBtn" hidden>📄 Informe PDF</button>
@@ -17735,7 +17749,7 @@ details.adv[open]>summary{margin-bottom:12px}
 
   <div class="legend">
     <span><i class="sw" style="background:#c0392b"></i>Pallet (1 cuadrado)</span>
-    <span><i class="sw" style="background:var(--c1)"></i>Rack (2 cuadrados)</span>
+    <span><i class="sw" style="background:var(--c1)"></i>Rack (pila)</span>
     <span><i class="sw" style="background:#7a1c13"></i>Pallet ocupado</span><span><i class="sw" style="background:#123f6b"></i>Rack ocupado</span>
     <span><i class="sw" style="background:var(--rack)"></i>Rack selectivo (Mapa Racks)</span>
     <span><i class="sw" style="box-shadow:inset 0 0 0 1px var(--line)"></i>Pasada 0,5 m / calle</span>
@@ -17748,13 +17762,16 @@ details.adv[open]>summary{margin-bottom:12px}
     <div class="seg" role="group" aria-label="Vista del plano">
       <button type="button" class="C1" data-vista="cfg">Distribución</button>
       <button type="button" class="C1" data-vista="ocu">Ocupación real</button>
+      <button type="button" class="C1" data-vista="rot">Rotación</button>
     </div>
+    <span class="legend" id="rotLegend" hidden><span><i class="sw" style="background:#2f9e57"></i>menos de 3%</span><span><i class="sw" style="background:#e39b16"></i>3–8%</span><span><i class="sw" style="background:#d03a2f"></i>8% o más de la rotación de la nave</span><span class="note" data-rl></span></span>
     <span class="legend" id="ocuLegend"><span><i class="sw" style="background:#2f9e57"></i>menos de 65%</span><span><i class="sw" style="background:#e39b16"></i>65–90%</span><span><i class="sw" style="background:#d03a2f"></i>90% o más</span><span><i class="sw" style="border:3px solid #8e44c9"></i>Coincide con la búsqueda / pedido</span></span>
   </div>
   <section class="plan" aria-label="Plano de la nave"><div class="nave" id="nave"></div></section>
   <section class="panel" id="opsPanel" hidden>
     <div class="ph"><h2>Operaciones</h2><span class="note" id="opsInfo"></span></div>
     <div class="cod" id="codCard"></div>
+    <div class="op" id="rotCard" style="margin-bottom:12px"></div>
     <div class="op" style="margin-bottom:12px"><h3>🚚 Pedido en el plano</h3>
       <div class="foot"><select id="pedSel" aria-label="Pedido en tránsito" style="flex:1;min-width:220px"></select><button type="button" class="btn" id="pedClear">Quitar del plano</button></div>
       <div id="pedOut"></div></div>
@@ -17764,14 +17781,14 @@ details.adv[open]>summary{margin-bottom:12px}
         <div class="foot"><button type="button" class="btn pri" id="qBtn">Buscar</button><button type="button" class="btn" id="qClear">Limpiar</button></div></div>
       <div class="op"><h3>🔄 Mover diseño completo</h3>
         <input id="mdDis" placeholder="Diseño (código completo, ej: AT52)">
-        <div class="two"><input id="mdOri" list="codigos" placeholder="De (ej: 3S)"><input id="mdDes" list="codigos" placeholder="A (ej: 4S o 4-20-05)"></div>
+        <div class="two"><input id="mdOri" list="codigos" placeholder="De (ej: 3S)"><input id="mdDes" list="codigos" placeholder="A (ej: 4S o 4S-03-12)"></div>
         <div class="foot"><button type="button" class="btn pri" id="mdBtn">Mover diseño</button></div></div>
       <div class="op"><h3>🔀 Repartir diseño</h3>
         <div class="two"><input id="rpDis" placeholder="Diseño (ej: AT52)"><input id="rpOri" list="codigos" placeholder="De (ej: 3S)"></div>
         <input id="rpDes" placeholder="A, separados por coma (ej: 4S, 5S, 6N)">
         <div class="foot"><button type="button" class="btn pri" id="rpBtn">Armar reparto</button></div></div>
       <div class="op"><h3>📦 Mover artículo</h3>
-        <div class="two"><input id="maArt" placeholder="Código (ej: 22320)"><input id="maDes" list="codigos" placeholder="A (ej: 4S o 4-20-05)"></div>
+        <div class="two"><input id="maArt" placeholder="Código (ej: 22320)"><input id="maDes" list="codigos" placeholder="A (ej: 4S o 4S-03-12)"></div>
         <div class="foot"><button type="button" class="btn pri" id="maBtn">Mover artículo</button></div></div>
     </div>
     <div id="opsOut"></div>
@@ -17799,80 +17816,108 @@ details.adv[open]>summary{margin-bottom:12px}
 <script>
 const KEY='wms_plano_capacidad';
 // ===== Modelo =====
-// Cada bloque es una cuadrícula como la planilla: columnas a lo ancho de la nave (Norte 1…14,
-// calle central 15…17, Sur 18…35) × filas a lo largo del bloque (1…18, desde las dársenas).
-// Cada cuadrado es un lugar de pallet (1,2 × 1,2 + separación). Un rack apilable ocupa 2 cuadrados
-// contiguos de la misma fila: el elegido y el siguiente desde la calle hacia la pared (Norte → col. menor,
-// Sur → col. mayor).   Pallet: 4-20-05     Rack: 4-20-05R (columnas 20 y 21 de la fila 5)
-// En el cuadrado: 'rk' = cabeza del rack, 'rkx' = cuadrado anulado que completa el rack.
-// Estado de cada cuadrado: pos (pallet), rk (rack apilable), pas (pasada 0,5 m / calle),
-// off (no disponible), sel (rack selectivo del Mapa Racks, solo Bloque 1).
+// Cada bloque tiene 3 lados a lo ancho de la nave: Norte, calle central y Sur. Cada lado es una
+// sucesión de columnas (líneas a lo largo del bloque) desde la calle hacia la pared, y cada columna
+// es de Pallets (1,2 × 1,2) o de Racks, con la medida real de cada una. A lo largo del bloque los racks
+// van en filas de a 2 espalda con espalda y entre cada par cruza una calle de autoelevador de 3,5 m,
+// transversal a la calle central (los extremos dan a los pasillos entre bloques): en 22 m entran 4 pares
+// = 8 filas. Los pallets van de a 2 con pasada humana de 0,5 m (ya incluida en las 18 / 14 columnas).
+//   Sur   26,5 m → 18 pallets × 18 filas   ·  11 racks × 22 filas
+//   Norte 21 m   → 14 pallets × 18 filas   ·   9 racks × 22 filas
+//   Calle 4,5 m  →  3 pallets × 18 filas   ·   1 rack  × 22 filas (hoy pasillo)
+// 1 cuadrado = 1 lugar: un pallet Arlog o una pila de racks. Las columnas se cuentan desde la calle
+// hacia la pared y las filas desde las dársenas.   Código: 4S-03-12 (bloque 4, Sur, col. 3, fila 12)
+// Estado de cada cuadrado: pos (lugar), pas (pasada / calle), off (no disponible),
+// sel (rack selectivo del Mapa Racks, solo Bloque 1).
 const pad2=n=>String(n).padStart(2,'0');
-const gr=g=>{g=g||S.grid;return {cols:g.cols,rows:g.filas,norte:g.norte,calle:g.calle}};
-function zonaC(c,g){const G=gr(g);return c<=G.norte?'norte':(c<=G.norte+G.calle?'calle':'sur')}
-function b1Default(g){const G=gr(g),cel={};for(let c=1;c<=G.cols;c++)for(let r=1;r<=G.rows;r++){const z=zonaC(c,g);if(z==='norte'||(z==='sur'&&c<=G.norte+G.calle+11))cel[pad2(c)+'-'+pad2(r)]='sel'}return cel}
-const DEF0={ver:6,nave:{largo:272,ancho:55},prep:20,dars:{n:8,ubic:'frente'},bloqueL:22,nBloques:9,
-  grid:{cols:35,filas:18,norte:14,calle:3},gap:0.25,pallet:{l:1.2,a:1.2,apil:1},rackOp:{l:2.15,a:1.05},apilado:7,
+const ZS=['norte','calle','sur'], ZL={norte:'N',calle:'C',sur:'S'}, LZ={N:'norte',C:'calle',S:'sur'};
+const LADOS0={norte:{ancho:21,pal:{cols:14,rows:18},rk:{cols:9,rows:22}},calle:{ancho:4.5,pal:{cols:3,rows:18},rk:{cols:1,rows:22}},sur:{ancho:26.5,pal:{cols:18,rows:18},rk:{cols:11,rows:22}}};
+const DEF0={ver:9,calleRack:3.5,nave:{largo:272,ancho:55},prep:20,dars:{n:8,ubic:'frente'},bloqueL:22,nBloques:9,lados:LADOS0,
+  gap:0.25,pallet:{l:1.2,a:1.2,apil:1},rackOp:{l:2.15,a:1.05},apilado:7,
   cap:{AUTO:25,CAMIONETA:16,CAMION:7},alm:{PCR:'PALLET',TBR:'CAMION',OTR:'CAMION'},rackPos:448};
-function mkDEF(){const d=structuredClone(DEF0);d.blocks=[];for(let n=1;n<=d.nBloques;n++)d.blocks.push({n,obs:n===1?'Racks selectivos (Mapa Racks): todo el Norte y la parte del Sur pegada a la calle':'',cel:n===1?b1Default(d.grid):{}});return d}
-const DEF=mkDEF();
+const anchoCol=(z,t,L)=>{L=L||S.lados;return L[z].ancho/(t==='R'?L[z].rk.cols:L[z].pal.cols)};
+const CALLE_R=3.5, ALM={P:'PALLET',R:'RACK'}, TC=a=>a==='RACK'?'R':'P';
+// Filas de rack a lo largo del bloque: pares espalda con espalda + calles transversales de 3,5 m entre pares
+function rackGeo(z){const prof=S.bloqueL/S.lados[z].rk.rows,L=S.bloqueL,n=Math.max(1,Math.floor((L+CALLE_R)/(2*prof+CALLE_R)));return {prof,pares:n,filas:2*n,sobra:L-n*2*prof-(n-1)*CALLE_R}}
+const filasT=(z,t)=>t==='R'?rackGeo(z).filas:S.lados[z].pal.rows;
+// Arma las columnas de un lado desde la calle hacia la pared y completa el ancho con el tipo de la última.
+function llenar(z,arr,L){L=L||S.lados;const A=L[z].ancho+1e-6,src=arr.filter(t=>t!=='A');let w=0;const out=[];
+  for(const t of src){const cw=anchoCol(z,t,L);if(w+cw>A)break;out.push(t);w+=cw}
+  const last=out.length?out[out.length-1]:(src[0]||'P');while(w+anchoCol(z,last,L)<=A){out.push(last);w+=anchoCol(z,last,L)}return out}
+function colsDe(b,z){b.cols=b.cols||{};if(!b.cols[z]||!b.cols[z].length||b.cols[z].includes('A'))b.cols[z]=llenar(z,b.cols[z]&&b.cols[z].length?b.cols[z]:['P']);return b.cols[z]}
+const stc=(b,z)=>colsDe(b,z).filter(t=>t!=='A');   // líneas con lugares (sin las calles), numeradas 1…n
+const colT=(b,z,c)=>stc(b,z)[c-1];
+const filasC=(b,z,c)=>{const t=colT(b,z,c);return t?filasT(z,t):0};
+function tipoL(b,z){const a=stc(b,z);return a.every(t=>t==='R')?'RACK':a.every(t=>t==='P')?'PALLET':'MIXTO'}
+const tieneTipo=(b,z,alm)=>stc(b,z).includes(TC(alm));
+function resumenLado(b,z){const a=stc(b,z),nR=a.filter(t=>t==='R').length,nP=a.length-nR;return [nR?nR+' de rack':'',nP?nP+' de pallet':''].filter(Boolean).join(' + ')}
+function cuadLado(b,z){const a=stc(b,z),nR=a.filter(t=>t==='R').length,nP=a.length-nR;return [nR?nR+' × '+filasT(z,'R'):'',nP?nP+' × '+filasT(z,'P'):''].filter(Boolean).join(' + ')}
+function lado(b,z){const a=stc(b,z);return {t:tipoL(b,z),cols:a.length,rows:Math.max(...a.map(t=>filasT(z,t))),ancho:S.lados[z].ancho}}
+function b1Default(){const cel={norte:{},calle:{},sur:{}},L=LADOS0;
+  for(let c=1;c<=L.norte.rk.cols;c++)for(let r=1;r<=L.norte.rk.rows;r++)cel.norte[pad2(c)+'-'+pad2(r)]='sel';
+  for(let c=1;c<=7;c++)for(let r=1;r<=L.sur.rk.rows;r++)cel.sur[pad2(c)+'-'+pad2(r)]='sel';
+  return {cols:{norte:llenar('norte',['R'],L),calle:llenar('calle',['P'],L),sur:llenar('sur',['R'],L)},cel}}
+function mkBlock(n){const L=LADOS0,o={n,obs:'',cols:{norte:llenar('norte',['P'],L),calle:llenar('calle',['P'],L),sur:llenar('sur',['P'],L)},cel:{norte:{},calle:{},sur:{}}};if(n===1){Object.assign(o,b1Default());o.obs='Racks selectivos (Mapa Racks): todo el Norte y la parte del Sur pegada a la calle'}return o}
+function mkDEF(){const d=structuredClone(DEF0);d.blocks=[];for(let n=1;n<=d.nBloques;n++)d.blocks.push(mkBlock(n));return d}
 function load(){
   try{const t=localStorage.getItem(KEY);if(t){const o=JSON.parse(t);
-    if(o&&o.ver===6){for(const k in DEF0)if(o[k]==null)o[k]=structuredClone(DEF0[k]);return o}
-    if(o&&o.ver===5){o.ver=6;(o.blocks||[]).forEach(b=>{Object.keys(b.cel||{}).forEach(k=>{if(b.cel[k]==='rk')delete b.cel[k]})});for(const k in DEF0)if(o[k]==null)o[k]=structuredClone(DEF0[k]);return o}
-    // versión anterior: la cuadrícula cambió (35 × 18); se conservan medidas, dársenas, parámetros y observaciones
-    const d=mkDEF();if(o){['nave','prep','dars','apilado','cap','alm','rackOp','bloqueL','rackPos'].forEach(k=>{if(o[k]!=null)d[k]=o[k]});if(o.cfg&&o.cfg.B1&&o.cfg.B1.rackPos)d.rackPos=o.cfg.B1.rackPos;
-      (o.blocks||[]).forEach(b=>{const x=d.blocks.find(y=>y.n===b.n);if(x&&b.obs&&b.n!==1)x.obs=b.obs})}
+    if(o&&(o.ver===7||o.ver===8||o.ver===9)){if(o.calleRack==null)o.calleRack=3.5;for(const k in DEF0)if(o[k]==null)o[k]=structuredClone(DEF0[k]);
+      (o.blocks||[]).forEach(b=>{b.cel=b.cel||{};b.cols=b.cols||{};ZS.forEach(z=>{b.cel[z]=b.cel[z]||{};if(!b.cols[z]||!b.cols[z].length)b.cols[z]=[b.tipo&&b.tipo[z]==='RACK'?'R':'P'];b.cols[z]=llenar(z,b.cols[z],o.lados)});delete b.tipo});o.ver=9;return o}
+    // versión anterior (una sola cuadrícula 35 × 18): se conservan medidas, parámetros y observaciones;
+    // un lado que estaba mayormente en racks queda armado en Racks.
+    const d=mkDEF();if(o){['nave','prep','dars','apilado','cap','alm','rackOp','bloqueL','rackPos','gap','pallet'].forEach(k=>{if(o[k]!=null)d[k]=o[k]});
+      const G=o.grid||{cols:35,norte:14,calle:3},zc=c=>c<=G.norte?'norte':(c<=G.norte+G.calle?'calle':'sur');
+      (o.blocks||[]).forEach(b=>{const x=d.blocks.find(y=>y.n===b.n);if(!x||b.n===1)return;if(b.obs)x.obs=b.obs;
+        const cnt={norte:{rk:0,n:0},calle:{rk:0,n:0},sur:{rk:0,n:0}};Object.keys(b.cel||{}).forEach(k=>{const z=zc(+k.slice(0,2));if(b.cel[k]==='rk'||b.cel[k]==='rkx')cnt[z].rk++});
+        ['norte','sur'].forEach(z=>{const tot=(z==='norte'?G.norte:G.cols-G.norte-G.calle)*(G.filas||18);if(cnt[z].rk>tot/2)x.cols[z]=llenar(z,['R'],d.lados)})})}
     return d}}catch(e){}
   return mkDEF();
 }
-let S=load(); let sel=2; let brush='pos';
+let S=load(); let sel=2; let brush='P';
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 const fmt=n=>Math.round(n||0).toLocaleString('es-AR');
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ZN={sur:'Sur',calle:'Calle central',norte:'Norte'};
-function estado(b,c,r){const k=pad2(c)+'-'+pad2(r);return (b.cel&&b.cel[k])||(zonaC(c)==='calle'?'pas':'pos')}
-const okEstado=(e,alm)=>alm==='RACK'?(e==='rk'||e==='rkx'||e==='pos'):e==='pos';
-const dirC=c=>zonaC(c)==='norte'?-1:1;               // hacia la pared, desde la calle
-const pareja=c=>c+dirC(c);                            // cuadrado anulado por un rack con cabeza en c
-const celdasU=u=>u.alm==='RACK'||u.isR?[[u.c,u.r],[pareja(u.c),u.r]]:[[u.c,u.r]];
-function codigo(n,c,r){return n+'-'+pad2(c)+'-'+pad2(r)}
-function codigoRack(n,c,r){return n+'-'+pad2(c)+'-'+pad2(r)+'R'}
-// Conteo de posiciones por zona
-// pal = cuadrados de pallet, rk = cuadrados de rack, pos = total de lugares (pal + rk)
-function cuenta(b){const nz_=()=>({pos:0,rk:0,rkx:0,sel:0,pas:0,off:0}),z={sur:nz_(),calle:nz_(),norte:nz_()};
-  const G=gr();for(let c=1;c<=G.cols;c++)for(let r=1;r<=G.rows;r++)z[zonaC(c)][estado(b,c,r)]++;
-  Object.values(z).forEach(x=>{x.racks=x.rk;x.rk=x.rk+x.rkx;x.pal=x.pos;x.pos=x.pal+x.rk});return z}
-function geo(){const N=S.blocks.length,L=S.bloqueL,sobra=S.nave.largo-S.prep-N*L,gap=N>1?sobra/(N-1):0;
-  return {N,L,sobra,gap,colW:S.nave.ancho/S.grid.cols,rowH:L/S.grid.filas,colH:S.nave.ancho/S.grid.cols}}
+function estado(b,z,c,r){const v=b.cel&&b.cel[z]&&b.cel[z][pad2(c)+'-'+pad2(r)];return v||(z==='calle'?'pas':'pos')}
+function codigo(n,z,c,r){return n+ZL[z]+'-'+pad2(c)+'-'+pad2(r)}
+const blk_=n=>S.blocks.find(x=>x.n===n);
+// Conteo por lado: pos = lugares (pallets o pilas de rack, según el lado)
+function cuenta(b){const z={};ZS.forEach(k=>{const a=stc(b,k),x={pos:0,sel:0,pas:0,off:0,pal:0,rk:0,tipo:tipoL(b,k),cols:a.length,rows:Math.max(...a.map(t=>filasT(k,t)))};
+  a.forEach((t,i)=>{for(let r=1;r<=filasT(k,t);r++){const e=estado(b,k,i+1,r);x[e]++;if(e==='pos'){if(t==='R')x.rk++;else x.pal++}}});x.racks=x.rk;z[k]=x});return z}
+function geo(){const N=S.blocks.length,L=S.bloqueL,sobra=S.nave.largo-S.prep-N*L,gap=N>1?sobra/(N-1):0;return {N,L,sobra,gap}}
+// Bandas a lo ancho de la nave (Sur arriba, calle, Norte abajo), proporcionales al ancho de cada lado
+function bandas(H){const t=ZS.reduce((a,z)=>a+S.lados[z].ancho,0),h=z=>H*S.lados[z].ancho/t;const hs=h('sur'),hc=h('calle');return {sur:[0,hs],calle:[hs,hc],norte:[hs+hc,H-hs-hc]}}
 
 // ===== Conexión con el WMS =====
 const API=(()=>{try{return window.parent!==window&&parent.WMS_API?parent.WMS_API:null}catch(e){return null}})();
 let hl=new Set(), vista='cfg', OCC=null, pendRep=null, movArt=null, PED=null, UBSEL=null, ZAUTO='sur';
 const artDe=a=>API?API.data().find(r=>String(r.art)===String(a)):null;
 try{vista=localStorage.getItem('wms_plano_vista')||(API?'ocu':'cfg')}catch(e){}
-// Ubicación cargada en el artículo: "4S"/"4N" (lado) o "4-07-15" (posición exacta).
+// Ubicación cargada en el artículo: "4S"/"4N" (lado) o "4S-03-12" (posición exacta).
 function parseUbic(code){
   const t=String(code||'').toUpperCase().trim();
-  let m=t.match(/^(\d+)-(\d{1,2})-(\d{1,2})(R)?$/);
-  if(m){const b=+m[1],c=+m[2],r=+m[3];if(S.blocks.some(x=>x.n===b)&&c>=1&&c<=S.grid.cols&&r>=1&&r<=S.grid.filas)return [{b,side:zonaC(c),c,r,raw:t}];return [{b:null,side:null,raw:t}]}
-  m=t.includes('/')?null:t.match(/^(\d+)([SN])(?![A-Z0-9])/);
+  const u=codeToU(t);if(u)return [{b:u.b,side:u.z,c:u.c,r:u.r,raw:t}];
+  if(/^\d+[NCS]-\d{1,2}-\d{1,2}$/.test(t))return [{b:null,side:null,raw:t}];
+  const m=t.includes('/')?null:t.match(/^(\d+)([SN])(?![A-Z0-9])/);
   const b=m?+m[1]:null, ok=m&&S.blocks.some(x=>x.n===b);
   return [ok?{b,side:m[2]==='S'?'sur':'norte',raw:t}:{b:null,side:null,raw:t}];
 }
 // ===== Codificación: posiciones de cada artículo =====
-// UB[art] = {alm:'PALLET'|'RACK', u:[{b,c,r}]}  (pallet: 1 lugar en r · rack: lugares r y r+1, r impar = A)
+// UB[art] = {alm, u:[{b,z,c,r,alm,q}]}  (1 lugar = 1 pallet o 1 pila de racks)
 const UBKEY='wms_ubic_nave';
 let UB={};try{UB=JSON.parse(localStorage.getItem(UBKEY)||'{}')||{}}catch(e){UB={}}
-// La cuadrícula cambió a 35 × 18: lo codificado con la anterior no coincide; se guarda aparte y se arranca de cero.
-try{const vv=localStorage.getItem('wms_ubic_nave_ver');if(vv!=='6'){if(Object.keys(UB).length)localStorage.setItem('wms_ubic_nave_v'+(vv||'4'),JSON.stringify(UB));UB={};localStorage.setItem(UBKEY,'{}');localStorage.setItem('wms_ubic_nave_ver','6')}}catch(e){}
+// La cuadrícula cambió (cada lado con su medida real de pallets o racks): lo codificado antes no coincide; se guarda aparte y se arranca de cero.
+try{const vv=localStorage.getItem('wms_ubic_nave_ver');if(vv!=='7'){if(Object.keys(UB).length)localStorage.setItem('wms_ubic_nave_v'+(vv||'4'),JSON.stringify(UB));UB={};localStorage.setItem(UBKEY,'{}');localStorage.setItem('wms_ubic_nave_ver','7')}}catch(e){}
 function ubGuardar(){try{localStorage.setItem(UBKEY,JSON.stringify(UB))}catch(e){}}
 function ubBorrar(art){if(UB[art]){delete UB[art];ubGuardar()}}
 const almU=(U,u)=>u.alm||U.alm;
-const codU=(U,u)=>almU(U,u)==='RACK'?codigoRack(u.b,u.c,u.r):codigo(u.b,u.c,u.r);
-let IDX={},IDXR={};function ubIndex(){IDX={};IDXR={};Object.keys(UB).forEach(a=>{const x=UB[a];(x.u||[]).forEach(u=>{const isR=almU(x,u)==='RACK';celdasU({c:u.c,r:u.r,isR}).forEach(([c,r])=>{IDX[u.b+'|'+c+'|'+r]=a;if(isR)IDXR[u.b+'|'+c+'|'+r]=1})})})}
+const codU=(U,u)=>codigo(u.b,u.z,u.c,u.r);
+const ik=(b,z,c,r)=>b+'|'+z+'|'+c+'|'+r;
+let IDX={};function ubIndex(){IDX={};Object.keys(UB).forEach(a=>{(UB[a].u||[]).forEach(u=>{IDX[ik(u.b,u.z,u.c,u.r)]=a})})}
+// Si cambió el armado (ej. se agregaron las calles de rack), las posiciones que ya no existen vuelven a pendientes.
+function limpiarUB(){let n=0;Object.keys(UB).forEach(a=>{const U=UB[a];U.u=(U.u||[]).filter(u=>{const x=codeToU(codigo(u.b,u.z,u.c,u.r));const ok=x&&x.alm===(u.alm||U.alm);if(!ok)n++;return ok});if(!U.u.length)delete UB[a]});if(n)ubGuardar();return n}
 ubIndex();
-const ocupante=(b,c,r)=>IDX[b+'|'+c+'|'+r];
+const ocupante=(b,z,c,r)=>IDX[ik(b,z,c,r)];
 function rackTipoDe(r){const al=S.alm[catDe(r)];return al&&al!=='PALLET'?al:(catDe(r)==='PCR'?'AUTO':'CAMION')}
 function almDe(r){const x=UB[r.art];if(x&&x.alm)return x.alm;return (S.alm[catDe(r)]||'CAMION')==='PALLET'?'PALLET':'RACK'}
 // Cuántas unidades de almacenaje necesita (pallets o pilas de racks) para u cubiertas
@@ -17880,12 +17925,12 @@ function necesita(r,u,alOver){const al=alOver||almDe(r);if(al==='PALLET'){const 
 function tokensDe(code){return String(code||'').toUpperCase().split('/').map(t=>t.trim()).filter(Boolean)}
 // Cuántas posiciones ocupa un artículo: auto/camioneta en pallets Arlog (1 posición cada max_pos
 // cubiertas, apilados según S.pallet.apil); el resto en racks (cubiertas por rack según tipo,
-// apilados de a S.apilado; cada pila de racks ocupa 2 posiciones).
+// apilados de a S.apilado; cada pila de racks ocupa 1 lugar de un lado armado en racks).
 function catDe(r){if(String(r.prov||'').toUpperCase()==='SPEEDWAY')return 'OTR';const l=parseFloat(String(r.med||'').trim().split(/\s+/).pop());if(l===17.5||l===19.5||l>=22.5)return 'TBR';if(l<=22)return 'PCR';return 'OTR'}
 function espacioDe(r,u){
   const al=almDe(r)==='PALLET'?'PALLET':rackTipoDe(r);
   if(al==='PALLET'){const mp=r.max_pos||0;if(!mp)return {pos:0,pal:0,rk:0,sin:u,al};const pal=Math.ceil(u/mp);return {pos:Math.ceil(pal/Math.max(1,S.pallet.apil)),pal,rk:0,sin:0,al}}
-  const rk=Math.ceil(u/(S.cap[al]||1));return {pos:Math.ceil(rk/Math.max(1,S.apilado))*2,pal:0,rk,sin:0,al};
+  const rk=Math.ceil(u/(S.cap[al]||1));return {pos:Math.ceil(rk/Math.max(1,S.apilado)),pal:0,rk,sin:0,al};
 }
 const nz=()=>({stock:0,pall:0,pos:0,codPos:0,pal:0,rk:0,sin:0,arts:[]});
 function calcOcc(){
@@ -17910,7 +17955,7 @@ function calcOcc(){
     const U=UB[r.art]&&UB[r.art].u&&UB[r.art].u.length?UB[r.art]:null;
     if(U){ // codificado: cada unidad cuenta en su zona exacta, las cubiertas se reparten parejo
       o.cod.arts++;o.cod.stock+=resto;const per=resto/U.u.length;
-      U.u.forEach(u=>{if(!o.b[u.b])return;const isR=almU(U,u)==='RACK',step=isR?2:1,z=zonaC(u.c),c=o.b[u.b][z];c.stock+=per;c.pall+=pl/U.u.length;c.pos+=step;c.codPos+=step;if(isR)c.rk+=Math.ceil(per/(S.cap[rackTipoDe(r)]||1));else c.pal++;
+      U.u.forEach(u=>{if(!o.b[u.b]||!o.b[u.b][u.z])return;const isR=almU(U,u)==='RACK',step=1,z=u.z,c=o.b[u.b][z];c.stock+=per;c.pall+=pl/U.u.length;c.pos+=step;c.codPos+=step;if(isR)c.rk+=Math.ceil(per/(S.cap[rackTipoDe(r)]||1));else c.pal++;
         let e=c.arts.find(a=>a.r===r);if(!e){e={r,side:z,raw:'',u:0,pl:0,e:{al:isR?'R':'PALLET',pal:0,rk:0,pos:0,sin:0},cod:[]};c.arts.push(e)}e.u+=per;e.e.pos+=step;if(isR)e.e.rk++;else e.e.pal++;e.cod.push(codU(U,u))});
       return;
     }
@@ -17918,7 +17963,7 @@ function calcOcc(){
     if(x.b&&o.b[x.b]){const c=o.b[x.b][x.side],e=espacioDe(r,resto);o.cod.pend++;o.cod.pendStock+=resto;c.stock+=resto;c.pall+=pl;c.pos+=e.pos;c.pal+=e.pal;c.rk+=e.rk;c.sin+=e.sin;if(e.sin){o.sinDato+=e.sin;o.sinDatoArts++}c.arts.push({r,side:x.side,raw:x.raw,u:resto,pl,e})}
     else{o.fuera.stock+=resto;o.fuera.pall+=pl;o.fuera.arts++;o.fuera.codes.add(x.raw);o.fuera.list.push(Object.assign(Object.create(r),{_u:resto}))}
   });
-  OCC=o;
+  OCC=o;calcRotPos(data);ROTD={};data.forEach(r=>{const d=String(r.diseno||'').trim().toUpperCase();if(d)ROTD[d]=(ROTD[d]||0)+(+r.rot||0)});
 }
 function ocZona(n,z){if(!OCC)return null;const b=S.blocks.find(x=>x.n===n),cap=cuenta(b)[z].pos,u=OCC.b[n][z].pos;return cap>0?u/cap:(u>0?Infinity:0)}
 function ocBlock(n){if(!OCC)return null;const b=S.blocks.find(x=>x.n===n),k=cuenta(b),o=OCC.b[n],cap=k.sur.pos+k.calle.pos+k.norte.pos,u=o.sur.pos+o.calle.pos+o.norte.pos,st=o.sur.stock+o.calle.stock+o.norte.stock;return {st,pos:u,cap,f:cap>0?u/cap:(u>0?Infinity:0)}}
@@ -17929,7 +17974,7 @@ function despuesDeMover(txt,destinos){API.save();calcOcc();hl=new Set(destinos.m
 function opsMsg(t,isErr){document.getElementById('opsOut').innerHTML=t?`<div class="note${isErr?' warn':''}" style="padding:6px 0">${esc(t)}</div>`:''}
 const v=id=>(document.getElementById(id).value||'').trim();
 const enPlano=c=>!!parseUbic(c)[0].b;
-const noPlano=c=>opsMsg(c+' no es una ubicación del plano. Usá bloque y lado (4S, 4N) o una posición bloque-columna-fila (4-20-05 pallet, 4-20-05R rack), bloques 1 a '+S.blocks.length+'.',true);
+const noPlano=c=>opsMsg(c+' no es una ubicación del plano. Usá bloque y lado (4S, 4N) o una posición bloque+lado-columna-fila (ej. 4S-03-12), bloques 1 a '+S.blocks.length+'.',true);
 function pedidosAbiertos(){try{return (API.transitos()||[]).filter(t=>t.flujo==='salida'&&t.estado==='transito')}catch(e){return []}}
 function fuentesItem(r){
   const tot=r.cantReal||r.cant||0, pD=r.punteraDetalle||[], dp=pD.reduce((a,d)=>a+(d.unidades||0),0);
@@ -18039,44 +18084,88 @@ function renderReub(){
       <div class="num" style="text-align:right">${fmt(r._u)} un.<div class="meta">${r._u<(r.stock||0)?'total '+fmt(r.stock||0):''}</div></div><button type="button" class="btn" data-mover="${esc(r.art)}">Mover</button>
       ${mv?`<div class="mv"><input id="mvDes" list="codigos" placeholder="A bloque (ej: 4S)" aria-label="Bloque destino"><button type="button" class="btn pri" data-mvok="${esc(r.art)}">Mover</button><button type="button" class="btn" data-mvcancel="1">Cancelar</button></div>`:''}</div>`}).join('')}${L.length>150?`<div class="res-item u">…y ${L.length-150} más</div>`:''}</div>`;
 }
+// ===== Rotación por diseño (todas las medidas juntas) y dónde está cada uno =====
+let ROTQ='',ROTN=25;
+function rotDisenos(){
+  if(!API||!OCC)return [];const M={};
+  API.data().forEach(r=>{const d=String(r.diseno||'').trim().toUpperCase();if(!d)return;const st=Math.max(0,r.stock||0);
+    const x=M[d]||(M[d]={dis:d,rot:0,stock:0,arts:0,meds:new Set(),donde:{},otros:0,reub:0,sin:0,bl:new Set()});
+    x.rot+=+r.rot||0;x.stock+=st;x.arts++;if(r.med)x.meds.add(r.med);
+    const resto=OCC.resto[r.art]||0;x.otros+=Math.max(0,st-resto);if(resto<=0)return;
+    const U=UB[r.art]&&UB[r.art].u&&UB[r.art].u.length?UB[r.art]:null;
+    if(U){const per=resto/U.u.length;U.u.forEach(u=>{const k=u.b+ZL[u.z];const e=x.donde[k]||(x.donde[k]={u:0,l:0,b:u.b});e.u+=per;e.l++;x.bl.add(u.b)});return}
+    const p=parseUbic(r.bloque)[0];
+    if(p.b){const k=p.b+ZL[p.side];const e=x.donde[k]||(x.donde[k]={u:0,l:0,b:p.b,sc:1});e.u+=resto;x.bl.add(p.b)}
+    else if(r.bloque)x.reub+=resto;else x.sin+=resto});
+  return Object.values(M).filter(x=>x.stock>0||x.rot>0).sort((a,b)=>b.rot-a.rot||b.stock-a.stock);
+}
+function renderRot(){
+  const el=document.getElementById('rotCard');if(!el)return;if(!API||!OCC){el.innerHTML='';return}
+  const all=rotDisenos(),q=ROTQ.trim().toUpperCase(),L=q?all.filter(x=>x.dis.includes(q)):all;
+  el.innerHTML=`<div class="ph"><h3 style="margin:0">📈 Rotación por diseño</h3><span class="note">${fmt(all.length)} diseños · suma de todas sus medidas · de más a menos rotación</span></div>
+    <div class="foot"><input id="rotQ" type="search" value="${esc(ROTQ)}" placeholder="Buscar diseño (ej: AT52)" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px"></div>
+    <div class="tbl" style="max-height:420px;overflow:auto"><table><thead><tr><th>#</th><th>Diseño</th><th>Rot./mes</th><th>Stock</th><th>Medidas</th><th style="text-align:left">Dónde está</th><th></th></tr></thead><tbody>
+    ${L.slice(0,ROTN).map((x,i)=>{const ks=Object.keys(x.donde).sort((a,b)=>x.donde[b].u-x.donde[a].u);
+      const chips=ks.map(k=>{const e=x.donde[k];return `<span class="side-tag" title="${e.sc?'cargado por bloque y lado, sin codificar':fmt(e.l)+' lugar(es) codificados'}">${k} · ${fmt(e.u)}</span>`}).join(' ')+
+        (x.otros?` <span class="side-tag" title="Mapa Racks y punteras">racks/punteras · ${fmt(x.otros)}</span>`:'')+(x.reub?` <span class="side-tag bad">a reubicar · ${fmt(x.reub)}</span>`:'')+(x.sin?` <span class="side-tag bad">sin ubicación · ${fmt(x.sin)}</span>`:'');
+      return `<tr data-rotdis="${esc(x.dis)}" style="cursor:pointer"><td>${all.indexOf(x)+1}</td><td style="text-align:left"><b>${esc(x.dis)}</b></td><td>${fmt(x.rot)}</td><td>${fmt(x.stock)}</td><td>${x.meds.size}</td><td style="text-align:left;white-space:normal">${chips||'—'}</td><td>${ks.length?`<button type="button" class="link" data-rotmov="${esc(x.dis)}|${esc(ks[0])}">Mover</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="7">No hay diseños con ese nombre.</td></tr>'}
+    </tbody></table></div>${L.length>ROTN?`<div class="foot"><button type="button" class="btn" id="rotMas">Ver ${Math.min(50,L.length-ROTN)} más (${fmt(L.length-ROTN)} restantes)</button></div>`:''}
+    <div class="note">Tocá un diseño para marcar sus bloques en el plano. "Mover" carga el diseño y su lado principal en 🔄 Mover diseño completo.</div>`;
+}
 // ===== Codificar un artículo =====
 function ubDe(art){const r=artDe(art);if(!UB[art])UB[art]={alm:almDe(r),u:[]};return UB[art]}
-function libre(b,c,r,alm){const B=S.blocks.find(x=>x.n===b);return B&&r>=1&&r<=gr().rows&&okEstado(estado(B,c,r),alm||'PALLET')&&!ocupante(b,c,r)}
+function libre(b,z,c,r){const B=blk_(b);if(!B||!S.lados[z])return false;return c>=1&&r>=1&&r<=filasC(B,z,c)&&estado(B,z,c,r)==='pos'&&!ocupante(b,z,c,r)}
 function syncBloque(art){const r=artDe(art),U=UB[art];if(!r||!U||!U.u.length)return;r.bloque=codU(U,U.u[0]);API.save()}
 // ----- Motor de lugares libres (lo usan este plano y la recepción de descargas del WMS) -----
+// Solo cuenta las columnas del mismo tipo (pallets en columnas de pallets, racks en columnas de racks).
+// Recorre desde la calle hacia la pared y desde las dársenas hacia el fondo.
 function libresLista(b,z,alm,excl,max){
-  const G=gr(),out=[],ex=excl||new Set(),B=S.blocks.find(x=>x.n===b);if(!B)return out;
-  if(alm==='RACK'){ // primero los cuadrados marcados como rack, después pares de cuadrados de pallet
-    const usado=new Set();
-    const orden=[];for(let c=G.norte;c>=1;c--)orden.push(c);for(let c=G.norte+1;c<=G.cols;c++)orden.push(c);
-    for(const pref of ['rk','pos'])for(const c of orden){if(z&&z!=='todo'&&zonaC(c)!==z)continue;
-      for(let r=1;r<=G.rows;r++){if(max&&out.length>=max)return out;
-        const c2=pareja(c);if(c2<1||c2>G.cols||zonaC(c2)!==zonaC(c))continue;
-        const k1=codigo(b,c,r),k2=codigo(b,c2,r);if(usado.has(k1)||usado.has(k2)||ex.has(k1)||ex.has(k2))continue;
-        if(pref==='rk'&&(estado(B,c,r)!=='rk'||estado(B,c2,r)!=='rkx'))continue;
-        if(pref==='pos'&&(estado(B,c,r)!=='pos'||estado(B,c2,r)!=='pos'))continue;
-        if(libre(b,c,r,'RACK')&&libre(b,c2,r,'RACK')){out.push(codigoRack(b,c,r));usado.add(k1);usado.add(k2)}}}
-    return out;
-  }
-  for(let c=1;c<=G.cols;c++){if(z&&z!=='todo'&&zonaC(c)!==z)continue;
-    for(let r=1;r<=G.rows;r++){if(max&&out.length>=max)return out;const k=codigo(b,c,r);if(libre(b,c,r,'PALLET')&&!ex.has(k))out.push(k)}}
+  const out=[],ex=excl||new Set(),B=blk_(b);if(!B)return out;alm=alm==='RACK'?'RACK':'PALLET';
+  const zs=z&&z!=='todo'?[z]:['sur','norte','calle'];
+  for(const zz of zs){if(!S.lados[zz])continue;const a=stc(B,zz),tc=TC(alm);
+    for(let c=1;c<=a.length;c++){if(a[c-1]!==tc)continue;for(let r=1;r<=filasT(zz,tc);r++){if(max&&out.length>=max)return out;const k=codigo(b,zz,c,r);if(!ex.has(k)&&libre(b,zz,c,r))out.push(k)}}}
   return out;
 }
-function codeToU(code){const m=String(code||'').toUpperCase().trim().match(/^(\d+)-(\d{1,2})-(\d{1,2})(R)?$/);if(!m)return null;const b=+m[1],c=+m[2],r=+m[3];
-  if(!S.blocks.some(x=>x.n===b)||c<1||c>S.grid.cols||r<1||r>S.grid.filas)return null;if(m[4]){const c2=pareja(c);if(c2<1||c2>S.grid.cols||zonaC(c2)!==zonaC(c))return null}return m[4]?{b,c,r,alm:'RACK'}:{b,c,r,alm:'PALLET'}}
-const exclDe=codes=>{const s=new Set();(codes||[]).forEach(k=>{const u=codeToU(k);if(!u)return;celdasU(u).forEach(([c,r])=>s.add(codigo(u.b,c,r)))});return s};
+// Lado preferido para un tipo de almacenaje en un bloque
+function zonaPara(b,alm,pref){const B=blk_(b);if(!B)return pref||'sur';alm=alm==='RACK'?'RACK':'PALLET';if(pref&&S.lados[pref]&&tieneTipo(B,pref,alm))return pref;
+  const c=['sur','norte','calle'].filter(z=>tieneTipo(B,z,alm)).sort((x,y)=>libresLista(b,y,alm).length-libresLista(b,x,alm).length);return c[0]||pref||'sur'}
+function codeToU(code){const m=String(code||'').toUpperCase().trim().match(/^(\d+)([NCS])-(\d{1,2})-(\d{1,2})R?$/);if(!m)return null;const b=+m[1],z=LZ[m[2]],c=+m[3],r=+m[4],B=blk_(b);
+  if(!B)return null;const t=colT(B,z,c);if(!t||r<1||r>filasT(z,t))return null;return {b,z,c,r,alm:ALM[t]}}
+const exclDe=codes=>{const s=new Set();(codes||[]).forEach(k=>{const u=codeToU(k);if(u)s.add(codigo(u.b,u.z,u.c,u.r))});return s};
 function asignar(art,codes){
   art=String(art);const err=[],ok=[];ubIndex();
   codes.forEach(k0=>{const k=typeof k0==='object'?k0.code:k0,q=typeof k0==='object'?k0.q:null;const u=codeToU(k);if(!u){err.push(k+': código inválido');return}
-    const cel=celdasU(u);const bad=cel.find(([c,r])=>{const oc=ocupante(u.b,c,r);return (oc&&oc!==art)||!okEstado(estado(S.blocks.find(x=>x.n===u.b),c,r),u.alm)});
-    if(bad){const oc=ocupante(u.b,bad[0],bad[1]);err.push(k+(oc&&oc!==art?': ocupado por '+oc:': no es un lugar libre'));return}
-    if(cel.some(([c,r])=>ocupante(u.b,c,r)===art))return; // ya era suyo
-    const U=ubDe(art);const nu={b:u.b,c:u.c,r:u.r,alm:u.alm};if(q!=null)nu.q=q;U.u.push(nu);cel.forEach(([c,r])=>IDX[u.b+'|'+c+'|'+r]=art);ok.push(k)});
+    const oc=ocupante(u.b,u.z,u.c,u.r);if(oc===art)return; // ya era suyo
+    if(oc){err.push(k+': ocupado por '+oc);return}
+    if(estado(blk_(u.b),u.z,u.c,u.r)!=='pos'){err.push(k+': no es un lugar libre');return}
+    const U=ubDe(art);const nu={b:u.b,z:u.z,c:u.c,r:u.r,alm:u.alm};if(q!=null)nu.q=q;U.u.push(nu);IDX[ik(u.b,u.z,u.c,u.r)]=art;ok.push(k)});
   ubGuardar();ubIndex();syncBloque(art);return {ok,err};
 }
 function sacarCodigo(art,code){const U=UB[art];if(!U)return;const i=U.u.findIndex(u=>codU(U,u)===code);if(i>=0)U.u.splice(i,1);if(!U.u.length)delete UB[art];ubGuardar();ubIndex();syncBloque(art)}
-function mejorBloque(alm,z,need,pref){const L=S.blocks.map(b=>({n:b.n,lib:libresLista(b.n,z,alm).length}));if(pref){const p=L.find(x=>x.n===pref);if(p&&p.lib>=(need||1))return pref}L.sort((a,b)=>b.lib-a.lib);return L[0]&&L[0].lib?L[0].n:(pref||S.blocks[0].n)}
-let CF={alm:null,b:null,z:'sur',n:0};
+function mejorBloque(alm,z,need,pref){const L=S.blocks.map(b=>({n:b.n,lib:libresLista(b.n,z,alm).length}));if(pref){const p=L.find(x=>x.n===pref);if(p&&p.lib>=(need||1))return pref}L.sort((a,b)=>b.lib-a.lib);if(L[0]&&L[0].lib)return L[0].n;
+  if(z&&z!=='todo')return mejorBloque(alm,'todo',need,pref);return pref||S.blocks[0].n}
+let CF={alm:null,b:null,z:'sur',n:0};let ROTD={};
+// Rotación por posición: la rotación mensual de cada artículo se reparte en proporción a dónde están sus
+// cubiertas (bloque y lado, Mapa Racks, punteras). El % es sobre la rotación total de la nave.
+let RP={tot:0,b:{},rack:0,punt:0,fuera:0};
+function calcRotPos(data){
+  const R_={tot:0,b:{},rack:0,punt:0,fuera:0};S.blocks.forEach(b=>R_.b[b.n]={sur:0,calle:0,norte:0,arts:{sur:[],calle:[],norte:[]}});
+  const enRack={},enPunt={},as=API.asign()||{},pu=API.punteras()||{};
+  Object.keys(as).forEach(k=>{const v=as[k];if(!v)return;if(v.art!=null)enRack[v.art]=(enRack[v.art]||0)+(v.unidades||0);(v.compartidos||[]).forEach(c=>{enRack[c.art]=(enRack[c.art]||0)+(c.unidades||0)})});
+  Object.keys(pu).forEach(k=>(pu[k]||[]).forEach(it=>{enPunt[it.art]=(enPunt[it.art]||0)+(it.unidades||0)}));
+  data.forEach(r=>{const rot=+r.rot||0;if(rot<=0)return;R_.tot+=rot;const st=Math.max(0,r.stock||0);
+    if(!st){const p=parseUbic(r.bloque)[0];if(p.b&&R_.b[p.b]){R_.b[p.b][p.side]+=rot;R_.b[p.b].arts[p.side].push({r,rot})}else R_.fuera+=rot;return}
+    const resto=OCC.resto[r.art]||0,pC=Math.min(enPunt[r.art]||0,st),rC=Math.min(enRack[r.art]||0,st-pC);
+    R_.punt+=rot*pC/st;R_.rack+=rot*rC/st;if(resto<=0)return;const rr=rot*resto/st;
+    const U=UB[r.art]&&UB[r.art].u&&UB[r.art].u.length?UB[r.art]:null;
+    if(U){const per=rr/U.u.length,seen={};U.u.forEach(u=>{const B=R_.b[u.b];if(!B||B[u.z]==null)return;B[u.z]+=per;const k=u.b+u.z;if(!seen[k]){seen[k]={r,rot:0};B.arts[u.z].push(seen[k])}seen[k].rot+=per});return}
+    const p=parseUbic(r.bloque)[0];if(p.b&&R_.b[p.b]){R_.b[p.b][p.side]+=rr;R_.b[p.b].arts[p.side].push({r,rot:rr})}else R_.fuera+=rr});
+  RP=R_;
+}
+const rotB=n=>{const x=RP.b[n];return x?x.sur+x.calle+x.norte:0};
+const rotPct=v_=>RP.tot?v_/RP.tot:0;
+const pctR=f=>{const p=f*100;return (p>0&&p<1?p.toFixed(1).replace('.',','):Math.round(p))+'%'};
+const nivelRot=f=>f>=.08?'hi':f>=.03?'mid':'ok';
 function renderCod(){
   const el=document.getElementById('codCard');if(!el)return;
   if(!API||!OCC){el.innerHTML='';return}
@@ -18095,6 +18184,7 @@ function renderCod(){
   const al=CF.alm||almDe(r), need=necesita(r,resto,al), hechos=puestos.filter(u=>almU(U,u)===al).length;
   const faltan=need==null?1:Math.max(0,need-hechos);
   if(CF.b==null)CF.b=mejorBloque(al,CF.z,faltan,puestos.length?puestos[0].b:parseUbic(r.bloque)[0].b);
+  if(CF.z!=='todo'&&!tieneTipo(blk_(CF.b),CF.z,al))CF.z=zonaPara(CF.b,al,CF.z);
   const libres=libresLista(CF.b,CF.z,al), cant=Math.min(libres.length,CF.n||faltan), sug=libres.slice(0,cant);
   const cnt=(b,z)=>libresLista(b,z,al).length;
   el.innerHTML=`<div class="ph"><span class="big">🧩 ${esc(r.art)} — ${esc(r.med||'')} ${esc(r.diseno||'')}</span><span class="note">${esc(r.prov||'')} · ${fmt(resto)} un. en piso${(r.stock||0)>resto?' (de '+fmt(r.stock)+' en total)':''}</span></div>
@@ -18104,7 +18194,7 @@ function renderCod(){
       <div class="row"><label for="cfZ">Zona</label><select id="cfZ" style="width:auto">${['sur','norte','calle','todo'].map(z=>`<option value="${z}" ${CF.z===z?'selected':''}>${z==='todo'?'Todo el bloque':ZN[z]} · ${fmt(cnt(CF.b,z))} libres</option>`).join('')}</select></div>
       <div class="row"><label for="cfN">Cuántos ubicar</label><input id="cfN" type="number" min="0" value="${cant}"></div>
     </div>
-    <div class="note">${al==='PALLET'?(r.max_pos?fmt(r.max_pos)+' cubiertas por pallet':'<span class="bad">sin max_pos: elegí la cantidad a mano</span>'):fmt(S.cap[rackTipoDe(r)])+' cubiertas por rack · apilados de a '+S.apilado+' · cada pila usa 2 cuadrados'} · necesita <b>${need==null?'?':fmt(need)}</b>, ya tiene <b>${fmt(hechos)}</b>${need!=null&&hechos>=need?' ✅':''}</div>
+    <div class="note">${al==='PALLET'?(r.max_pos?fmt(r.max_pos)+' cubiertas por pallet':'<span class="bad">sin max_pos: elegí la cantidad a mano</span>'):fmt(S.cap[rackTipoDe(r)])+' cubiertas por rack · apilados de a '+S.apilado+' · cada pila usa 1 lugar de un lado en racks'} · necesita <b>${need==null?'?':fmt(need)}</b>, ya tiene <b>${fmt(hechos)}</b>${need!=null&&hechos>=need?' ✅':''}</div>
     <div class="prog"><i style="width:${need?Math.min(100,Math.round(hechos/need*100)):0}%"></i></div>
     <div><div class="lbl" style="margin-bottom:4px">Sugeridos (los primeros libres de la zona) — destildá los que no quieras</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">${sug.map(k=>`<label class="side-tag" style="display:inline-flex;gap:3px;align-items:center;cursor:pointer"><input type="checkbox" data-sug="${k}" checked>${k}</label>`).join('')||'<span class="bad">No hay lugares libres en esa zona.</span>'}</div></div>
@@ -18116,36 +18206,54 @@ function renderCod(){
 function empezarCod(art){
   art=String(art).trim();const r=artDe(art);if(!r)return msg('No hay ningún artículo con código '+art+'.');
   UBSEL=String(r.art);const U=UB[UBSEL],pu=parseUbic(r.bloque)[0];
-  CF={alm:null,b:null,z:U&&U.u.length?zonaC(U.u[0].c):(pu.side||'sur'),n:0};if(CF.z==='calle'&&!pu.c)CF.z='sur';
+  CF={alm:null,b:null,z:U&&U.u.length?U.u[0].z:(pu.side||'todo'),n:0};
   renderCod();renderNave();renderFicha();document.getElementById('codCard').scrollIntoView({behavior:'smooth',block:'start'});
 }
-// Cambiar un cuadrado. Rack: la cabeza en c y el contiguo hacia la pared queda anulado (rkx).
-// Si se pisa la mitad de un rack existente, el rack se desarma (la otra mitad vuelve a pallet).
-function setCelda(b,c,r,val){
-  const k=(cc)=>pad2(cc)+'-'+pad2(r), def=cc=>zonaC(cc)==='calle'?'pas':'pos', put=(cc,v_)=>{if(v_===def(cc))delete b.cel[k(cc)];else b.cel[k(cc)]=v_};
-  const desarmar=cc=>{const e=estado(b,cc,r);if(e==='rk'){const t=pareja(cc);if(estado(b,t,r)==='rkx')put(t,'pos')}else if(e==='rkx'){const h=cc-dirC(cc);if(estado(b,h,r)==='rk')put(h,'pos')}};
-  if(val==='rk'){const t=pareja(c);if(t<1||t>S.grid.cols||zonaC(t)!==zonaC(c))return 'no hay cuadrado contiguo hacia la pared';
-    if(ocupante(b.n,t,r)&&!IDXR[b.n+'|'+t+'|'+r])return codigo(b.n,t,r)+' tiene un pallet';
-    desarmar(c);desarmar(t);put(c,'rk');put(t,'rkx');return null}
-  desarmar(c);put(c,val);return null;
-}
-const ocupadoR=(b,c,r)=>!!IDXR[b+'|'+c+'|'+r];
+// Cambiar un cuadrado de un lado: lugar / pasillo / no disponible / rack selectivo
+function setCelda(b,z,c,r,val){b.cel=b.cel||{};b.cel[z]=b.cel[z]||{};const k=pad2(c)+'-'+pad2(r);if(val===(z==='calle'?'pas':'pos'))delete b.cel[z][k];else b.cel[z][k]=val}
+const enCol=(b,z,c)=>Object.keys(UB).reduce((a,k)=>a+(UB[k].u||[]).filter(u=>u.b===b.n&&u.z===z&&(c==null||u.c===c)).length,0);
+// Cambiar todo un lado a Pallets o a Racks: la cuadrícula cambia de medida, así que el lado tiene que estar vacío.
+function setTipo(b,z,t){const nu=llenar(z,[TC(t)]);if(JSON.stringify(colsDe(b,z))===JSON.stringify(nu))return null;ubIndex();const n=enCol(b,z);
+  if(n)return `el ${ZN[z]} del bloque ${b.n} tiene ${n} lugar(es) con mercadería codificada: vacialo primero`;
+  b.cols[z]=nu;b.cel[z]={};return null}
+// Cambiar una columna a Pallet ('P') o Rack ('R'). Como rack y pallet tienen distinto ancho, al final del lado
+// pueden entrar más o menos columnas; las columnas que cambian tienen que estar vacías.
+function setColTipo(b,z,c,tc){const old=stc(b,z);if(old[c-1]===tc)return null;const arr=old.slice();arr[c-1]=tc;const full=llenar(z,arr),nu=full.filter(t=>t!=='A');ubIndex();
+  const cambian=[];for(let i=1;i<=Math.max(old.length,nu.length);i++)if(old[i-1]!==nu[i-1])cambian.push(i);
+  const llenas=cambian.filter(i=>enCol(b,z,i));if(llenas.length)return `la${llenas.length>1?'s':''} columna${llenas.length>1?'s':''} ${llenas.join(', ')} del ${ZN[z]} tiene${llenas.length>1?'n':''} mercadería codificada: vaciala${llenas.length>1?'s':''} primero`;
+  b.cols[z]=full;cambian.forEach(i=>{Object.keys(b.cel[z]||{}).forEach(k=>{if(+k.slice(0,2)===i)delete b.cel[z][k]})});return null}
 // ===== Dibujo =====
-// map=true: dentro del plano de la nave (filas a lo largo, columnas a lo ancho con el Sur arriba).
-// map=false: ficha, igual que la planilla (columnas 1…35 de izquierda a derecha, filas 1…18 hacia abajo).
-function gridHTML(b,W,H,map){
-  const G=gr(), gp=map?Math.max(.4,W/G.rows*0.06):1, ocu=map&&vista==='ocu'&&OCC, fill={}, mine=UBSEL?String(UBSEL):null;
-  if(ocu){const k=cuenta(b);['sur','calle','norte'].forEach(z=>{const o=OCC.b[b.n][z],libres=k[z].pos-o.codPos,est=Math.max(0,o.pos-o.codPos),f=ocZona(b.n,z);fill[z]={n:Math.min(libres,est),cls:'fill-'+nivel(f),i:0}})}
-  let h=`<div class="grid${map?'':' ficha-grid'}" style="width:${W}px;height:${H}px;grid-template-columns:repeat(${map?G.rows:G.cols},1fr);grid-template-rows:repeat(${map?G.cols:G.rows},1fr);gap:${gp}px" data-b="${b.n}">`;
-  for(let r=1;r<=G.rows;r++)for(let c=1;c<=G.cols;c++){
-    const e=estado(b,c,r), z=zonaC(c), oc=ocupante(b.n,c,r);
-    let cls=e;
-    if(oc){cls='occ'+(oc===mine?' mine':'')+(IDXR[b.n+'|'+c+'|'+r]?' ocr':'')}
-    else if((e==='pos'||e==='rk'||e==='rkx')&&ocu){const F=fill[z];cls=F.i++<F.n?F.cls:'fill-empty'}
-    if(z==='calle')cls+=' zc';
-    h+=`<span class="cell ${cls}" data-b="${b.n}" data-c="${c}" data-r="${r}"${map?` style="grid-column:${r};grid-row:${G.cols-c+1}"`:''}></span>`;
-  }
+// map=true: dentro del plano de la nave (filas a lo largo, columnas a lo ancho; Sur arriba, Norte abajo).
+// map=false: ficha como la planilla (Norte | calle | Sur de izquierda a derecha, filas hacia abajo).
+function ladoGrid(b,z,W,H,map,fill){
+  const a=colsDe(b,z), A=S.lados[z].ancho, mine=UBSEL?String(UBSEL):null, F=fill&&fill[z];
+  const dir=map?(z==='sur'?'column-reverse':'column'):(z==='norte'?'row-reverse':'row');
+  let h=`<div class="lgrid${map?'':' ficha-grid'}" style="display:flex;flex-direction:${dir};gap:${map?.5:2}px;width:${W}px;height:${H}px" data-b="${b.n}" data-z="${z}">`;
+  let c=0,runP=0;
+  a.forEach((t,i)=>{const frac=anchoCol(z,t)/A;
+    c++;const rows=filasT(z,t),isR=t==='R',gp=map?Math.max(.4,W/22*0.06):1;
+    runP=isR?0:runP+1;const pas=!isR&&runP%2===0&&a[i+1]==='P', f2=isR?1:.82, mg=pas?(map?H:W)*frac*.36:0;
+    const w=map?W:Math.max(4,W*frac*f2-2),hh=map?Math.max(1,H*frac*f2-.5):H;
+    // pistas a lo largo: racks = fila, fila, calle 3,5 m, fila, fila, … ; pallets = filas parejas
+    let tr=`repeat(${rows},1fr)`,pos=r=>r,cal=[];
+    if(isR){const g=rackGeo(z),p=g.prof,T=[];for(let k=0;k<g.pares;k++){T.push(p+'fr',p+'fr');if(k<g.pares-1){T.push(CALLE_R+'fr');cal.push(T.length)}}if(g.sobra>0.05)T.push(g.sobra+'fr');tr=T.join(' ');pos=r=>{const k=Math.floor((r-1)/2);return r+k}}
+    h+=`<div class="grid" title="Columna ${c} · ${isR?'rack':'pallet'}" style="flex:none;width:${w}px;height:${hh}px;${mg?(map?(z==='sur'?'margin-top':'margin-bottom'):(z==='norte'?'margin-left':'margin-right'))+':'+mg+'px;':''}grid-template-columns:${map?tr:'1fr'};grid-template-rows:${map?'1fr':tr};gap:${gp}px">`;
+    cal.forEach(k=>{h+=`<i class="ctr" style="${map?`grid-row:1;grid-column:${k}`:`grid-column:1;grid-row:${k}`}"></i>`});
+    for(let r=1;r<=rows;r++){const e=estado(b,z,c,r),oc=ocupante(b.n,z,c,r);
+      let cls=e==='pos'&&isR?'rk':e;
+      if(oc){cls='occ'+(oc===mine?' mine':'')+(isR?' ocr':'')}
+      else if(e==='pos'&&F){cls=F.i++<F.n?F.cls:'fill-empty'}
+      if(z==='calle')cls+=' zc';
+      h+=`<span class="cell ${cls}" data-b="${b.n}" data-z="${z}" data-c="${c}" data-r="${r}" style="${map?`grid-row:1;grid-column:${pos(r)}`:`grid-column:1;grid-row:${pos(r)}`}"></span>`}
+    h+='</div>'});
   return h+'</div>';
+}
+function gridHTML(b,W,H,map){
+  const ocu=map&&vista==='ocu'&&OCC, fill={};
+  if(ocu){const k=cuenta(b);ZS.forEach(z=>{const o=OCC.b[b.n][z],libres=k[z].pos-o.codPos,est=Math.max(0,o.pos-o.codPos),f=ocZona(b.n,z);fill[z]={n:Math.min(libres,est),cls:'fill-'+nivel(f),i:0}})}
+  if(map){const B=bandas(H);return `<div style="position:relative;width:${W}px;height:${H}px">`+['sur','calle','norte'].map(z=>`<div style="position:absolute;left:0;top:${B[z][0]}px">${ladoGrid(b,z,W,B[z][1],true,ocu?fill:null)}</div>`).join('')+'</div>'}
+  const t=ZS.reduce((a,z)=>a+S.lados[z].ancho,0),gap=6,ww=z=>Math.max(30,Math.round((W-2*gap)*S.lados[z].ancho/t));
+  return `<div class="fpanels" style="display:flex;gap:${gap}px;align-items:flex-start">`+ZS.map(z=>`<div class="fpanel"><div class="zhead1${z==='calle'?' zc':''}">${z==='calle'?'CALLE':ZN[z].toUpperCase()}<small>${resumenLado(b,z)}</small></div>${ladoGrid(b,z,ww(z),H,false,null)}</div>`).join('')+'</div>';
 }
 function playaHTML(w,sc,surEnd,norteStart,dSel){
   const n=S.dars.n, H=S.nave.ancho, half1=Math.ceil(n/2), half2=n-half1;
@@ -18162,11 +18270,11 @@ function playaHTML(w,sc,surEnd,norteStart,dSel){
 function renderNave(){
   const g=geo(), nav=S.nave, plan=document.querySelector('.plan');
   const avail=(plan.clientWidth||1200)-96, sc=Math.max(4,Math.min(9,avail/nav.largo));
-  const G=S.grid, nSur=G.cols-G.norte-G.calle, W=nav.largo*sc, H=nav.ancho*sc, ch=g.colH*sc, sH=nSur*ch, cH=G.calle*ch;
+  const W=nav.largo*sc, H=nav.ancho*sc, BD=bandas(H), sH=BD.sur[1], cH=BD.calle[1];
   let h=`<div class="dim h">${fmt(nav.largo)} m</div><div class="dim v"><span>${fmt(nav.ancho)} m</span></div>
-    <div class="lado" style="top:0;height:${sH}px" title="Columnas ${G.norte+G.calle+1}–${G.cols}">SUR</div>
-    <div class="lado" style="top:${sH}px;height:${cH}px" title="Columnas ${G.norte+1}–${G.norte+G.calle}">CALLE</div>
-    <div class="lado" style="top:${sH+cH}px;height:${H-sH-cH}px" title="Columnas 1–${G.norte}">NORTE</div>
+    <div class="lado" style="top:0;height:${sH}px" title="${fmt(S.lados.sur.ancho)} m">SUR</div>
+    <div class="lado" style="top:${sH}px;height:${cH}px" title="${S.lados.calle.ancho.toLocaleString('es-AR')} m">CALLE</div>
+    <div class="lado" style="top:${sH+cH}px;height:${H-sH-cH}px" title="${fmt(S.lados.norte.ancho)} m">NORTE</div>
     <div class="central" style="top:${sH}px;height:${cH}px"></div>`;
   const off=S.prep, gp=Math.max(0,g.gap), PM=pedidoEnMapa();
   if(off>0) h+=playaHTML(off,sc,sH/sc,(sH+cH)/sc,PM&&PM.ds?PM.ds.k:0);
@@ -18175,20 +18283,22 @@ function renderNave(){
     const oc=ocBlock(b.n), k=cuenta(b), tot=k.sur.pos+k.calle.pos+k.norte.pos;
     h+=`<button type="button" class="blk${b.n===sel?' sel':''}${hl.has(b.n)||(PM&&PM.m[b.n])?' hl':''}" data-blk="${b.n}" style="left:${(off+i*(g.L+gp))*sc}px;width:${g.L*sc}px" aria-label="Bloque ${b.n}">
       ${gridHTML(b,g.L*sc,H,true)}
-      <div class="blk-info" style="top:${sH}px;height:${cH}px"><b>BLOQUE ${b.n}</b>${PM&&PM.m[b.n]?`<span class="pedtag">🚚 ${fmt(PM.m[b.n])} un.</span>`:''}${oc&&vista==='ocu'?`<span class="pct ${nivel(oc.f)}">${pctTxt(oc.f)} · ${fmt(oc.st)} un.</span>`:`<span class="num">${fmt(tot)} pos.</span>`}</div></button>`;
+      ${vista==='rot'&&OCC?['sur','norte','calle'].map(z=>{const v_=RP.b[b.n]?RP.b[b.n][z]:0,f=rotPct(v_),[y,hh]=BD[z];if(z==='calle'&&!v_)return '';return `<div class="rotov rot-${nivelRot(f)}" style="top:${y}px;height:${hh}px;--a:${Math.min(.85,.12+f*6)}"><span>${pctR(f)}</span></div>`}).join(''):''}
+      <div class="blk-info" style="top:${sH}px;height:${cH}px"><b>BLOQUE ${b.n}</b>${PM&&PM.m[b.n]?`<span class="pedtag">🚚 ${fmt(PM.m[b.n])} un.</span>`:''}${oc&&vista==='ocu'?`<span class="pct ${nivel(oc.f)}">${pctTxt(oc.f)} · ${fmt(oc.st)} un.</span>`:vista==='rot'&&OCC?`<span class="pct ${nivelRot(rotPct(rotB(b.n)))}">🔁 ${pctR(rotPct(rotB(b.n)))} rotación</span>`:`<span class="num">${fmt(tot)} lugares</span>`}</div></button>`;
   });
-  const el=document.getElementById('nave'); el.style.width=W+'px'; el.style.height=H+'px'; el.innerHTML=h;
+  const el=document.getElementById('nave'); el.classList.toggle('vrot',vista==='rot'&&!!OCC); el.style.width=W+'px'; el.style.height=H+'px'; el.innerHTML=h;
 }
 function renderKpis(){
-  let pos=0,selC=0;S.blocks.forEach(b=>{const k=cuenta(b);pos+=k.sur.pos+k.calle.pos+k.norte.pos;selC+=k.sur.sel+k.calle.sel+k.norte.sel});
-  const items=[['Posiciones',pos,`= ${fmt(pos)} pallets o ${fmt(pos/2)} pilas de rack`],['Rack selectivo',S.rackPos,'posiciones · Mapa Racks']];
+  let pos=0,selC=0,pP=0,pR=0;S.blocks.forEach(b=>{const k=cuenta(b);ZS.forEach(z=>{pos+=k[z].pos;pP+=k[z].pal;pR+=k[z].rk;selC+=k[z].sel})});
+  const items=[['Lugares',pos,`${fmt(pP)} de pallet · ${fmt(pR)} pilas de rack (${fmt(pR*S.apilado)} racks)`],['Rack selectivo',S.rackPos,'posiciones · Mapa Racks']];
   if(OCC){let u=0;S.blocks.forEach(b=>{const o=OCC.b[b.n];u+=o.sur.pos+o.calle.pos+o.norte.pos});
     const enB=Object.values(OCC.b).reduce((a,o)=>a+o.sur.stock+o.calle.stock+o.norte.stock,0);
     items.push(['Stock total',OCC.total,'ficha de pila · '+fmt(API.data().length)+' artículos'],
-      ['En bloques',enB,(pos?Math.round(u/pos*100):0)+'% · '+fmt(u)+' de '+fmt(pos)+' posiciones'],
+      ['En bloques',enB,(pos?Math.round(u/pos*100):0)+'% · '+fmt(u)+' de '+fmt(pos)+' lugares'],
       ['En racks',OCC.rack,'Mapa Racks'],['En punteras',OCC.punt,'parrillas'],
       ['A reubicar',OCC.fuera.stock,OCC.fuera.arts?OCC.fuera.arts+' arts fuera del plano':'todo en el plano'],
       ['Sin ubicación',OCC.sin.stock,OCC.sin.arts+' arts sin bloque']);
+    {const rb=S.blocks.map(b=>({n:b.n,v:rotB(b.n)})).sort((a,b)=>b.v-a.v);if(RP.tot)items.push(['Rotación / mes',RP.tot,'más rotación: '+rb.slice(0,3).filter(x=>x.v>0).map(x=>'B'+x.n+' '+pctR(rotPct(x.v))).join(' · ')])}
     {const tot=OCC.cod.arts+OCC.pendList.length;items.splice(2,0,['Codificados',OCC.cod.arts,`de ${fmt(tot)} arts con stock en piso (${tot?Math.round(OCC.cod.arts/tot*100):0}%) · ${fmt(OCC.cod.stock)} un.`])}
     if(OCC.sinDato)items.push(['Sin max_pos',OCC.sinDato,OCC.sinDatoArts+' arts auto/camioneta sin cubiertas por pallet']);
     if(OCC.neg)items.push(['Negativos',OCC.neg,OCC.negArts+' arts en negativo en la ficha']);
@@ -18202,38 +18312,45 @@ function fichaStockHTML(n){
   const sel_=k.sur.sel+k.calle.sel+k.norte.sel;
   const racks=sel_?(()=>{const as=API.asign(),ks=Object.keys(as).filter(x=>as[x]);const un=ks.reduce((t,x)=>t+(as[x].unidades||0),0);return `<div class="row"><span><b>Mapa Racks</b> · ${ks.length} de ${fmt(S.rackPos)} posiciones ocupadas · ${fmt(un)} un.</span><button type="button" class="link" data-ir="mapa">Abrir Mapa Racks</button></div>`})():'';
   const zs=['sur','calle','norte'].filter(z=>k[z].pos||o[z].stock);
-  return `<div class="ph" style="margin-top:4px"><h2>Stock en el bloque</h2><span class="pct ${nivel(oc.f)}">${pctTxt(oc.f)} ocupado</span></div>
-    <div class="tbl"><table><thead><tr><th></th><th>Stock</th><th>Pallets</th><th>Racks</th><th>Usa</th><th>Posiciones</th><th>Ocupación</th><th></th></tr></thead><tbody>
-      ${zs.map(z=>{const f=ocZona(n,z),c=o[z];return `<tr><td>${ZN[z]}${z!=='calle'?' ('+n+(z==='sur'?'S':'N')+')':''}</td><td>${fmt(c.stock)}</td><td>${fmt(c.pal)}</td><td>${fmt(c.rk)}</td><td>${fmt(c.pos)}</td><td>${fmt(k[z].pos)}</td><td><span class="pct ${nivel(f)}">${pctTxt(f)}</span></td><td>${z!=='calle'?`<button type="button" class="link" data-vaciar="${n}|${z}">Vaciar</button>`:''}</td></tr>`}).join('')}
+  const rb=rotB(n),dis={};['sur','calle','norte'].forEach(z=>((RP.b[n]||{arts:{}}).arts[z]||[]).forEach(x=>{const d=String(x.r.diseno||'—').trim().toUpperCase();dis[d]=(dis[d]||0)+x.rot}));
+  const top=Object.keys(dis).sort((a,b)=>dis[b]-dis[a]).slice(0,8);
+  return `<div class="ph" style="margin-top:4px"><h2>Stock en el bloque</h2><span class="pct ${nivel(oc.f)}">${pctTxt(oc.f)} ocupado</span><span class="pct ${nivelRot(rotPct(rb))}" title="${fmt(rb)} un./mes de ${fmt(RP.tot)}">🔁 ${pctR(rotPct(rb))} de la rotación</span></div>
+    ${top.length?`<div class="note">Rotación del bloque por diseño: ${top.map(d=>`<span class="side-tag">${esc(d)} · ${pctR(rotPct(dis[d]))}</span>`).join(' ')}</div>`:''}
+    <div class="tbl"><table><thead><tr><th></th><th>Stock</th><th>Pallets</th><th>Racks</th><th>Usa</th><th>Posiciones</th><th>Ocupación</th><th>Rotación</th><th></th></tr></thead><tbody>
+      ${zs.map(z=>{const f=ocZona(n,z),c=o[z],rv=RP.b[n]?RP.b[n][z]:0;return `<tr><td>${ZN[z]}${z!=='calle'?' ('+n+(z==='sur'?'S':'N')+')':''}</td><td>${fmt(c.stock)}</td><td>${fmt(c.pal)}</td><td>${fmt(c.rk)}</td><td>${fmt(c.pos)}</td><td>${fmt(k[z].pos)}</td><td><span class="pct ${nivel(f)}">${pctTxt(f)}</span></td><td title="${fmt(rv)} un./mes"><span class="pct ${nivelRot(rotPct(rv))}">${pctR(rotPct(rv))}</span></td><td>${z!=='calle'?`<button type="button" class="link" data-vaciar="${n}|${z}">Vaciar</button>`:''}</td></tr>`}).join('')}
     </tbody></table></div>${(o.sur.sin+o.calle.sin+o.norte.sin)?`<div class="bad">${fmt(o.sur.sin+o.calle.sin+o.norte.sin)} un. de auto/camioneta sin max_pos: no se puede calcular su pallet.</div>`:''}${racks}
-    <div class="res-list">${list.length?list.slice(0,80).map(x=>{const r=x.r,mv=movArt===String(r.art);return `<div class="art-row"><div style="min-width:0"><div>${esc(r.med||'')} — ${esc(r.diseno||'')} ${x.cod?x.cod.slice(0,6).map(c=>`<span class="side-tag">${esc(c)}</span>`).join(' ')+(x.cod.length>6?' …':''):`<span class="side-tag">${esc(x.raw)}</span> <span class="bad">sin codificar</span>`}</div><div class="meta">${esc(r.art)} · ${esc(r.prov||'')} · rot ${r.rot||0}/mes${r.cond==='bajo stock'?' · <span class="bad">bajo stock</span>':''}</div></div>
+    <div class="res-list">${list.length?list.slice(0,80).map(x=>{const r=x.r,mv=movArt===String(r.art);return `<div class="art-row"><div style="min-width:0"><div>${esc(r.med||'')} — ${esc(r.diseno||'')} ${x.cod?x.cod.slice(0,6).map(c=>`<span class="side-tag">${esc(c)}</span>`).join(' ')+(x.cod.length>6?' …':''):`<span class="side-tag">${esc(x.raw)}</span> <span class="bad">sin codificar</span>`}</div><div class="meta">${esc(r.art)} · ${esc(r.prov||'')} · rot ${r.rot||0}/mes${r.diseno&&ROTD[String(r.diseno).trim().toUpperCase()]!=null?' · diseño '+fmt(ROTD[String(r.diseno).trim().toUpperCase()])+'/mes':''}${r.cond==='bajo stock'?' · <span class="bad">bajo stock</span>':''}</div></div>
       <div class="num" style="text-align:right">${fmt(x.u)} un.<div class="meta">${x.cod?(x.e.al==='PALLET'?fmt(x.e.pal)+' pallet'+(x.e.pal===1?'':'s'):fmt(x.e.rk)+' pila'+(x.e.rk===1?'':'s')+' de rack'):(x.e.al==='PALLET'?(x.e.sin?'<span class="bad">sin max_pos</span>':fmt(x.e.pal)+' pallet'+(x.e.pal===1?'':'s')):fmt(x.e.rk)+' rack'+(x.e.rk===1?'':'s'))} · ${fmt(x.e.pos)} lugares${x.u<(r.stock||0)?' · total '+fmt(r.stock||0):''}</div></div><span style="display:flex;gap:4px"><button type="button" class="btn" data-ubicar="${esc(r.art)}">Codificar</button><button type="button" class="btn" data-mover="${esc(r.art)}">Mover</button></span>
-      ${mv?`<div class="mv"><input id="mvDes" list="codigos" placeholder="A (ej: 4S o 4-20-05)" aria-label="Destino"><button type="button" class="btn pri" data-mvok="${esc(r.art)}">Mover</button><button type="button" class="btn" data-mvcancel="1">Cancelar</button></div>`:''}</div>`}).join('')+(list.length>80?`<div class="res-item u">…y ${list.length-80} más</div>`:''):'<div class="res-item u">No hay artículos cargados en este bloque.</div>'}</div>`;
+      ${mv?`<div class="mv"><input id="mvDes" list="codigos" placeholder="A (ej: 4S o 4S-03-12)" aria-label="Destino"><button type="button" class="btn pri" data-mvok="${esc(r.art)}">Mover</button><button type="button" class="btn" data-mvcancel="1">Cancelar</button></div>`:''}</div>`}).join('')+(list.length>80?`<div class="res-item u">…y ${list.length-80} más</div>`:''):'<div class="res-item u">No hay artículos cargados en este bloque.</div>'}</div>`;
 }
 function renderFicha(){
-  const b=S.blocks.find(x=>x.n===sel), k=cuenta(b), g=geo();
-  const tot=z=>k[z].pos, all=tot('sur')+tot('calle')+tot('norte');
+  const b=S.blocks.find(x=>x.n===sel), k=cuenta(b);
+  const all=ZS.reduce((a,z)=>a+k[z].pos,0);
   // El rack selectivo (Mapa Racks) es fijo y solo está en el Bloque 1: no se ofrece en los demás.
-  const br=[['pos','Pallet'],['rk','Rack'],['pas','Pasillo'],...(b.n===1?[['sel','Rack selectivo']]:[])];
-  if(!br.some(x=>x[0]===brush))brush='pos';
+  const br=[['P','Pallet'],['R','Rack'],['pas','Pasillo'],...(b.n===1?[['sel','Rack selectivo']]:[])];
+  if(!br.some(x=>x[0]===brush))brush='P';
+  const L_=S.lados, opt=(z,t)=>{const n=llenar(z,[TC(t)]).filter(x=>x!=='A').length;return `<option value="${t}" ${tipoL(b,z)===t?'selected':''}>Todo ${t==='RACK'?'racks':'pallets'} · ${n} × ${filasT(z,TC(t))}</option>`},
+    optM=z=>tipoL(b,z)==='MIXTO'?`<option value="MIXTO" selected>${resumenLado(b,z)}</option>`:'';
+  const maxC=Math.max(...ZS.map(z=>k[z].cols)),maxR=Math.max(...ZS.map(z=>k[z].rows)),nums=(id,n,selv)=>`<select id="${id}" style="width:auto">${Array.from({length:n},(_,i)=>`<option ${i+1===selv?'selected':''}>${i+1}</option>`).join('')}</select>`;
   document.getElementById('ficha').innerHTML=`
-    <div class="ph"><h2>Bloque ${b.n}</h2><span class="note num">${S.grid.cols} columnas × ${S.grid.filas} filas · 1 cuadrado = 1 pallet · 2 cuadrados = 1 rack</span></div>
-    <div class="op"><h3>Distribución del bloque</h3><div class="note">Tocá un cuadrado para elegir Pallet, Rack o Pasillo, o marcá varios de una vez:</div>
+    <div class="ph"><h2>Bloque ${b.n}</h2><span class="note num">1 cuadrado = 1 lugar: un pallet Arlog o una pila de ${S.apilado} racks</span></div>
+    <div class="op"><h3>Armado de cada lado</h3><div class="note">Cada lado se puede armar entero en pallets o en racks, o mezclar línea por línea desde la calle. A lo largo, los racks van en filas de a 2 espalda con espalda con calle transversal de ${String(CALLE_R).replace('.',',')} m entre pares (${rackGeo('sur').filas} filas en ${fmt(S.bloqueL)} m); los pallets de a 2 con pasada humana de 0,5 m.</div>
+      <div class="foot">${['norte','calle','sur'].map(z=>`<label class="lbl" for="tipo-${z}">${z==='calle'?'Calle':ZN[z]}</label><select id="tipo-${z}" data-tipo="${z}" style="width:auto">${optM(z)}${opt(z,'PALLET')}${opt(z,'RACK')}</select>`).join('')}</div></div>
+    <div class="op"><h3>Distribución del bloque</h3><div class="note">Tocá un cuadrado para elegir Pallet, Rack o Pasillo, o marcá varios de una vez. Pallet y Rack cambian la columna entera (una línea de rack tiene ${filasT('sur','R')} lugares a lo largo y una de pallets ${filasT('sur','P')}).</div>
       <div class="foot"><div class="seg big" role="group" aria-label="Marcar como">${br.map(([v,t])=>`<button type="button" class="C1" data-est="${v}" aria-pressed="${brush===v}">${t}</button>`).join('')}</div></div>
       <div class="foot"><label for="dZona" class="lbl">En</label><select id="dZona" style="width:auto"><option value="norte">Todo el Norte</option><option value="sur">Todo el Sur</option><option value="calle">La calle central</option><option value="todo">Todo el bloque</option><option value="">Filas y columnas que elija…</option></select>
         <label class="note" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="dPas"> con pasillo cada 2</label>
         <button type="button" class="btn pri" id="dAplicar">Aplicar</button></div>
       <div class="foot" id="dMano" hidden>
-        <span class="lbl">Columnas</span><select id="dC1" style="width:auto">${Array.from({length:S.grid.cols},(_,i)=>`<option ${i===0?'selected':''}>${i+1}</option>`).join('')}</select><span>a</span><select id="dC2" style="width:auto">${Array.from({length:S.grid.cols},(_,i)=>`<option ${i===S.grid.cols-1?'selected':''}>${i+1}</option>`).join('')}</select>
-        <span class="lbl">Filas</span><select id="dF1" style="width:auto">${Array.from({length:S.grid.filas},(_,i)=>`<option ${i===0?'selected':''}>${i+1}</option>`).join('')}</select><span>a</span><select id="dF2" style="width:auto">${Array.from({length:S.grid.filas},(_,i)=>`<option ${i===S.grid.filas-1?'selected':''}>${i+1}</option>`).join('')}</select></div>
+        <span class="lbl">Lado</span><select id="dLado" style="width:auto"><option value="norte">Norte</option><option value="calle">Calle</option><option value="sur" selected>Sur</option></select>
+        <span class="lbl">Columnas</span>${nums('dC1',maxC,1)}<span>a</span>${nums('dC2',maxC,maxC)}
+        <span class="lbl">Filas</span>${nums('dF1',maxR,1)}<span>a</span>${nums('dF2',maxR,maxR)}</div>
     </div>
-    <div class="detail" style="overflow:auto;flex-direction:column;gap:2px;flex-wrap:nowrap">
-      <div class="zhead" style="width:${S.grid.cols*17}px;grid-template-columns:${S.grid.norte}fr ${S.grid.calle}fr ${S.grid.cols-S.grid.norte-S.grid.calle}fr"><span>NORTE · col. 1–${S.grid.norte}</span><span>CALLE</span><span>SUR · col. ${S.grid.norte+S.grid.calle+1}–${S.grid.cols}</span></div>
-      ${gridHTML(b,S.grid.cols*17,S.grid.filas*15,false)}</div>
-    <div class="note">Código: <b>bloque-columna-fila</b>. Pallet: <span class="side-tag">${b.n}-20-05</span> · rack: <span class="side-tag">${b.n}-20-05R</span> (ocupa las columnas 20 y 21 de la fila 5: siempre el elegido y el siguiente hacia la pared). Columnas ${ZN.norte} 1–${S.grid.norte} · ${ZN.calle} ${S.grid.norte+1}–${S.grid.norte+S.grid.calle} · ${ZN.sur} ${S.grid.norte+S.grid.calle+1}–${S.grid.cols}. Filas 1–${S.grid.filas} desde las dársenas.</div>
-    <div class="tbl"><table><thead><tr><th></th><th>Cuadrados pallet</th><th>Cuadrados rack</th><th>= racks</th><th>Total en pallets</th><th>Pasada</th><th>No disp.</th>${b.n===1?'<th>Rack selectivo</th>':''}</tr></thead><tbody>
-      ${['norte','calle','sur'].map(z=>`<tr><td>${ZN[z]}</td><td>${fmt(k[z].pal)}</td><td>${fmt(k[z].rk)}</td><td>${fmt(k[z].racks)}</td><td>${fmt(k[z].pos)}</td><td>${fmt(k[z].pas)}</td><td>${fmt(k[z].off)}</td>${b.n===1?`<td>${fmt(k[z].sel)}</td>`:''}</tr>`).join('')}
-      <tr class="tot"><td>Bloque</td><td>${fmt(k.sur.pal+k.calle.pal+k.norte.pal)}</td><td>${fmt(k.sur.rk+k.calle.rk+k.norte.rk)}</td><td>${fmt(k.sur.racks+k.calle.racks+k.norte.racks)}</td><td>${fmt(all)}</td><td>${fmt(k.sur.pas+k.calle.pas+k.norte.pas)}</td><td>${fmt(k.sur.off+k.calle.off+k.norte.off)}</td>${b.n===1?`<td>${fmt(k.sur.sel+k.calle.sel+k.norte.sel)}</td>`:''}</tr>
+    <div class="detail" style="overflow:auto;flex-direction:column;gap:2px;flex-wrap:nowrap">${gridHTML(b,640,300,false)}</div>
+    <div class="note">Código: <b>bloque+lado-columna-fila</b>, ej. <span class="side-tag">${b.n}S-03-12</span> = bloque ${b.n}, Sur, columna 3, fila 12. Columnas desde la calle hacia la pared · filas desde las dársenas.</div>
+    <div class="tbl"><table><thead><tr><th></th><th>Columnas</th><th>Cuadrícula</th><th>Lugares</th><th>Capacidad</th><th>Pasillo</th><th>No disp.</th>${b.n===1?'<th>Rack selectivo</th>':''}</tr></thead><tbody>
+      ${ZS.map(z=>{const x=k[z];return `<tr><td>${ZN[z]}</td><td>${resumenLado(b,z)}</td><td>${cuadLado(b,z)}</td><td>${fmt(x.pos)}</td><td>${[x.pal?fmt(x.pal*Math.max(1,S.pallet.apil))+' pallets':'',x.rk?fmt(x.rk*S.apilado)+' racks':''].filter(Boolean).join(' · ')||'—'}</td><td>${fmt(x.pas)}</td><td>${fmt(x.off)}</td>${b.n===1?`<td>${fmt(x.sel)}</td>`:''}</tr>`}).join('')}
+      <tr class="tot"><td>Bloque</td><td></td><td></td><td>${fmt(all)}</td><td>${fmt(ZS.reduce((a,z)=>a+k[z].pal,0)*Math.max(1,S.pallet.apil))} pallets · ${fmt(ZS.reduce((a,z)=>a+k[z].rk,0)*S.apilado)} racks</td><td>${fmt(ZS.reduce((a,z)=>a+k[z].pas,0))}</td><td>${fmt(ZS.reduce((a,z)=>a+k[z].off,0))}</td>${b.n===1?`<td>${fmt(ZS.reduce((a,z)=>a+k[z].sel,0))}</td>`:''}</tr>
     </tbody></table></div>
     <div class="foot"><input id="copyTo" placeholder="Copiar esta distribución a… (ej: 2,3,4 o todos)" style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:6px 8px"><button type="button" class="btn" id="copyBtn">Copiar</button><button type="button" class="btn danger" id="resetBlk">Restablecer bloque</button></div>
     ${fichaStockHTML(b.n)}
@@ -18241,18 +18358,13 @@ function renderFicha(){
 }
 function renderNaveDims(){
   const g=geo(), f=(id,l,v,step,min)=>`<div class="row"><label for="${id}">${l}</label><input id="${id}" type="number" min="${min??1}" step="${step||1}" value="${v}"></div>`;
-  const okP=S.pallet.a+S.gap<=g.colW+1e-9&&S.pallet.l<=g.rowH+1e-9, okR=S.rackOp.a<=g.colW+1e-9&&S.rackOp.l<=2*g.rowH+1e-9;
   document.getElementById('naveDims').innerHTML=
     f('nv-largo','Nave largo (m)',S.nave.largo)+f('nv-ancho','Nave ancho (m)',S.nave.ancho)+f('bl-largo','Bloque largo (m)',S.bloqueL,0.5)+f('prep','Zona de preparación (m)',S.prep,0.5,0)+
     `<div class="row"><span>Pasillo entre bloques</span><span class="num${g.gap<0?' warn':''}">${g.gap.toLocaleString('es-AR',{maximumFractionDigits:2})} m</span></div>`+
     f('dars-n','Dársenas',S.dars.n,1,0)+`<div class="row"><label for="dars-u">Ubicación dársenas</label><select id="dars-u" style="width:auto"><option value="frente" ${S.dars.ubic==='frente'?'selected':''}>Pared del frente</option><option value="lat" ${S.dars.ubic==='lat'?'selected':''}>Paredes laterales</option></select></div>`+
-    `<div class="lbl" style="grid-column:1/-1;margin-top:8px">Cuadrícula de cada bloque</div>`+
-    f('g-cols','Columnas (a lo ancho de la nave)',S.grid.cols)+f('g-norte','Columnas lado Norte',S.grid.norte)+f('g-calle','Columnas calle central',S.grid.calle,1,0)+
-    `<div class="row"><span>Columnas lado Sur</span><span class="num">${S.grid.cols-S.grid.norte-S.grid.calle}</span></div>`+f('g-rows','Filas (a lo largo del bloque)',S.grid.filas,1,2)+
-    `<div class="row"><span>Cuadrado (aprox.)</span><span class="num">${g.colW.toLocaleString('es-AR',{maximumFractionDigits:2})} × ${g.rowH.toLocaleString('es-AR',{maximumFractionDigits:2})} m</span></div>`+
-    `<div class="note" style="grid-column:1/-1">${okP?'✅':'⚠️'} Pallet ${S.pallet.l} × ${S.pallet.a} m + ${S.gap.toLocaleString('es-AR')} m de separación ${okP?'entra':'no entra'} en una celda · ${okR?'✅':'⚠️'} Rack ${S.rackOp.l} × ${S.rackOp.a} m ${okR?'entra':'no entra'} en 2 cuadrados.</div>`+
-    (g.sobra<0?`<div class="warn" style="grid-column:1/-1">Preparación + ${g.N} bloques suman ${fmt(S.prep+g.N*g.L)} m y la nave mide ${fmt(S.nave.largo)} m: no entran.</div>`:'')+
-    (S.grid.norte+S.grid.calle>=S.grid.cols?`<div class="warn" style="grid-column:1/-1">Norte + calle ocupan todas las columnas: no queda lado Sur.</div>`:'');
+    `<div class="lbl" style="grid-column:1/-1;margin-top:8px">Medida de cada lado</div>`+
+    ['norte','calle','sur'].map(z=>{const L=S.lados[z];return `<div class="row"><span>${ZN[z]} · ${L.ancho.toLocaleString('es-AR')} m</span><span class="num">pallets ${L.pal.cols} × ${L.pal.rows} · racks ${L.rk.cols} × ${L.rk.rows}</span></div>`}).join('')+
+    (g.sobra<0?`<div class="warn" style="grid-column:1/-1">Preparación + ${g.N} bloques suman ${fmt(S.prep+g.N*g.L)} m y la nave mide ${fmt(S.nave.largo)} m: no entran.</div>`:'');
 }
 function renderCfgs(){
   const f=(id,l,v,step,min)=>`<div class="row"><label for="${id}">${l}</label><input id="${id}" type="number" min="${min??0.1}" step="${step||0.05}" value="${v}"></div>`;
@@ -18265,11 +18377,11 @@ function renderCfgs(){
     f('rk-l','Largo operativo (m)',S.rackOp.l)+f('rk-a','Ancho operativo (m)',S.rackOp.a)+f('apil','Racks apilados',S.apilado,1,1)+
     Object.keys(S.cap).map(t=>f('cap-'+t,'Cubiertas por rack '+t.toLowerCase(),S.cap[t],1,1).replace('<input ','<input data-cap="'+t+'" ')).join('')+
     f('rackPos','Posiciones Mapa Racks',S.rackPos,1,0)+
-    `<div class="note" style="grid-column:1/-1">Equivalencia: 1 rack = 2 cuadrados = 2 pallets.</div>`;
+    `<div class="note" style="grid-column:1/-1">Cada pila de ${S.apilado} racks ocupa 1 lugar de un lado armado en racks.</div>`;
 }
-function renderVista(){const bar=document.getElementById('vistaBar');bar.hidden=!API;document.getElementById('infBtn').hidden=!API;document.querySelectorAll('[data-vista]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.vista===vista));document.getElementById('ocuLegend').hidden=vista!=='ocu';
+function renderVista(){const bar=document.getElementById('vistaBar');bar.hidden=!API;document.getElementById('infBtn').hidden=!API;document.querySelectorAll('[data-vista]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.vista===vista));document.getElementById('ocuLegend').hidden=vista!=='ocu';{const rl=document.getElementById('rotLegend');if(rl){rl.hidden=vista!=='rot';if(vista==='rot'&&OCC)rl.querySelector('[data-rl]').textContent=`Rotación total ${fmt(RP.tot)} un./mes · en bloques ${pctR(rotPct(S.blocks.reduce((a,b)=>a+rotB(b.n),0)))} · Mapa Racks ${pctR(rotPct(RP.rack))} · punteras ${pctR(rotPct(RP.punt))}${RP.fuera?' · fuera del plano '+pctR(rotPct(RP.fuera)):''}`}}
   document.getElementById('opsPanel').hidden=!API;if(API){document.getElementById('codigos').innerHTML=codigosDestino().map(c=>`<option value="${esc(c)}">`).join('');document.getElementById('opsInfo').textContent=fmt(API.data().length)+' artículos en el WMS'}}
-function renderAll(){renderVista();renderCod();renderReub();renderPedidos();renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
+function renderAll(){renderVista();renderCod();renderRot();renderReub();renderPedidos();renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
 window.planoRefrescar=function(){calcOcc();renderAll()};
 // ----- Para la recepción de descargas del WMS -----
 window.planoBloques=function(){return S.blocks.map(b=>b.n)};
@@ -18277,28 +18389,30 @@ window.planoZonas=function(){return {sur:ZN.sur,norte:ZN.norte,calle:ZN.calle}};
 window.planoLibres=function(b,z,alm,excl){return libresLista(+b,z,alm,exclDe(excl)).length};
 window.planoDefaults=function(art,cant){
   const r=artDe(art);if(!r)return null;const al=almDe(r),need=necesita(r,cant,al),U=UB[String(art)],pu=parseUbic(r.bloque)[0];
-  let z=U&&U.u.length?zonaC(U.u[0].c):(pu.side&&pu.side!=='calle'?pu.side:'sur');
-  const b=mejorBloque(al,z,need||1,U&&U.u.length?U.u[0].b:pu.b);
+  let z=U&&U.u.length?U.u[0].z:(pu.side&&pu.side!=='calle'?pu.side:'sur');
+  const b=mejorBloque(al,z,need||1,U&&U.u.length?U.u[0].b:pu.b);z=zonaPara(b,al,z);
   return {alm:al,need,b,z,maxPos:r.max_pos||0,rackTipo:rackTipoDe(r)};
 };
 window.planoNecesita=function(art,cant,alm){const r=artDe(art);return r?necesita(r,cant,alm):null};
 window.planoSugerir=function(o){const r=artDe(o.art);const need=r?necesita(r,o.cant,o.alm):null;const L=libresLista(+o.b,o.z,o.alm,exclDe(o.excl));const n=o.n!=null?o.n:(need==null?1:need);return {need,codes:L.slice(0,n),libres:L.length,faltan:Math.max(0,n-L.length)}};
 window.planoValidar=function(art,codes,excl){ubIndex();const ex=exclDe(excl),err=[];codes.forEach(k=>{const u=codeToU(k);if(!u){err.push(k+': código inválido');return}
-  celdasU(u).forEach(([c,r])=>{const oc=ocupante(u.b,c,r);if(oc&&oc!==String(art))err.push(k+': ocupado por '+oc);else if(!okEstado(estado(S.blocks.find(x=>x.n===u.b),c,r),u.alm))err.push(k+': no es un lugar libre');else if(ex.has(codigo(u.b,c,r)))err.push(k+': elegido para otro artículo')})});return [...new Set(err)]};
+  const oc=ocupante(u.b,u.z,u.c,u.r);if(oc&&oc!==String(art))err.push(k+': ocupado por '+oc);else if(estado(blk_(u.b),u.z,u.c,u.r)!=='pos')err.push(k+': no es un lugar libre');else if(ex.has(codigo(u.b,u.z,u.c,u.r)))err.push(k+': elegido para otro artículo')});return [...new Set(err)]};
 // Armado sugerido: cuántos pallets / racks y de cuántas cubiertas cada uno
 window.planoArmado=function(art,cant,alm){const r=artDe(art);if(!r)return [];const L=[];
   if(alm==='PALLET'){const mp=r.max_pos||0;if(!mp)return [{n:1,t:'PALLET',q:cant}];const n=Math.floor(cant/mp),rem=cant-n*mp;if(n)L.push({n,t:'PALLET',q:mp});if(rem)L.push({n:1,t:'PALLET',q:rem});return L}
   const c=S.cap[rackTipoDe(r)]||1,n=Math.floor(cant/c),rem=cant-n*c;if(n)L.push({n,t:'RACK',q:c});if(rem)L.push({n:1,t:'RACK',q:rem});return L};
 window.planoApilado=function(){return {rack:S.apilado,pallet:Math.max(1,S.pallet.apil)}};
-// Posiciones para un armado: un lugar por pila de pallets y dos (A+B) por pila de racks.
+// Posiciones para un armado: un lugar por pila de pallets (lado en pallets) y uno por pila de racks (lado en racks).
+// Si el lado elegido no alcanza o es de otro tipo, se completa con los otros lados del mismo bloque.
 // Devuelve [{code,q}] con las cubiertas que quedan en cada posición.
 window.planoSugerirMix=function(o){
   const ap=Math.max(1,S.pallet.apil),ar=Math.max(1,S.apilado),pal=[],rk=[];
   (o.lineas||[]).forEach(l=>{for(let i=0;i<(+l.n||0);i++)(l.t==='RACK'?rk:pal).push(+l.q||0)});
   const pilas=(arr,h)=>{const out=[];for(let i=0;i<arr.length;i+=h)out.push(arr.slice(i,i+h).reduce((a,b)=>a+b,0));return out};
   const pP=pilas(pal,ap),pR=pilas(rk,ar),ex=exclDe(o.excl);
-  const cP=pP.length?libresLista(+o.b,o.z,'PALLET',ex,pP.length):[];
-  const ex2=exclDe([...(o.excl||[]),...cP]);const cR=pR.length?libresLista(+o.b,o.z,'RACK',ex2,pR.length):[];
+  const buscar_=(alm,n,exs)=>{if(!n)return [];const a=libresLista(+o.b,o.z,alm,exs,n);if(a.length<n&&o.z&&o.z!=='todo'){const e2=new Set([...exs,...a]);a.push(...libresLista(+o.b,'todo',alm,e2,n-a.length))}return a};
+  const cP=buscar_('PALLET',pP.length,ex);
+  const ex2=exclDe([...(o.excl||[]),...cP]);const cR=buscar_('RACK',pR.length,ex2);
   const res=[];cP.forEach((k,i)=>res.push({code:k,q:pP[i]}));cR.forEach((k,i)=>res.push({code:k,q:pR[i]}));
   return {items:res,necPal:pP.length,necRack:pR.length,faltanPal:Math.max(0,pP.length-cP.length),faltanRack:Math.max(0,pR.length-cR.length)};
 };
@@ -18326,7 +18440,7 @@ window.planoResumen=function(){
   const bloques=S.blocks.map(b=>{const k=cuenta(b),o=OCC?OCC.b[b.n]:null;
     const sd=z=>{const cap=k[z].pos,u=o?o[z].pos:0;return {cap,stock:o?o[z].stock:0,pall:o?o[z].pall:0,pal:o?o[z].pal:0,rk:o?o[z].rk:0,m2:u,capM2:cap,f:cap>0?u/cap:(u>0?Infinity:0)}};
     const S_=sd('sur'),C_=sd('calle'),N_=sd('norte');
-    return {n:b.n,nombre:fmt(S_.cap+C_.cap+N_.cap)+' pos.',cap:S_.cap+C_.cap+N_.cap,sur:S_,calle:C_,norte:N_}});
+    return {rot:rotB(b.n),rotF:rotPct(rotB(b.n)),n:b.n,nombre:fmt(S_.cap+C_.cap+N_.cap)+' lugares',cap:S_.cap+C_.cap+N_.cap,sur:S_,calle:C_,norte:N_}});
   const cap=bloques.reduce((a,b)=>a+b.cap,0), enB=bloques.reduce((a,b)=>a+b.sur.stock+b.calle.stock+b.norte.stock,0), occ=bloques.reduce((a,b)=>a+b.sur.m2+b.calle.m2+b.norte.m2,0);
   let rackOcc=0;if(API){const as=API.asign()||{};rackOcc=Object.keys(as).filter(k=>as[k]).length}
   return {unidad:'posiciones',bloques,cap,capM2:cap,occM2:occ,sinDato:OCC?OCC.sinDato:0,sinDatoArts:OCC?OCC.sinDatoArts:0,enBloques:enB,total:OCC?OCC.total:0,rack:OCC?OCC.rack:0,punt:OCC?OCC.punt:0,reubicar:OCC?OCC.fuera.stock:0,reubArts:OCC?OCC.fuera.arts:0,sinUbic:OCC?OCC.sin.stock:0,sinArts:OCC?OCC.sin.arts:0,dif:OCC?OCC.dif:0,neg:OCC?OCC.neg:0,negArts:OCC?OCC.negArts:0,
@@ -18335,25 +18449,25 @@ window.planoResumen=function(){
 window.planoInformeHTML=function(){
   const R=planoResumen(), f=new Date(), fecha=f.toLocaleDateString('es-AR')+' '+f.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
   const col=x=>x===Infinity||x>=.9?'#d03a2f':x>=.65?'#e39b16':'#2f9e57', pc=x=>x===Infinity?'s/lugar':Math.round(x*100)+'%';
-  const g=geo(), W=1000, sc=W/S.nave.largo, H=S.nave.ancho*sc, gp=Math.max(0,g.gap), rh=g.colH*sc, nSur=S.grid.cols-S.grid.norte-S.grid.calle;
+  const g=geo(), W=1000, sc=W/S.nave.largo, H=S.nave.ancho*sc, gp=Math.max(0,g.gap);
   let svg=`<svg viewBox="0 0 ${W} ${H+16}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Arial" font-size="9"><rect x="0" y="0" width="${W}" height="${H}" fill="#fff" stroke="#222" stroke-width="2"/>`;
   svg+=`<rect x="0" y="0" width="${S.prep*sc}" height="${H}" fill="#f1f1f1"/><text x="${S.prep*sc/2}" y="${H/2}" text-anchor="middle" fill="#555">Prep.</text>`;
-  const zy={sur:[0,nSur*rh],calle:[nSur*rh,S.grid.calle*rh],norte:[(nSur+S.grid.calle)*rh,H-(nSur+S.grid.calle)*rh]};
+  const zy=bandas(H);
   R.bloques.forEach((b,i)=>{const x=(S.prep+i*(g.L+gp))*sc,w=g.L*sc;
     ['sur','calle','norte'].forEach(z=>{const d=b[z],[y,h]=zy[z];if(!d.cap&&!d.stock){if(z==='calle')svg+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fbf3d6"/>`;return}
       const fr=d.f===Infinity?1:Math.min(1,d.f);svg+=`<rect x="${x+1}" y="${y+1}" width="${w-2}" height="${h-2}" fill="#f4f4f4" stroke="#999"/>`;
       svg+=`<rect x="${x+1}" y="${y+1+(h-2)*(1-fr)}" width="${w-2}" height="${(h-2)*fr}" fill="${col(d.f)}" opacity=".85"/><text x="${x+w/2}" y="${y+h/2+3}" text-anchor="middle" font-weight="bold" fill="#111">${pc(d.f)}</text>`});
-    svg+=`<text x="${x+w/2}" y="${H-4}" text-anchor="middle" fill="#333">B${b.n}</text>`});
+    svg+=`<text x="${x+w/2}" y="${H-4}" text-anchor="middle" fill="#333">B${b.n} · rot ${pctR(b.rotF)}</text>`});
   svg+=`<text x="0" y="${H+12}" fill="#666">Sur arriba · calle central · Norte abajo · dársenas a la izquierda · relleno = % de posiciones usadas</text></svg>`;
-  const rows=R.bloques.map(b=>{const T=b.cap,U=b.sur.m2+b.calle.m2+b.norte.m2,c=d=>d.cap||d.stock?`${fmt(d.stock)} un. · ${fmt(d.pal)} pall. · ${fmt(d.rk)} racks · ${fmt(d.m2)}/${fmt(d.cap)} pos.`:'—';return `<tr><td>Bloque ${b.n}</td><td>${c(b.sur)}</td><td style="color:${col(b.sur.f)}">${b.sur.cap?pc(b.sur.f):'—'}</td><td>${c(b.norte)}</td><td style="color:${col(b.norte.f)}">${b.norte.cap?pc(b.norte.f):'—'}</td><td>${fmt(U)} / ${fmt(T)}</td><td style="color:${col(T?U/T:0)}"><b>${T?pc(U/T):'—'}</b></td></tr>`}).join('');
+  const rows=R.bloques.map(b=>{const T=b.cap,U=b.sur.m2+b.calle.m2+b.norte.m2,c=d=>d.cap||d.stock?`${fmt(d.stock)} un. · ${fmt(d.pal)} pall. · ${fmt(d.rk)} racks · ${fmt(d.m2)}/${fmt(d.cap)} lugares`:'—';return `<tr><td>Bloque ${b.n}</td><td>${c(b.sur)}</td><td style="color:${col(b.sur.f)}">${b.sur.cap?pc(b.sur.f):'—'}</td><td>${c(b.norte)}</td><td style="color:${col(b.norte.f)}">${b.norte.cap?pc(b.norte.f):'—'}</td><td>${fmt(U)} / ${fmt(T)}</td><td style="color:${col(T?U/T:0)}"><b>${T?pc(U/T):'—'}</b></td><td>${pctR(b.rotF)}</td></tr>`}).join('');
   const reub=OCC?OCC.fuera.list.slice().sort((a,b)=>b._u-a._u).slice(0,15):[], peds=API?pedidosAbiertos():[];
-  const kp=[['Stock total (ficha de pila)',R.total],['En bloques',R.enBloques],['Posiciones',R.cap],['Posiciones usadas',R.occM2],['Ocupación bloques',R.cap?Math.round(R.occM2/R.cap*100)+'%':'—'],['En racks',R.rack],['Racks ocupados',R.rackOcc+' / '+R.rackPos],['En punteras',R.punt],['A reubicar',R.reubicar],['Sin ubicación',R.sinUbic],...(R.neg?[['Negativos',R.neg]]:[])];
+  const kp=[['Stock total (ficha de pila)',R.total],['En bloques',R.enBloques],['Lugares',R.cap],['Lugares usados',R.occM2],['Ocupación bloques',R.cap?Math.round(R.occM2/R.cap*100)+'%':'—'],['En racks',R.rack],['Racks ocupados',R.rackOcc+' / '+R.rackPos],['En punteras',R.punt],['A reubicar',R.reubicar],['Sin ubicación',R.sinUbic],...(R.neg?[['Negativos',R.neg]]:[])];
   return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plano de nave '+fecha+'</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px;margin:0}h1{font-size:18px;margin:0}h2{font-size:12px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:#444}.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px}.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px;margin-top:10px}.k div{border:1px solid #ccc;border-radius:4px;padding:5px}.k b{display:block;font-size:14px;margin-top:2px}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:3px 5px;text-align:right}th:first-child,td:first-child{text-align:left}th{font-size:9px;text-transform:uppercase;color:#555}.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.n{color:#666;font-size:9px}</style></head><body>'+
     `<div class="top"><div><div class="n">HALPERN NEUMÁTICOS · DEPÓSITO MENDOZA</div><h1>Plano de nave · cómo va quedando</h1></div><div>${fecha}</div></div>`+
     `<div class="k">${kp.map(([l,v])=>`<div>${l}<b>${typeof v==='number'?fmt(v):v}</b></div>`).join('')}</div>`+
     (R.dif?`<div class="n" style="margin-top:4px;color:#d03a2f">Hay ${fmt(R.dif)} un. registradas en rack/puntera por encima de la ficha de pila: revisar.</div>`:'')+
     `<h2>Plano</h2>${svg}`+
-    `<h2>Ocupación por bloque (posiciones: 1 pallet Arlog = 1, 1 pila de racks = 2)</h2><table><thead><tr><th>Bloque</th><th>Sur</th><th>%</th><th>Norte</th><th>%</th><th>Total</th><th>%</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `<h2>Ocupación por bloque (lugares: 1 pallet Arlog = 1, 1 pila de racks = 1)</h2><table><thead><tr><th>Bloque</th><th>Sur</th><th>%</th><th>Norte</th><th>%</th><th>Total</th><th>%</th><th>Rotación</th></tr></thead><tbody>${rows}</tbody></table>`+
     `<div class="cols"><div><h2>A reubicar (top ${reub.length} de ${R.reubArts})</h2>${reub.length?`<table><thead><tr><th>Art.</th><th>Descripción</th><th>Ubicación cargada</th><th>Un.</th></tr></thead><tbody>${reub.map(r=>`<tr><td>${esc(r.art)}</td><td>${esc(r.med||'')} ${esc(r.diseno||'')}</td><td>${esc(r.bloque)}</td><td>${fmt(r._u)}</td></tr>`).join('')}</tbody></table>`:'<div class="n">Todo el stock en bloque está ubicado en el plano.</div>'}</div>`+
     `<div><h2>Pedidos en tránsito de salida (${peds.length})</h2>${peds.length?`<table><thead><tr><th>Pedido</th><th>Destino</th><th>Dársena</th><th>Arts</th><th>Un.</th></tr></thead><tbody>${peds.slice(0,15).map(t=>`<tr><td>${esc(t.nroContenedor||t.id)}</td><td>${esc(t.destino||'')}</td><td>${esc(t.darsena||'—')}</td><td>${(t.items||[]).length}</td><td>${fmt((t.items||[]).reduce((a,r)=>a+(r.cantReal||r.cant||0),0))}</td></tr>`).join('')}</tbody></table>`:'<div class="n">No hay pedidos en tránsito.</div>'}</div></div>`+
     '<scr'+'ipt>setTimeout(function(){window.print()},400)<'+'/scr'+'ipt></body></html>';
@@ -18361,40 +18475,41 @@ window.planoInformeHTML=function(){
 
 // ===== Eventos =====
 document.addEventListener('click',e=>{
-  const vb=e.target.closest('[data-vista]'); if(vb){vista=vb.dataset.vista;try{localStorage.setItem('wms_plano_vista',vista)}catch(_){}renderVista();renderNave();return}
+  const vb=e.target.closest('[data-vista]'); if(vb){vista=vb.dataset.vista;try{localStorage.setItem('wms_plano_vista',vista)}catch(_){}renderVista();renderNave();renderFicha();return}
   const id=e.target.id;
-  // Menú por cuadrado: tocar un cuadrado de la ficha → Pallet / Rack / Pasillo
-  const cm=e.target.closest('[data-cm]'); if(cm){const m=document.getElementById('cellMenu'),b=S.blocks.find(x=>x.n===+m.dataset.b),c=+m.dataset.c,r=+m.dataset.r,k=pad2(c)+'-'+pad2(r),val=cm.dataset.cm;
-    m.hidden=true;ubIndex();let cc=c;const cur=estado(b,c,r);if(cur==='rkx'){const h=c-dirC(c);if(estado(b,h,r)==='rk')cc=h}
-    const oc=ocupante(b.n,c,r);
-    if(oc){const isR=ocupadoR(b.n,c,r);if((val==='rk')!==isR)return msg(codigo(b.n,c,r)+' tiene mercadería ('+oc+'): no se puede cambiar a '+({pos:'pallet',rk:'rack',pas:'pasillo',sel:'rack selectivo'})[val]);return}
-    const err=setCelda(b,(cur==='rkx'&&val==='rk')?cc:c,r,val);if(err)return msg('No se puede poner un rack ahí: '+err);save();calcOcc();renderKpis();renderNave();renderFicha();return}
-  const fc=e.target.closest('.ficha-grid .cell'); if(fc){const m=document.getElementById('cellMenu'),b=S.blocks.find(x=>x.n===+fc.dataset.b),c=+fc.dataset.c,r=+fc.dataset.r,cur=estado(b,c,r);
-    m.dataset.b=b.n;m.dataset.c=c;m.dataset.r=r;
-    m.innerHTML=`<div class="cm-t">${codigo(b.n,c,r)} · ${ZN[zonaC(c)]}</div>`+[['pos','Pallet'],['rk','Rack'],['pas','Pasillo'],...(b.n===1?[['sel','Rack selectivo']]:[])].map(([v_,t])=>`<button type="button" data-cm="${v_}"${(cur==='rkx'?'rk':cur)===v_?' aria-pressed="true"':''}>${t}</button>`).join('');
+  // Menú por cuadrado: tocar un cuadrado de la ficha → Lugar / Pasillo (/ Rack selectivo en B1) o cambiar el armado del lado
+  const cm=e.target.closest('[data-cm]'); if(cm){const m=document.getElementById('cellMenu'),b=blk_(+m.dataset.b),z=m.dataset.z,c=+m.dataset.c,r=+m.dataset.r,val=cm.dataset.cm;
+    m.hidden=true;ubIndex();
+    if(val==='T:RACK'||val==='T:PALLET'){const err=setTipo(b,z,val.slice(2));if(err)return msg('No se puede cambiar: '+err);save();calcOcc();renderAll();return msg(ZN[z]+' del bloque '+b.n+' armado en '+(val==='T:RACK'?'racks':'pallets'))}
+    if(val==='P'||val==='R'){if(colT(b,z,c)===val){if(!ocupante(b.n,z,c,r))setCelda(b,z,c,r,'pos')}else{const n0=stc(b,z).length,err=setColTipo(b,z,c,val);if(err)return msg('No se puede cambiar: '+err);const n1=stc(b,z).length;
+      msg(`Columna ${c} del ${ZN[z]} ahora es de ${val==='R'?'rack':'pallet'} (${filasT(z,val)} lugares)`+(n1!==n0?` · el lado quedó con ${n1} líneas`:''))}save();calcOcc();renderAll();return}
+    const oc=ocupante(b.n,z,c,r);
+    if(oc)return msg(codigo(b.n,z,c,r)+' tiene mercadería ('+oc+'): no se puede cambiar');
+    setCelda(b,z,c,r,val);save();calcOcc();renderKpis();renderNave();renderFicha();return}
+  const fc=e.target.closest('.ficha-grid .cell'); if(fc){const m=document.getElementById('cellMenu'),b=blk_(+fc.dataset.b),z=fc.dataset.z,c=+fc.dataset.c,r=+fc.dataset.r,e0=estado(b,z,c,r),cur=e0==='pos'?colT(b,z,c):e0,t=tipoL(b,z);
+    m.dataset.b=b.n;m.dataset.z=z;m.dataset.c=c;m.dataset.r=r;
+    m.innerHTML=`<div class="cm-t">${codigo(b.n,z,c,r)} · ${ZN[z]} · col. ${c} de ${colT(b,z,c)==='R'?'rack':'pallet'}</div>`+[['P','Pallet'],['R','Rack'],['pas','Pasillo'],...(b.n===1?[['sel','Rack selectivo']]:[])].map(([v_,tt])=>`<button type="button" data-cm="${v_}"${cur===v_?' aria-pressed="true"':''}>${tt}</button>`).join('')+
+      ['PALLET','RACK'].filter(x=>x!==t).map(x=>`<button type="button" class="cm-lado" data-cm="T:${x}">Armar todo el ${z==='calle'?'lado de la calle':ZN[z]} en ${x==='RACK'?'racks':'pallets'}</button>`).join('');
     m.hidden=false;const R=fc.getBoundingClientRect();m.style.left=Math.min(R.left,innerWidth-m.offsetWidth-8)+'px';m.style.top=(R.bottom+4+m.offsetHeight>innerHeight?R.top-m.offsetHeight-4:R.bottom+4)+'px';tip.hidden=true;return}
   if(!e.target.closest('#cellMenu')){const m=document.getElementById('cellMenu');if(m)m.hidden=true}
   const de=e.target.closest('[data-est]'); if(de){brush=de.dataset.est;document.querySelectorAll('[data-est]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.est===brush));return}
   if(id==='dAplicar'){
-    const b=S.blocks.find(x=>x.n===sel),zo=v('dZona'),est=brush,pat=document.getElementById('dPas').checked?(zo==='calle'?'f2':'c2'):'';
-    let f1=+v('dF1'),f2=+v('dF2'),c1=Math.min(+v('dC1'),+v('dC2')),c2=Math.max(+v('dC1'),+v('dC2'));
-    if(zo){const G=S.grid;[c1,c2]=zo==='norte'?[1,G.norte]:zo==='calle'?[G.norte+1,G.norte+G.calle]:zo==='sur'?[G.norte+G.calle+1,G.cols]:[1,G.cols];[f1,f2]=[1,G.filas]}
-    if(f1>f2)[f1,f2]=[f2,f1];let n=0,ocup=0;ubIndex();
-    // columnas ordenadas desde la calle hacia cada pared (Norte: 14→1, Sur: 18→35, calle tal cual)
-    const grupos={norte:[],calle:[],sur:[]};for(let c=c1;c<=c2;c++)grupos[zonaC(c)].push(c);grupos.norte.reverse();
-    for(let r=f1;r<=f2;r++)for(const z of ['norte','calle','sur']){const L=grupos[z];let i=0,j=0;
-      while(i<L.length){const c=L[i];
-        // patrón: 2 cuadrados (un rack o 2 pallets) y 1 de pasillo
-        const e=(pat&&j===2)?'pas':est;
-        if(e==='rk'){if(i+1>=L.length){i++;continue}
-          if(ocupante(b.n,c,r)||ocupante(b.n,L[i+1],r)){ocup++;i+=2;j=pat?2:0;continue}
-          if(!setCelda(b,c,r,'rk'))n++;i+=2;j=pat?2:0;continue}
-        if(ocupante(b.n,c,r)){ocup++}else{setCelda(b,c,r,e);n++}
-        i++;j=pat?(j+1)%3:0}}
+    const b=blk_(sel),zo=v('dZona'),est=brush,pat=document.getElementById('dPas').checked;
+    const zs=zo==='todo'?ZS:(zo?[zo]:[v('dLado')]);let n=0,ocup=0;ubIndex();
+    for(const z of zs){const L=lado(b,z);let c1=1,c2=L.cols,f1=1,f2=L.rows;
+      if(!zo){c1=Math.min(+v('dC1'),+v('dC2'));c2=Math.min(L.cols,Math.max(+v('dC1'),+v('dC2')));f1=Math.min(+v('dF1'),+v('dF2'));f2=Math.min(L.rows,Math.max(+v('dF1'),+v('dF2')))}
+      if(zo&&(est==='P'||est==='R')&&!pat){const err=setTipo(b,z,ALM[est]);if(err){ocup++;continue}const k=cuenta(b)[z];n+=k.pos;continue}
+      // patrón desde la calle hacia la pared: 2 columnas y 1 de pasillo
+      for(let c=c1;c<=Math.min(c2,stc(b,z).length);c++){const e_=pat&&(c-c1)%3===2?'pas':est;
+        if(e_==='P'||e_==='R'){if(setColTipo(b,z,c,e_)){ocup++;continue}if(zo)c2=stc(b,z).length;for(let r=f1;r<=Math.min(f2,filasC(b,z,c));r++){if(!ocupante(b.n,z,c,r)){setCelda(b,z,c,r,'pos');n++}}continue}
+        for(let r=f1;r<=Math.min(f2,filasC(b,z,c));r++){if(ocupante(b.n,z,c,r)){ocup++;continue}setCelda(b,z,c,r,e_);n++}}}
     save();calcOcc();renderAll();return msg(`${n} lugares del bloque ${b.n} actualizados`+(ocup?` · ${ocup} no se cambiaron porque tienen mercadería`:''))}
-  if(id==='copyBtn'){const t=v('copyTo').toLowerCase(),src=S.blocks.find(x=>x.n===sel);const dest=t==='todos'?S.blocks.filter(x=>x.n!==sel):t.split(/[,\s]+/).map(Number).map(n=>S.blocks.find(x=>x.n===n)).filter(x=>x&&x.n!==sel);
-    if(!dest.length)return msg('Escribí a qué bloques copiar (ej: 2,3,4 o todos).');dest.forEach(x=>x.cel=structuredClone(src.cel));save();calcOcc();renderAll();return msg('Distribución del bloque '+sel+' copiada a '+dest.map(x=>x.n).join(', '))}
-  if(id==='resetBlk'){const r=e.target;if(r.dataset.armed){const b=S.blocks.find(x=>x.n===sel);b.cel=b.n===1?b1Default(S.grid):{};save();calcOcc();renderAll();msg('Bloque '+sel+' restablecido')}else{r.dataset.armed=1;r.textContent='Tocá de nuevo para confirmar';setTimeout(()=>{delete r.dataset.armed;r.textContent='Restablecer bloque'},4000)}return}
+  if(id==='copyBtn'){const t=v('copyTo').toLowerCase(),src=blk_(sel);const dest=t==='todos'?S.blocks.filter(x=>x.n!==sel):t.split(/[,\s]+/).map(Number).map(n=>blk_(n)).filter(x=>x&&x.n!==sel);
+    if(!dest.length)return msg('Escribí a qué bloques copiar (ej: 2,3,4 o todos).');const no=[];
+    dest.forEach(x=>ZS.forEach(z=>{const sc=colsDe(src,z);if(JSON.stringify(colsDe(x,z))!==JSON.stringify(sc)){ubIndex();if(enCol(x,z)){no.push(x.n+ZL[z]);return}x.cols[z]=sc.slice()}x.cel[z]=structuredClone(src.cel[z]||{});
+      Object.keys(UB).forEach(a=>(UB[a].u||[]).forEach(u=>{if(u.b===x.n&&u.z===z)delete x.cel[z][pad2(u.c)+'-'+pad2(u.r)]}))}));
+    save();calcOcc();renderAll();return msg('Distribución del bloque '+sel+' copiada a '+dest.map(x=>x.n).join(', ')+(no.length?' · no se cambió el armado de '+no.join(', ')+' porque tiene mercadería':''))}
+  if(id==='resetBlk'){const r=e.target;if(r.dataset.armed){const b=blk_(sel),d=mkBlock(b.n),no=[];ubIndex();ZS.forEach(z=>{if(JSON.stringify(colsDe(b,z))!==JSON.stringify(d.cols[z])&&enCol(b,z)){no.push(ZN[z]);return}b.cols[z]=d.cols[z];b.cel[z]=d.cel[z]});save();calcOcc();renderAll();msg('Bloque '+sel+' restablecido'+(no.length?' (menos '+no.join(' y ')+': tiene mercadería)':''))}else{r.dataset.armed=1;r.textContent='Tocá de nuevo para confirmar';setTimeout(()=>{delete r.dataset.armed;r.textContent='Restablecer bloque'},4000)}return}
   if(API){
     if(id==='qBtn')return buscar();
     if(id==='codBtn')return empezarCod(v('codArt'));
@@ -18404,6 +18519,9 @@ document.addEventListener('click',e=>{
     const qt=e.target.closest('[data-quitar]'); if(qt&&UBSEL){sacarCodigo(UBSEL,qt.dataset.quitar);calcOcc();return renderAll()}
     if(id==='codClear'){const r=e.target;if(r.dataset.armed){ubBorrar(UBSEL);ubIndex();calcOcc();renderAll();return}r.dataset.armed=1;r.textContent='Tocá de nuevo para sacar todo';setTimeout(()=>{if(r.isConnected){delete r.dataset.armed;r.textContent='Sacar todos'}},4000);return}
     const ub=e.target.closest('[data-ubicar]'); if(ub)return empezarCod(ub.dataset.ubicar);
+    if(id==='rotMas'){ROTN+=50;return renderRot()}
+    const rm=e.target.closest('[data-rotmov]'); if(rm){const [d,k]=rm.dataset.rotmov.split('|');document.getElementById('mdDis').value=d;document.getElementById('mdOri').value=k;const i=document.getElementById('mdDes');i.scrollIntoView({behavior:'smooth',block:'center'});i.focus();return opsMsg('Elegí el destino de '+d+' y tocá Mover diseño.')}
+    const rd=e.target.closest('[data-rotdis]'); if(rd){const x=rotDisenos().find(y=>y.dis===rd.dataset.rotdis);hl=new Set(x?[...x.bl]:[]);renderNave();if(hl.size){sel=[...hl][0];renderFicha()}return document.querySelector('.plan').scrollIntoView({behavior:'smooth',block:'start'})}
     if(id==='infBtn')return API.imprimir(planoInformeHTML());
     if(id==='pedClear'){PED=null;renderPedidos();return renderNave()}
     if(id==='qClear'){document.getElementById('q').value='';return buscar()}
@@ -18421,8 +18539,8 @@ document.addEventListener('click',e=>{
   const blk=e.target.closest('[data-blk]'); if(blk){sel=+blk.dataset.blk;movArt=null;renderNave();renderFicha();return}
   if(id==='reset'){const r=e.target;if(r.dataset.armed){S=mkDEF();sel=2;save();calcOcc();renderAll();msg('Valores originales restablecidos');delete r.dataset.armed;r.textContent='Restablecer valores originales'}else{r.dataset.armed=1;r.textContent='Tocá de nuevo para confirmar';setTimeout(()=>{delete r.dataset.armed;r.textContent='Restablecer valores originales'},4000)}return}
   if(id==='copy'){
-    const rows=[['Bloque','Zona','Posiciones','Rack selectivo','Pasillo','No disponible','Stock','Pallets','Racks','Posiciones usadas','Ocupación %']];
-    S.blocks.forEach(b=>{const k=cuenta(b);['sur','calle','norte'].forEach(z=>{const o=OCC?OCC.b[b.n][z]:nz(),f=k[z].pos?o.pos/k[z].pos:0;rows.push([b.n,ZN[z],k[z].pos,k[z].sel,k[z].pas,k[z].off,Math.round(o.stock),o.pal,o.rk,o.pos,Math.round(f*100)])})});
+    const rows=[['Bloque','Zona','Armado','Lugares','Rack selectivo','Pasillo','No disponible','Stock','Pallets','Racks','Lugares usados','Ocupación %']];
+    S.blocks.forEach(b=>{const k=cuenta(b);['sur','calle','norte'].forEach(z=>{const o=OCC?OCC.b[b.n][z]:nz(),f=k[z].pos?o.pos/k[z].pos:0;rows.push([b.n,ZN[z],resumenLado(b,z),k[z].pos,k[z].sel,k[z].pas,k[z].off,Math.round(o.stock),o.pal,o.rk,o.pos,Math.round(f*100)])})});
     navigator.clipboard.writeText(rows.map(r=>r.join('\t')).join('\n')).then(()=>msg('Resumen copiado: pegalo en Excel')).catch(()=>msg('No se pudo copiar desde este visor'));return}
 });
 document.addEventListener('change',e=>{
@@ -18432,7 +18550,8 @@ document.addEventListener('change',e=>{
   if(el.id==='cfZ'){CF.z=el.value;CF.n=0;return renderCod()}
   if(el.id==='cfN'){CF.n=Math.max(0,+el.value||0);return renderCod()}
   if(el.id==='dZona'){document.getElementById('dMano').hidden=el.value!=='';return}
-  if(el.id==='dF1'||el.id==='dF2'||el.id==='dC1'||el.id==='dC2'||el.id==='dPas')return;
+  if(el.id==='dF1'||el.id==='dF2'||el.id==='dC1'||el.id==='dC2'||el.id==='dPas'||el.id==='dLado')return;
+  if(el.dataset.tipo){if(el.value==='MIXTO')return;const b=blk_(sel),err=setTipo(b,el.dataset.tipo,el.value);if(err){el.value=tipoL(b,el.dataset.tipo);return msg('No se puede cambiar: '+err)}save();calcOcc();renderAll();return msg(ZN[el.dataset.tipo]+' del bloque '+b.n+' armado en '+(el.value==='RACK'?'racks':'pallets'))}
   if(el.id==='pedSel'){PED=el.value||null;renderPedidos();renderNave();if(PED){const pm=pedidoEnMapa();const ks=pm?Object.keys(pm.m).map(Number):[];if(ks.length){sel=Math.min(...ks);renderFicha()}}return}
   const num=(x,min)=>Math.max(min,+el.value||x);
   if(el.dataset.cap){S.cap[el.dataset.cap]=num(1,1)}
@@ -18443,10 +18562,6 @@ document.addEventListener('change',e=>{
   else if(el.id==='prep')S.prep=Math.max(0,+el.value||0);
   else if(el.id==='dars-n')S.dars.n=Math.min(20,Math.max(0,+el.value||0));
   else if(el.id==='dars-u')S.dars.ubic=el.value;
-  else if(el.id==='g-cols')S.grid.cols=Math.min(60,num(35,3));
-  else if(el.id==='g-rows')S.grid.filas=Math.min(45,num(18,2));
-  else if(el.id==='g-norte')S.grid.norte=Math.min(S.grid.cols-1,num(14,1));
-  else if(el.id==='g-calle')S.grid.calle=Math.min(S.grid.cols-S.grid.norte,Math.max(0,+el.value||0));
   else if(el.id==='gap')S.gap=Math.max(0,+el.value||0);
   else if(el.id==='pal-l')S.pallet.l=num(1.2,.1);
   else if(el.id==='pal-a')S.pallet.a=num(1,.1);
@@ -18459,21 +18574,21 @@ document.addEventListener('change',e=>{
   save();calcOcc();renderAll();
 });
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&API){if(e.target.id==='q')buscar();if(e.target.id==='codArt')empezarCod(v('codArt'));if(e.target.id==='mvDes'&&movArt)moverArticulo(movArt,v('mvDes'))}});
-document.addEventListener('input',e=>{if(e.target.id==='obs'){S.blocks.find(x=>x.n===sel).obs=e.target.value;save()}});
+document.addEventListener('input',e=>{if(e.target.id==='rotQ'){ROTQ=e.target.value;ROTN=25;renderRot();const i=document.getElementById('rotQ');i.focus();i.setSelectionRange(i.value.length,i.value.length);return}if(e.target.id==='obs'){S.blocks.find(x=>x.n===sel).obs=e.target.value;save()}});
 const tip=document.getElementById('tip');
-const EST={pos:'pallet (libre)',rk:'rack (libre)',rkx:'rack (2º cuadrado)',pas:'pasillo',sel:'rack selectivo',off:'no disponible'};
+const EST={pos:'libre',pas:'pasillo',sel:'rack selectivo',off:'no disponible'};
 document.addEventListener('mousemove',e=>{
   const cmo=document.getElementById('cellMenu');if(cmo&&!cmo.hidden){tip.hidden=true;return}
   const c=e.target.closest('.cell');
   if(!c){tip.hidden=true;return}
-  const b=S.blocks.find(x=>x.n===+c.dataset.b),cc=+c.dataset.c,r=+c.dataset.r;
-  const oc=ocupante(b.n,cc,r),A=oc?artDe(oc):null;
-  const est=estado(b,cc,r),zz=zonaC(cc);
-  tip.textContent=`${codigo(b.n,cc,r)} · ${ZN[zz]} · ${oc?oc+(A?' '+(A.med||'')+' '+(A.diseno||''):''):(zz==='calle'&&est==='pas'?'calle':EST[est])}`;tip.hidden=false;
+  const b=blk_(+c.dataset.b),zz=c.dataset.z,cc=+c.dataset.c,r=+c.dataset.r;if(!b||!zz){tip.hidden=true;return}
+  const oc=ocupante(b.n,zz,cc,r),A=oc?artDe(oc):null,est=estado(b,zz,cc,r),tt=colT(b,zz,cc)==='R'?'rack':'pallet';
+  tip.textContent=`${codigo(b.n,zz,cc,r)} · ${ZN[zz]} · ${oc?tt+' '+oc+(A?' '+(A.med||'')+' '+(A.diseno||''):''):(zz==='calle'&&est==='pas'?'calle':(est==='pos'?tt+' libre':EST[est]))}`;tip.hidden=false;
   tip.style.left=Math.min(e.clientX+12,innerWidth-tip.offsetWidth-8)+'px';tip.style.top=(e.clientY+14)+'px';
 });
 function msg(t){const m=document.getElementById('msg');if(m){m.textContent=t;setTimeout(()=>{m.textContent=''},3500)}if(API)API.toast(t)}
 let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(renderNave,150)});
+{const n=limpiarUB();ubIndex();if(n)setTimeout(()=>msg(n+' posición(es) codificadas quedaron fuera del nuevo armado y volvieron a pendientes'),800)}
 calcOcc();renderAll();
 try{if(window.parent!==window){const ro=new ResizeObserver(()=>parent.postMessage({tipo:'plano-cap-alto',h:document.documentElement.scrollHeight},'*'));ro.observe(document.body)}}catch(e){}
 <\/script>
