@@ -2724,7 +2724,11 @@ function aplicarUbicNave(tr){
 // Previa del pedido: de qué posiciones del plano sale cada artículo y cuántas cubiertas de cada una.
 // Se guarda en el tránsito, sale en la planilla de picking y al despachar se descuenta del plano.
 var _salTr=null, _salRows=[];
-function _salPend(art, menosTrId){ var t=0; try{ transitoGetAll().forEach(function(x){ if(x.flujo==='salida'&&x.descontado&&x.estado==='transito') (x.items||[]).forEach(function(it){ if(it.art===art) t+=(it.cant||0); }); }); }catch(e){} return t; }
+function _salPend(art, menosTrId){ var t=0; try{ transitoGetAll().forEach(function(x){ if(menosTrId&&x.id===menosTrId) return; if(x.flujo==='salida'&&x.descontado&&x.estado==='transito') (x.items||[]).forEach(function(it){ if(String(it.art)===String(art)) t+=(it.cant||0); }); }); }catch(e){} return t; }
+// Stock FÍSICO = stock del WMS + lo que está en pedidos en tránsito (ya descontado del WMS
+// pero todavía en el depósito). Es lo que tiene que coincidir con la ficha y lo que
+// tiene que ver cada pedido, sin importar cuántos otros pedidos haya abiertos.
+function stockFisico(art){ var d=DATA.find(function(r){return String(r.art)===String(art);}); return d?(d.stock||0)+_salPend(art):0; }
 function _salBloqueCant(r, real){
   var tot=real?(r.cantReal||r.cant):(r.cant||0);
   var dp=(r.punteraDetalle||[]).reduce(function(s,d){return s+(d.unidades||0);},0);
@@ -4881,7 +4885,8 @@ function procesarPaste(){
     // fija de stock como respaldo; en el formato nuevo no hay columna fija
     // equivalente confiable, así que queda en 0 hasta que se cargue en DATA
     const dataArt = DATA.find(r=>r.art==art);
-    const stock = dataArt ? dataArt.stock : (headerMap ? 0 : Math.round(cleanNum(cols[11]||0)));
+    const stock = dataArt ? stockFisico(art) : (headerMap ? 0 : Math.round(cleanNum(cols[11]||0)));
+    const comprometido = dataArt ? _salPend(art) : 0;
 
     volumenTotal += volumen;
     lineasViaje.push(nroPed);
@@ -4904,6 +4909,7 @@ function procesarPaste(){
       diam: diam, secc: secc, tipo: tipo, llan: llan,
       diseno: diseno || (dataArt?dataArt.diseno:''),
       stock: stock,
+      comprometido: comprometido,
       cant: cant,
       volumen: volumen,
       cliente: cliente,
@@ -5210,7 +5216,7 @@ function renderPedido(conPuntera, conRack, conBloque, sinUbic, todos){
       </td>
       <td>${ubic}</td>
       <td class="ped-cant">${item.cant}</td>
-      <td class="ped-stock" style="${esBajo?'color:#d70015;font-weight:600':''}">${(item.stock||0).toLocaleString('es-AR')}</td>
+      <td class="ped-stock" style="${esBajo?'color:#d70015;font-weight:600':''}">${(item.stock||0).toLocaleString('es-AR')}${item.comprometido?`<div style="font-size:10px;color:${(item.stock-item.comprometido)<item.cant?'#d70015':'#86868b'};font-weight:600;white-space:nowrap">${item.comprometido} en otros pedidos</div>`:''}</td>
     </tr>`;
   }
 
@@ -5700,8 +5706,8 @@ function pedidoEnviarTransito(){
 
     var dataArt = DATA.find(function(r){ return r.art===item.art; });
     if(dataArt){
-      dataArt.stock = Math.max(0, (dataArt.stock||0) - item.cant);
-      dataArt.pall = Math.floor(dataArt.stock / (dataArt.max_pos||32));
+      dataArt.stock = (dataArt.stock||0) - item.cant;
+      dataArt.pall = Math.floor(Math.max(0,dataArt.stock) / (dataArt.max_pos||32));
       recalcularCond(dataArt);
       saveDataStock();
 
@@ -5953,15 +5959,15 @@ function cydEjecutarDespacho(id){
     // sumarle el pedido de vuelta para recuperar el stock real de
     // referencia. Si nunca se descontó (flujo viejo), el stock actual ya
     // ES el de referencia tal cual.
-    var cantSistema = da0 ? (tr.descontado ? (da0.stock||0) + r.cant : (da0.stock||0)) : r.cant;
+    var cantSistema = da0 ? (tr.descontado ? (da0.stock||0) + _salPend(r.art) : (da0.stock||0)) : r.cant;
 
     if(!tr.descontado){
       // Flujo viejo: nunca se descontó, descontar el stock general ahora
       // con la cantidad real (Mapa Racks NO se toca — carga/descuento manual)
       var da = DATA.find(function(d){return d.art===r.art;});
       if(da){
-        da.stock = Math.max(0, (da.stock||0) - cantReal);
-        da.pall  = Math.floor(da.stock / (da.max_pos||32));
+        da.stock = (da.stock||0) - cantReal;
+        da.pall  = Math.floor(Math.max(0,da.stock) / (da.max_pos||32));
         recalcularCond(da);
         if(da.stock < (da.max_pos||32) && da.bloque){
           repoSugerido.push({
@@ -5979,8 +5985,8 @@ function cydEjecutarDespacho(id){
       var da2 = DATA.find(function(d){return d.art===r.art;});
 
       if(diff !== 0 && da2){
-        da2.stock = Math.max(0, (da2.stock||0) - diff);
-        da2.pall  = Math.floor(da2.stock / (da2.max_pos||32));
+        da2.stock = (da2.stock||0) - diff;
+        da2.pall  = Math.floor(Math.max(0,da2.stock) / (da2.max_pos||32));
         recalcularCond(da2);
       }
 
@@ -6527,8 +6533,8 @@ function confirmarDespacho(){
     let stockAntesDespacho = item.cant; // fallback si el art no está en DATA
     if(dataArt){
       stockAntesDespacho = dataArt.stock||0;
-      dataArt.stock = Math.max(0, (dataArt.stock||0) - item.cantReal);
-      dataArt.pall = Math.floor(dataArt.stock / (dataArt.max_pos||32));
+      dataArt.stock = (dataArt.stock||0) - item.cantReal;
+      dataArt.pall = Math.floor(Math.max(0,dataArt.stock) / (dataArt.max_pos||32));
       recalcularCond(dataArt);
       saveDataStock();
       if(chequearCambioUbicacion(dataArt, stockAntesDespacho, dataArt.stock)) sugUbicCount++;
@@ -10725,7 +10731,7 @@ function confirmarColaPedido(idx){
       const art = DATA.find(r=>r.art==item.art);
       if(art){
         const cantReal = Math.round(item.cant * escala);
-        art.stock = Math.max(0, (art.stock||0) - cantReal);
+        art.stock = (art.stock||0) - cantReal;
       }
     });
     saveDataStock();
@@ -12512,7 +12518,7 @@ function cydEliminarTransito(id){
       var dataArt = DATA.find(function(r){ return r.art===item.art; });
       if(dataArt){
         dataArt.stock = (dataArt.stock||0) + item.cant;
-        dataArt.pall = Math.floor(dataArt.stock / (dataArt.max_pos||32));
+        dataArt.pall = Math.floor(Math.max(0,dataArt.stock) / (dataArt.max_pos||32));
         recalcularCond(dataArt);
       }
     });
@@ -12810,9 +12816,11 @@ function cydRenderTransito(){
         html += '<td style="padding:4px 8px;color:#86868b">'+(r.diseno||'—')+'</td>';
         html += '<td style="padding:4px 8px">'+ubic+'</td>';
         var artHoy = DATA.find(function(d){return d.art==r.art;});
-        var stockHoy = artHoy ? (artHoy.stock||0) : null;
-        var alertaStock = (stockHoy!==null && stockHoy < cantReal)
-          ? '<div style="color:#d70015;font-weight:700;font-size:9px;white-space:nowrap">⚠️ Hoy: '+stockHoy+'</div>'
+        // Stock físico hoy (lo de este pedido sigue en el depósito hasta despacharlo)
+        var stockHoy = artHoy ? ((artHoy.stock||0) + (esPend&&tr.descontado ? _salPend(r.art) : 0)) : null;
+        var otrosPed = (artHoy && esPend && tr.descontado) ? _salPend(r.art, tr.id) : 0;
+        var alertaStock = (stockHoy!==null && esPend && (stockHoy - otrosPed) < cantReal)
+          ? '<div style="color:#d70015;font-weight:700;font-size:9px;white-space:nowrap">⚠️ Hoy: '+stockHoy+(otrosPed?' ('+otrosPed+' en otros pedidos)':'')+'</div>'
           : '';
         html += '<td style="padding:4px 8px;text-align:right;color:#86868b">'+r.stock+alertaStock+'</td>';
         html += '<td style="padding:4px 8px;text-align:right;font-weight:700;color:#d70015">'+r.cant+'</td>';
