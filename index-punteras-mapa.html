@@ -1709,7 +1709,24 @@ function wmsHash(str){ var h1=0xdeadbeef, h2=0x41c6ce57; for(var i=0,ch;i<str.le
 
 
 const DISC = (__B.DISC||[]);
-let DATA = (__B.DATA||[]);
+// DATA es una COPIA de la base, sin artículos repetidos. Antes DATA era el mismo
+// array que __BASE.datos.DATA: al cargar una ficha con artículos nuevos se
+// guardaba la base con el stock DEL MOMENTO (ya igualado a la ficha) y además
+// duplicaba esos artículos. Al recargar: base (= ficha) + movimiento (ficha − base
+// vieja) → la diferencia se sumaba dos veces y el WMS dejaba de coincidir.
+let DATA = (function(src){
+  var seen = {}, out = [];
+  (src||[]).forEach(function(r){ var k = String(r.art); if(seen[k]) return; seen[k] = 1; out.push(Object.assign({}, r)); });
+  return out;
+})(__B.DATA);
+// Reparar una base que quedó con artículos repetidos (se guarda una sola vez, limpia)
+if(__BASE && __B.DATA && __B.DATA.length !== DATA.length){
+  try{
+    console.log('🧹 Base: '+(__B.DATA.length-DATA.length)+' filas repetidas eliminadas');
+    __BASE.datos.DATA = DATA.map(function(r){ return Object.assign({}, r); });
+    wmsBaseGuardar(__BASE);
+  }catch(e){ console.warn('No se pudo limpiar la base', e); }
+}
 
 // ASIGNACIONES: posId -> {art, unidades}
 const SUGERENCIAS = (__B.SUGERENCIAS||{chasis:{},stock_bajo:{},eficiencia:{}});
