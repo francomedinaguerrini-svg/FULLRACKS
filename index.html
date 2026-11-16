@@ -11661,6 +11661,7 @@ if('serviceWorker' in navigator){
       <option value="descarga">🚚 Descarga</option>
       <option value="transito">🟡 Tránsito</option>
       <option value="historial">📋 Historial</option>
+      <option value="ficha">🗂️ Ficha de pila</option>
     </select>
     <!-- Badge tránsito visible siempre -->
     <span id="cyd-transito-badge" style="display:none;background:#ff9500;color:#fff;border-radius:12px;padding:3px 9px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0"></span>
@@ -11691,6 +11692,29 @@ if('serviceWorker' in navigator){
   <!-- Panel tránsito -->
   <div id="cyd-panel-transito" style="display:none">
     <div id="cyd-transito-lista"></div>
+  </div>
+
+  <!-- Panel Ficha de pila (SOLO LECTURA: arma el listado con lo que ya está guardado, no modifica nada) -->
+  <div id="cyd-panel-ficha" style="display:none">
+    <div style="border:1px solid #d2d2d7;border-radius:12px;padding:12px;margin-bottom:10px;background:#fafafa">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <label style="font-size:11px;color:#86868b;flex:1;min-width:150px">Artículo (código o medida — vacío = todos)
+          <input id="fp-art" type="search" placeholder="Ej: 19345 o 245 65 17" onkeydown="if(event.key==='Enter')fpBuscar()" style="display:block;width:100%;margin-top:3px;padding:8px 10px;border:1.5px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box"></label>
+        <label style="font-size:11px;color:#86868b">Desde
+          <input id="fp-desde" type="date" style="display:block;margin-top:3px;padding:7px 8px;border:1.5px solid #d2d2d7;border-radius:8px;font-size:13px"></label>
+        <label style="font-size:11px;color:#86868b">Hasta
+          <input id="fp-hasta" type="date" style="display:block;margin-top:3px;padding:7px 8px;border:1.5px solid #d2d2d7;border-radius:8px;font-size:13px"></label>
+        <label style="font-size:11px;color:#86868b">Mostrar
+          <select id="fp-tipo" onchange="fpBuscar()" style="display:block;margin-top:3px;padding:8px 10px;border:1.5px solid #d2d2d7;border-radius:8px;font-size:13px;background:#fff">
+            <option value="todos">Todos</option>
+            <option value="ingresos">Ingresos</option>
+            <option value="salidas">Salidas (despachos)</option>
+            <option value="pedidos">Pedidos</option>
+          </select></label>
+        <button onclick="fpBuscar()" style="padding:9px 18px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔍 Buscar</button>
+      </div>
+    </div>
+    <div id="fp-resultado"></div>
   </div>
 
   <div id="cyd-panel-historial" style="display:none">
@@ -12987,7 +13011,7 @@ function cydTrBuscar(v){ window._cydTrBusca = v; window._cydTrFocus = true; cydR
 function cydTrFiltrar(f){ window._cydTrFiltro = f; window._cydTrFocus = false; cydRenderTransito(); }
 
 function cydTab(tab){
-  ['carga','descarga','transito','historial'].forEach(function(t){
+  ['carga','descarga','transito','historial','ficha'].forEach(function(t){
     var panel = document.getElementById('cyd-panel-'+t);
     if(panel) panel.style.display = t===tab ? '' : 'none';
   });
@@ -12996,6 +13020,151 @@ function cydTab(tab){
   if(sel && sel.value !== tab) sel.value = tab;
   if(tab==='historial') cydRenderHistorial();
   if(tab==='transito')  cydRenderTransito();
+  if(tab==='ficha')     fpInit();
+}
+
+// ═══ FICHA DE PILA (solo lectura) ═══════════════════════════════════════
+// Arma un listado tipo "Ficha de pila" de Guerrini con lo que el WMS ya guarda:
+//  · Ingresos  → historial de cargas/descargas (wms_hist_carga / wms_hist_descarga)
+//                + ingresos todavía en tránsito (marcados "pendiente", no suman)
+//  · Pedidos   → tránsitos de salida, por fecha en que se armó el pedido
+//  · Salidas   → tránsitos de salida confirmados (despachados), por fecha de despacho
+//  · Ficha     → última ficha de pila cargada (valor de referencia, no es movimiento)
+// NO escribe nada en localStorage ni toca DATA.
+function fpISO(fecha, iso){
+  if(iso) return String(iso).slice(0,10);
+  var m = String(fecha||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(!m) return '';
+  var y = m[3].length===2 ? '20'+m[3] : m[3];
+  return y+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);
+}
+function fpInit(){
+  var d = document.getElementById('fp-desde'), h = document.getElementById('fp-hasta');
+  if(d && !d.value){ var n=new Date(); d.value = n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2)+'-01'; }
+  if(h && !h.value){ var n2=new Date(); h.value = n2.getFullYear()+'-'+('0'+(n2.getMonth()+1)).slice(-2)+'-'+('0'+n2.getDate()).slice(-2); }
+  fpBuscar();
+}
+function fpBuscar(){
+  var out = document.getElementById('fp-resultado'); if(!out) return;
+  var q = ((document.getElementById('fp-art')||{}).value||'').trim().toLowerCase();
+  var desde = (document.getElementById('fp-desde')||{}).value||'';
+  var hasta = (document.getElementById('fp-hasta')||{}).value||'';
+  var tipo = (document.getElementById('fp-tipo')||{}).value||'todos';
+  var esc = function(x){ return String(x==null?'':x).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); };
+
+  // ¿Qué artículos entran? Código exacto → ese solo. Si no, busca en medida/diseño/proveedor.
+  var exacto = q && DATA.some(function(d){ return String(d.art)===q; });
+  function artOk(art, med, dis, prov){
+    if(!q) return true;
+    if(exacto) return String(art)===q;
+    var d = DATA.find(function(x){ return String(x.art)===String(art); });
+    var txt = (String(art)+' '+(med||(d&&d.med)||'')+' '+(dis||(d&&d.diseno)||'')+' '+(prov||(d&&d.prov)||'')).toLowerCase();
+    return q.split(/\s+/).every(function(w){ return txt.indexOf(w)>=0; });
+  }
+  function enRango(iso){ return iso && (!desde || iso>=desde) && (!hasta || iso<=hasta); }
+
+  var filas = [];
+  // Ingresos confirmados (cargas / descargas)
+  if(tipo==='todos' || tipo==='ingresos'){
+    [['carga','Ingreso'],['descarga','Descarga']].forEach(function(par){
+      cydGetHist(par[0]).forEach(function(rem){
+        var iso = fpISO(rem.fecha, rem.fechaISO);
+        if(!enRango(iso)) return;
+        (rem.items||[]).forEach(function(it){
+          if(!artOk(it.art, it.med, it.diseno, it.prov)) return;
+          filas.push({iso:iso, fecha:rem.fecha, hora:rem.hora||'', comp:(rem.tipoIngreso||par[1]), nro:rem.nroContenedor||rem.nroRem||'', cant:+(it.cant||0),
+            art:it.art, med:it.med, dis:it.diseno, quien:rem.cliente||it.prov||'', prep:'', com:(rem.tte||it.tte)?'TTE '+(rem.tte||it.tte):'', clase:'in'});
+        });
+      });
+    });
+  }
+  // Tránsitos: ingresos pendientes, pedidos y despachos
+  transitoGetAll().forEach(function(tr){
+    var sal = tr.flujo==='salida';
+    (tr.items||[]).forEach(function(r){
+      if(!artOk(r.art, r.med, r.diseno, r.prov)) return;
+      if(!sal){
+        if(tr.estado!=='transito' || !(tipo==='todos'||tipo==='ingresos')) return;
+        var isoI = fpISO(tr.fecha, tr.fechaISO); if(!enRango(isoI)) return;
+        filas.push({iso:isoI, fecha:tr.fecha, hora:tr.hora, comp:(tr.tipoLabel||'Ingreso')+' (en tránsito)', nro:tr.nroContenedor||'', cant:+(r.cant||0),
+          art:r.art, med:r.med, dis:r.diseno, quien:tr.destino||'', prep:'', com:(tr.tte?'TTE '+tr.tte+' · ':'')+'pendiente de recibir — no suma', clase:'pend'});
+        return;
+      }
+      if(tipo==='todos' || tipo==='pedidos'){
+        var isoP = fpISO(tr.fecha, tr.fechaISO);
+        if(enRango(isoP)) filas.push({iso:isoP, fecha:tr.fecha, hora:tr.hora, comp:tr.tipoLabel||'Pedido', nro:tr.nroContenedor||'', cant:-(r.cant||0),
+          art:r.art, med:r.med, dis:r.diseno, quien:tr.destino||'', prep:tr.preparador||'', com:tr.estado==='transito'?'pendiente de despacho':'despachado', clase:'ped'});
+      }
+      if((tipo==='todos' || tipo==='salidas') && tr.estado==='confirmado'){
+        var isoS = fpISO(tr.fechaConfirmacion);
+        var real = r.cantReal!=null ? r.cantReal : r.cant;
+        if(enRango(isoS)) filas.push({iso:isoS, fecha:tr.fechaConfirmacion, hora:tr.horaConfirmacion||'', comp:'Despacho', nro:tr.nroContenedor||'', cant:-(real||0),
+          art:r.art, med:r.med, dis:r.diseno, quien:tr.destino||'', prep:tr.preparador||'', com:(real!==r.cant?'pedido '+r.cant+' · ':'')+(tr.tte?'TTE '+tr.tte:''), clase:'out'});
+      }
+    });
+  });
+  // Última ficha de pila cargada (referencia)
+  if(tipo==='todos'){
+    try{
+      var snap = JSON.parse(localStorage.getItem('wms_ficha_snap')||'null');
+      if(snap && snap.stock){
+        var isoF = snap.ts ? new Date(snap.ts).toISOString().slice(0,10) : '';
+        if(enRango(isoF)) Object.keys(snap.stock).forEach(function(a){
+          if(!artOk(a)) return;
+          if(!q && !snap.stock[a]) return;
+          var d = DATA.find(function(x){ return String(x.art)===a; })||{};
+          var dt = new Date(snap.ts);
+          filas.push({iso:isoF, fecha:dt.toLocaleDateString('es-AR'), hora:dt.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}), comp:'Ficha de pila cargada', nro:'', cant:null, saldoFicha:snap.stock[a],
+            art:a, med:d.med, dis:d.diseno, quien:'', prep:'', com:'stock según ficha: '+snap.stock[a], clase:'ficha'});
+        });
+      }
+    }catch(e){}
+  }
+
+  filas.sort(function(a,b){ return (a.iso+(a.hora||'')).localeCompare(b.iso+(b.hora||'')); });
+
+  // Encabezado del artículo + saldos de hoy (solo si es un artículo puntual)
+  var html = '';
+  if(exacto){
+    var d0 = DATA.find(function(x){ return String(x.art)===q; });
+    var compr = _salPend(q);
+    var enTr = 0;
+    transitoGetAll().forEach(function(tr){ if(tr.flujo!=='salida' && tr.estado==='transito') (tr.items||[]).forEach(function(r){ if(String(r.art)===q) enTr+=(r.cant||0); }); });
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin-bottom:10px">';
+    html += '<div style="flex:2;min-width:220px;border:1.5px solid #1d1d1f;border-radius:10px;padding:10px 14px;font-size:17px;font-weight:800;color:#0a2a8a;display:flex;align-items:center">'+esc(q)+' · '+esc(d0.med)+' '+esc(d0.diseno)+' · '+esc(d0.prov)+'</div>';
+    [['Saldo actual (físico)', stockFisico(q), '#0a2a8a'],['Comprometido en pedidos', compr, compr?'#d70015':'#86868b'],['Ingresos en tránsito', enTr, enTr?'#ff9500':'#86868b']].forEach(function(k){
+      html += '<div style="flex:1;min-width:120px;border:1px solid #d2d2d7;border-radius:10px;padding:8px 12px;background:#fff"><div style="font-size:10px;color:#86868b">'+k[0]+'</div><div style="font-size:20px;font-weight:800;color:'+k[2]+'">'+k[1].toLocaleString('es-AR')+'</div></div>';
+    });
+    html += '</div>';
+  }
+
+  var tIn = 0, tOut = 0, tPed = 0;
+  filas.forEach(function(f){ if(f.clase==='in') tIn+=f.cant; if(f.clase==='out') tOut+=f.cant; if(f.clase==='ped') tPed+=f.cant; });
+  html += '<div style="font-size:12px;color:#86868b;margin-bottom:6px">'+filas.length+' movimientos · Ingresos <b style="color:#34c759">+'+tIn+'</b> · Despachos <b style="color:#d70015">'+tOut+'</b> · Pedidos <b style="color:#0071e3">'+tPed+'</b></div>';
+  if(!filas.length){
+    out.innerHTML = html + '<div style="text-align:center;padding:30px;color:#86868b;font-size:13px">Sin movimientos para ese filtro</div>';
+    return;
+  }
+  var col = {in:'#34c759', out:'#d70015', ped:'#0071e3', pend:'#ff9500', ficha:'#7a3fb0'};
+  html += '<div style="overflow-x:auto;border:1px solid #d2d2d7;border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
+  html += '<tr style="background:#1d1d1f;color:#fff">'+['Fecha','Hora','Comprobante','Nro','Art','Medida','Cantidad','Cliente / Proveedor','Preparó','Comentario'].map(function(t,i){ return '<th style="padding:6px 8px;text-align:'+(i===6?'right':'left')+';white-space:nowrap">'+t+'</th>'; }).join('')+'</tr>';
+  filas.forEach(function(f,i){
+    html += '<tr style="'+(i%2?'background:#f5f9ff':'background:#fff')+'">';
+    html += '<td style="padding:4px 8px;white-space:nowrap">'+esc(f.fecha)+'</td>';
+    html += '<td style="padding:4px 8px;color:#86868b">'+esc(f.hora)+'</td>';
+    html += '<td style="padding:4px 8px;font-weight:600;color:'+col[f.clase]+';white-space:nowrap">'+esc(f.comp)+'</td>';
+    html += '<td style="padding:4px 8px">'+esc(f.nro)+'</td>';
+    html += '<td style="padding:4px 8px;font-weight:700">'+esc(f.art)+'</td>';
+    html += '<td style="padding:4px 8px;white-space:nowrap">'+esc(f.med||'')+' <span style="color:#86868b">'+esc(f.dis||'')+'</span></td>';
+    html += '<td style="padding:4px 8px;text-align:right;font-weight:800;color:'+col[f.clase]+'">'+(f.cant==null?'= '+f.saldoFicha:(f.cant>0?'+':'')+f.cant)+'</td>';
+    html += '<td style="padding:4px 8px">'+esc(f.quien)+'</td>';
+    html += '<td style="padding:4px 8px">'+esc(f.prep)+'</td>';
+    html += '<td style="padding:4px 8px;color:#86868b">'+esc(f.com)+'</td>';
+    html += '</tr>';
+  });
+  html += '</table></div>';
+  html += '<div style="font-size:10px;color:#86868b;margin-top:6px">Solo lectura — no modifica stock ni tránsitos. Pedidos = cuando se armó el pedido; Despacho = cuando salió (cantidad real). Los ingresos en tránsito no suman hasta recibirlos.</div>';
+  out.innerHTML = html;
 }
 
 // ─── PARSERS ───────────────────────────────────────────────
