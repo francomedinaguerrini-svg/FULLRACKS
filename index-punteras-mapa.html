@@ -2745,6 +2745,9 @@ function _salPend(art, menosTrId){ var t=0; try{ transitoGetAll().forEach(functi
 // Stock FÍSICO = stock del WMS + lo que está en pedidos en tránsito (ya descontado del WMS
 // pero todavía en el depósito). Es lo que tiene que coincidir con la ficha y lo que
 // tiene que ver cada pedido, sin importar cuántos otros pedidos haya abiertos.
+// Disponible para un pedido = stock físico menos lo que ya se llevan OTROS pedidos pendientes.
+// trId: el tránsito del propio pedido (para no restarse a sí mismo). Sin trId = pedido nuevo.
+function stockDisponiblePedido(art, trId){ return stockFisico(art) - _salPend(art, trId); }
 function stockFisico(art){ var d=DATA.find(function(r){return String(r.art)===String(art);}); return d?(d.stock||0)+_salPend(art):0; }
 function _salBloqueCant(r, real){
   var tot=real?(r.cantReal||r.cant):(r.cant||0);
@@ -5229,6 +5232,7 @@ function renderPedido(conPuntera, conRack, conBloque, sinUbic, todos){
       <td><div class="ped-art" style="${yaPrep?'text-decoration:line-through':''}">${item.art}</div></td>
       <td>
         <div class="ped-desc" style="${yaPrep?'text-decoration:line-through':''}">${item.med} ${item.diseno}</div>
+        ${(item.stock-(item.comprometido||0))<item.cant?`<div style="color:#fff;background:#d70015;font-weight:700;font-size:11px;padding:2px 6px;border-radius:4px;display:inline-block;margin:2px 0">⚠️ ATENCIÓN: revisar pedido — pide ${item.cant}, stock ${Math.max(0,item.stock-(item.comprometido||0))}</div>`:''}
         <div class="ped-prov">${item.prov}${esBajo?' · <span style="color:#d70015;font-weight:600">⚠️ BAJO STOCK</span>':''}${dividido?' · <span style="color:#d70015;font-weight:600">⚠️ SACAR DE 2 LUGARES</span>':''}</div>
       </td>
       <td>${ubic}</td>
@@ -6331,7 +6335,14 @@ function cydPlanillaPicking(id){
   function mkRow(r, seccion){
     var cantReal = r.cantReal||r.cant;
     var diff = cantReal - r.cant;
-    var alerta = r.stock < r.cant ? 'background:#fff3cd' : '';
+    // Stock en vivo disponible para ESTE pedido (sin lo de otros pedidos pendientes)
+    // (pedido ya despachado o artículo fuera de la base → stock congelado del pedido)
+    var hayArt = DATA.some(function(d){return String(d.art)===String(r.art);});
+    var stockDisp = (hayArt && tr.estado==='transito')
+      ? (tr.descontado ? stockDisponiblePedido(r.art, tr.id) : stockDisponiblePedido(r.art))
+      : (r.stock||0);
+    var masQueStock = cantReal > stockDisp;
+    var alerta = masQueStock ? 'background:#fff3cd' : '';
     var fuentes = r._fuentes||[];
     var ubic;
     if(fuentes.length>1){
@@ -6379,8 +6390,11 @@ function cydPlanillaPicking(id){
         }
       }
     }
+    if(masQueStock){
+      ubic += '<div style="color:#d70015;font-weight:700;font-size:9px;margin-top:2px">⚠️ ATENCIÓN: revisar pedido — pide '+cantReal+', stock '+Math.max(0,stockDisp)+'</div>';
+    }
     var rango = (typeof RANGOS !== 'undefined' && RANGOS[String(r.art)]) ? RANGOS[String(r.art)] : '—';
-    return '<tr style="'+alerta+'">'+
+    return '<tr class="'+(masQueStock?'mqs':'')+'" style="'+alerta+'">'+
       '<td style="font-weight:700">'+r.art+'</td>'+
       '<td>'+r.med+'</td>'+
       '<td>'+(r.diseno||'')+'</td>'+
@@ -6389,15 +6403,15 @@ function cydPlanillaPicking(id){
       '<td style="text-align:center;font-weight:700;color:#0071e3">'+rango+'</td>'+
       '<td style="text-align:right;font-weight:700;color:#d70015">'+r.cant+'</td>'+
       '<td style="text-align:right;color:#86868b">'+(r.stock||0)+'</td>'+
-      (diff!==0?'<td style="text-align:right;color:#d70015;font-weight:700">'+(diff>0?'+':'')+diff+'</td>':'<td style="text-align:right;color:#34c759">OK</td>')+
+      (masQueStock?'<td style="text-align:center;color:#d70015;font-weight:700;font-size:10px">⚠️</td>':(diff!==0?'<td style="text-align:right;color:#d70015;font-weight:700">'+(diff>0?'+':'')+diff+'</td>':'<td style="text-align:right;color:#34c759">OK</td>'))+
       '<td style="border:2px solid #bbb">&nbsp;</td>'+
       '<td style="border:2px solid #bbb">&nbsp;</td>'+
       '</tr>';
   }
 
-  // Anchos fijos (mm) iguales en todas las secciones: la tabla queda compacta
-  // y pegada a la izquierda, con lugar para "Control oficina" (diferencias a buscar)
-  var _pkCols = '<colgroup>'+[13,21,17,19,40,11,10,11,9,20,38].map(function(w){return '<col style="width:'+w+'mm">';}).join('')+'</colgroup>';
+  // Anchos fijos (proporción sobre 277 mm = A4 apaisada) iguales en todas las secciones:
+  // ocupa todo el ancho de la hoja, con lugar para "Control oficina" (diferencias a buscar)
+  var _pkCols = '<colgroup>'+[15,26,20,26,62,13,12,13,10,35,45].map(function(w){return '<col style="width:'+(w*100/277).toFixed(2)+'%">';}).join('')+'</colgroup>';
   var totalCant = tr.items.reduce(function(s,r){return s+(r.cantReal||r.cant);},0);
   var rowsPuntera = enPuntera.map(function(r){return mkRow(r,'puntera');}).join('');
   var rowsRack   = enRack.map(function(r){return mkRow(r,'rack');}).join('');
@@ -6408,7 +6422,7 @@ function cydPlanillaPicking(id){
     '<html><head><title>Picking '+tr.nroContenedor+' — '+(tr.destino||'')+'</title>'+
     '<style>'+
     '@page{size:A4 landscape;margin:10mm}'+
-    'body{font-family:Arial,sans-serif;font-size:10px;margin:0;color:#1d1d1f;width:209mm}'+
+    'body{font-family:Arial,sans-serif;font-size:10px;margin:0;color:#1d1d1f}'+
     'h2{font-size:13px;margin:0 0 3px;font-weight:700}'+
     '.meta{display:flex;gap:20px;flex-wrap:wrap;font-size:10px;color:#555;margin-bottom:8px;border-bottom:1px solid #ddd;padding-bottom:5px}'+
     '.meta b{color:#1d1d1f}'+
@@ -6417,10 +6431,12 @@ function cydPlanillaPicking(id){
     '.sec-puntera{background:#f2e6ff;color:#7a3fb0}'+
     '.sec-bloque{background:#fff3cd;color:#856404}'+
     '.sec-sin{background:#ffd6d9;color:#d70015}'+
-    'table{width:209mm;table-layout:fixed;border-collapse:collapse;font-size:9px;margin-bottom:6px}'+
+    'table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9px;margin-bottom:6px}'+
     'th{background:#1d1d1f;color:#fff;padding:3px 4px;text-align:left;font-size:8.5px;white-space:nowrap;overflow:hidden;border-right:1px solid #444}'+
     'td{padding:3px 4px;border-bottom:1px solid #e8e8e8;vertical-align:middle;border-right:1px solid #f0f0f0;overflow:hidden;word-wrap:break-word}'+
     'tr:nth-child(even) td{background:#f8f8f8}'+
+    'tr.mqs td{background:#fff3cd !important}'+
+    '*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     'tfoot td{font-weight:700;border-top:2px solid #1d1d1f;background:#f0f0f0}'+
     '.pie{margin-top:8px;font-size:8.5px;color:#999;border-top:1px solid #eee;padding-top:4px}'+
     '.horario-box{border:1.5px solid #1d1d1f;border-radius:5px;padding:5px 10px;margin:6px 0;display:flex;align-items:center;gap:18px;font-size:9.5px}'+
@@ -6459,7 +6475,7 @@ function cydPlanillaPicking(id){
       '<div class="sec sec-sin">SIN UBICACIÓN ('+sinUbic.length+' arts)</div>'+
       '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Ubicación</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
       '<tbody>'+rowsSin+'</tbody></table>':'')+
-    '<div class="pie">Amarillo = stock insuficiente · Violeta = puntera · Azul = rack · Naranja = bloque · '+
+    '<div class="pie">Amarillo / ⚠️ = el pedido pide más que el stock: revisar · Violeta = puntera · Azul = rack · Naranja = bloque · '+
     'Generado '+new Date().toLocaleString('es-AR')+' — WMS Halpern Depósito</div>'+
     '<script>window.onload=function(){window.print();}<\/script>'+
     '</body></html>'
@@ -12841,7 +12857,7 @@ function cydRenderTransito(){
         var stockHoy = artHoy ? ((artHoy.stock||0) + (esPend&&tr.descontado ? _salPend(r.art) : 0)) : null;
         var otrosPed = (artHoy && esPend && tr.descontado) ? _salPend(r.art, tr.id) : 0;
         var alertaStock = (stockHoy!==null && esPend && (stockHoy - otrosPed) < cantReal)
-          ? '<div style="color:#d70015;font-weight:700;font-size:9px;white-space:nowrap">⚠️ Hoy: '+stockHoy+(otrosPed?' ('+otrosPed+' en otros pedidos)':'')+'</div>'
+          ? '<div style="color:#d70015;font-weight:700;font-size:9px;white-space:nowrap">⚠️ Revisar pedido: más que stock ('+Math.max(0,stockHoy-otrosPed)+(otrosPed?' · '+otrosPed+' en otros pedidos':'')+')</div>'
           : '';
         html += '<td style="padding:4px 8px;text-align:right;color:#86868b">'+r.stock+alertaStock+'</td>';
         html += '<td style="padding:4px 8px;text-align:right;font-weight:700;color:#d70015">'+r.cant+'</td>';
