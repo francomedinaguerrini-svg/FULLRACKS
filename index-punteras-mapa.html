@@ -12769,15 +12769,69 @@ function cydRenderTransito(){
   html += '<div style="font-size:24px;font-weight:700;color:#34c759">'+conf.filter(function(t){return t.fechaConfirmacion===hoy;}).length+'</div></div>';
   html += '</div>';
 
-  // Tránsitos pendientes primero
-  lista.forEach(function(tr){
+  // Buscador + filtro (el valor queda en variables globales para no perderlo al re-renderizar)
+  var _q = (window._cydTrBusca||'').trim().toLowerCase();
+  var _f = window._cydTrFiltro || 'pend';
+  html += '<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">';
+  html += '<input id="cyd-tr-busca" type="search" value="'+String(window._cydTrBusca||'').replace(/"/g,'&quot;')+'" placeholder="🔍 Buscar cliente, proveedor, TTE, nro, artículo o medida…" oninput="cydTrBuscar(this.value)" style="flex:1;min-width:220px;padding:9px 12px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:13px">';
+  [['pend','Pendientes'],['sal','Salidas'],['ent','Ingresos'],['hoy','Confirmados hoy'],['todos','Todos']].forEach(function(o){
+    var on = _f===o[0];
+    html += '<button onclick="cydTrFiltrar(&quot;'+o[0]+'&quot;)" style="padding:7px 12px;border-radius:18px;border:1.5px solid '+(on?'#1d1d1f':'#d2d2d7')+';background:'+(on?'#1d1d1f':'#fff')+';color:'+(on?'#fff':'#1d1d1f')+';font-size:12px;font-weight:600;cursor:pointer">'+o[1]+'</button>';
+  });
+  html += '</div>';
+  window._cydTrAbiertos = window._cydTrAbiertos || {};
+  var _visibles = 0;
+
+  // Pendientes primero, después los confirmados (más nuevos arriba dentro de cada grupo)
+  lista.slice().sort(function(a,b){ return (a.estado==='transito'?0:1)-(b.estado==='transito'?0:1); }).forEach(function(tr){
     var esPend = tr.estado==='transito';
     var totalU = tr.items.reduce(function(s,r){return s+r.cant;},0);
     var esSalidaTr = tr.flujo === 'salida';
     var colorBorder = esPend ? (esSalidaTr?'#d70015':'#ff9500') : '#34c759';
     var colorBg     = esPend ? (esSalidaTr?'#fff0f0':'#fff9ee') : '#f0fff4';
 
-    html += '<div style="border:1.5px solid '+colorBorder+';border-radius:12px;margin-bottom:12px;overflow:hidden">';
+    // ── Filtro
+    if(_f==='pend' && !esPend) return;
+    if(_f==='sal' && !(esPend && esSalidaTr)) return;
+    if(_f==='ent' && !(esPend && !esSalidaTr)) return;
+    if(_f==='hoy' && !(!esPend && tr.fechaConfirmacion===hoy)) return;
+    if(_q){
+      var hay = [tr.destino,tr.tipoLabel,tr.tte,tr.nroContenedor,tr.id,tr.fecha].join(' ').toLowerCase().indexOf(_q)>=0 ||
+        (tr.items||[]).some(function(r){ return (String(r.art)+' '+(r.med||'')+' '+(r.diseno||'')+' '+(r.prov||'')).toLowerCase().indexOf(_q)>=0; });
+      if(!hay) return;
+    }
+    _visibles++;
+
+    // ── Avance: preparado (tildes del pedido) y cargado (lecturas del escáner)
+    var _prep = esSalidaTr ? getPrepPedidoState(tr.nroContenedor) : {};
+    var _ses = (typeof scanGetSes==='function') ? scanGetSes(tr.id) : {lec:[]};
+    var _leido = (typeof scanLeidoPorArt==='function') ? scanLeidoPorArt(_ses) : {};
+    var _nPrep = (tr.items||[]).filter(function(r){ return _prep[r.art]; }).length;
+    var _uCarg = (tr.items||[]).reduce(function(s,r){ return s+Math.min(_leido[String(r.art)]||0, r.cantReal||r.cant); },0);
+    var _nAlerta = esSalidaTr && esPend ? (tr.items||[]).filter(function(r){
+      return DATA.some(function(d){return String(d.art)===String(r.art);}) &&
+        (tr.descontado ? stockDisponiblePedido(r.art, tr.id) : stockDisponiblePedido(r.art)) < (r.cantReal||r.cant);
+    }).length : 0;
+    var abierto = !!window._cydTrAbiertos[tr.id];
+
+    // ── Fila resumida (click = abrir/cerrar)
+    html += '<div onclick="cydTrToggle(&quot;'+tr.id+'&quot;)" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid #e5e5ea;border-left:4px solid '+colorBorder+';border-radius:'+(abierto?'10px 10px 0 0':'10px')+';background:'+(abierto?colorBg:'#fff')+';margin-bottom:'+(abierto?'0':'6px')+'">';
+    html += '<div style="font-size:16px">'+(tr.tipoIcon||'')+'</div>';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(tr.destino||tr.tipoLabel||'—')+'</div>';
+    html += '<div style="font-size:11px;color:#86868b">'+(tr.nroContenedor?'Nro '+tr.nroContenedor+' · ':'')+(tr.tte?'TTE '+tr.tte+' · ':'')+tr.fecha+' '+tr.hora+'</div>';
+    html += '</div>';
+    html += '<div style="font-size:11px;color:#1d1d1f;text-align:right;white-space:nowrap">'+tr.items.length+' arts · <b>'+totalU+'</b> un.</div>';
+    if(esSalidaTr){
+      html += '<div style="font-size:10px;text-align:right;white-space:nowrap;color:#86868b;min-width:92px">Prep <b style="color:'+(_nPrep===tr.items.length?'#34c759':'#1d1d1f')+'">'+_nPrep+'/'+tr.items.length+'</b><br>Carg <b style="color:'+(_uCarg>=totalU&&totalU?'#34c759':'#1d1d1f')+'">'+_uCarg+'/'+totalU+'</b></div>';
+    }
+    if(_nAlerta) html += '<div title="Pide más que el stock" style="font-size:10px;font-weight:700;color:#fff;background:#d70015;border-radius:10px;padding:2px 7px;white-space:nowrap">⚠️ '+_nAlerta+'</div>';
+    html += '<div style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;background:'+(esPend?(esSalidaTr?'#ffe5e7':'#fff1d6'):'#dcf7e3')+';color:'+colorBorder+'">'+(esPend?(esSalidaTr?'Salida':'Ingreso'):'✅ Confirmado')+'</div>';
+    html += '<div style="color:#86868b;font-size:12px">'+(abierto?'▲':'▼')+'</div>';
+    html += '</div>';
+    if(!abierto) return;
+
+    html += '<div style="border:1.5px solid '+colorBorder+';border-top:none;border-radius:0 0 12px 12px;margin-bottom:12px;overflow:hidden">';
 
     // Cabecera del tránsito
     html += '<div style="background:'+colorBg+';padding:10px 12px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">';
@@ -12822,7 +12876,7 @@ function cydRenderTransito(){
     html += '<div style="overflow-x:auto">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
     if(tr.flujo==='salida'){
-      html += '<tr style="background:#f5f5f7"><th style="padding:5px 8px;text-align:left">Art</th><th style="padding:5px 8px;text-align:left">Medida</th><th style="padding:5px 8px;text-align:left">Diseño</th><th style="padding:5px 8px;text-align:left">Ubicación</th><th style="padding:5px 8px;text-align:right">Stock</th><th style="padding:5px 8px;text-align:right">Pedido</th><th style="padding:5px 8px;text-align:right">Real</th><th style="padding:5px 8px;text-align:right">Dif</th></tr>';
+      html += '<tr style="background:#f5f5f7"><th style="padding:5px 8px;text-align:left">Art</th><th style="padding:5px 8px;text-align:left">Medida</th><th style="padding:5px 8px;text-align:left">Diseño</th><th style="padding:5px 8px;text-align:left">Ubicación</th><th style="padding:5px 8px;text-align:right">Stock</th><th style="padding:5px 8px;text-align:right">Pedido</th><th style="padding:5px 8px;text-align:center">Preparado</th><th style="padding:5px 8px;text-align:right">Cargado</th><th style="padding:5px 8px;text-align:right">Real</th><th style="padding:5px 8px;text-align:right">Dif</th></tr>';
     } else {
       html += '<tr style="background:#f5f5f7"><th style="padding:5px 8px;text-align:left">Art</th><th style="padding:5px 8px;text-align:left">Medida</th><th style="padding:5px 8px;text-align:left">Diseño</th><th style="padding:5px 8px;text-align:right">Stock</th><th style="padding:5px 8px;text-align:right">Entra</th><th style="padding:5px 8px;text-align:right">Nuevo</th><th style="padding:5px 8px;text-align:right">Pallets</th><th style="padding:5px 8px;text-align:left">Destino sugerido</th></tr>';
     }
@@ -12861,6 +12915,9 @@ function cydRenderTransito(){
           : '';
         html += '<td style="padding:4px 8px;text-align:right;color:#86868b">'+r.stock+alertaStock+'</td>';
         html += '<td style="padding:4px 8px;text-align:right;font-weight:700;color:#d70015">'+r.cant+'</td>';
+        html += '<td style="padding:4px 8px;text-align:center">'+(_prep[r.art]?'<span style="color:#34c759;font-weight:700">✓</span>':'<span style="color:#c7c7cc">—</span>')+'</td>';
+        var _cg = _leido[String(r.art)]||0;
+        html += '<td style="padding:4px 8px;text-align:right;font-weight:700;color:'+(!_cg?'#c7c7cc':(_cg===cantReal?'#34c759':(_cg>cantReal?'#d70015':'#ff9500')))+'">'+(_cg||'—')+'</td>';
         if(esPend){
           html += '<td style="padding:4px 8px;text-align:right">';
           html += '<button onclick="cydEditarCantTransito(&quot;'+tr.id+'&quot;,'+i+',-1)" style="padding:1px 6px;border:1px solid #d2d2d7;border-radius:4px;background:#fff;cursor:pointer;font-size:11px">-</button>';
@@ -12910,10 +12967,24 @@ function cydRenderTransito(){
     html += '</table></div></div>';
   });
 
+  if(!_visibles) html += '<div style="text-align:center;padding:24px;color:#86868b;font-size:13px">Sin resultados'+(_q?' para "'+_q.replace(/</g,'&lt;')+'"':'')+'</div>';
   if(_necesitaSave) transitoSave(lista);
 
   cont.innerHTML = html;
+  // Mantener el foco y el cursor en el buscador al re-renderizar mientras se escribe
+  if(window._cydTrFocus){
+    var _in = document.getElementById('cyd-tr-busca');
+    if(_in){ _in.focus(); var L=_in.value.length; try{_in.setSelectionRange(L,L);}catch(e){} }
+  }
 }
+function cydTrToggle(id){
+  window._cydTrAbiertos = window._cydTrAbiertos || {};
+  window._cydTrAbiertos[id] = !window._cydTrAbiertos[id];
+  window._cydTrFocus = false;
+  cydRenderTransito();
+}
+function cydTrBuscar(v){ window._cydTrBusca = v; window._cydTrFocus = true; cydRenderTransito(); }
+function cydTrFiltrar(f){ window._cydTrFiltro = f; window._cydTrFocus = false; cydRenderTransito(); }
 
 function cydTab(tab){
   ['carga','descarga','transito','historial'].forEach(function(t){
