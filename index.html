@@ -865,7 +865,20 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 <!-- MAPA -->
 <div class="view" id="view-mapa">
   <div class="mapa-wrap">
-    <div class="cobertura-bar" id="cob-bar">
+    <div style="margin-bottom:10px;background:#f5f5f7;padding:8px 0 4px">
+      <input type="text" id="mapa-buscar" placeholder="🔍 Buscar artículo, medida o diseño en el mapa..." 
+        autocomplete="off" autocorrect="off" spellcheck="false"
+        oninput="buscarEnMapa(this.value)"
+        style="width:100%;padding:11px 14px;border:1.5px solid #0071e3;border-radius:10px;font-size:15px;background:#fff;color:#1d1d1f;outline:none">
+      <div id="mapa-buscar-resultado" style="margin-top:6px"></div>
+    </div>
+    <details id="mapa-indicadores" style="margin-bottom:10px">
+      <summary style="cursor:pointer;list-style:none;padding:10px 14px;background:#fff;border:1px solid #e5e5ea;border-radius:12px;font-size:13px;font-weight:600;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+        <span>📊 Indicadores</span>
+        <span style="font-weight:400;color:#86868b;font-size:12px">📍 <b id="cobmini-1">—</b> · 🏭 libre <b id="cobmini-2">—</b> · 🗄️ racks <b id="cobmini-3">—</b> · 📈 conc. <b id="cobmini-4">—</b></span>
+        <span style="margin-left:auto;color:#86868b;font-size:11px">ver detalle ▾</span>
+      </summary>
+    <div class="cobertura-bar" id="cob-bar" style="margin-top:6px">
       <div class="cob-header">
         <span class="cob-title">📍 Ubicación declarada</span>
         <span class="cob-pct" id="cob-pct">—</span>
@@ -909,6 +922,17 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
         </div>
       </div>
     </div>
+    </details>
+    <script>
+    // Copia los % de los indicadores a la línea resumida (se actualiza sola)
+    (function(){
+      function sync(){ [['cob-pct',1],['cob-stock-pct',2],['cob-rackocup-pct',3],['cob-pareto-pct',4]].forEach(function(p){
+        var a=document.getElementById(p[0]), b=document.getElementById('cobmini-'+p[1]); if(a&&b) b.textContent=a.textContent; }); }
+      var el=document.getElementById('cob-bar');
+      if(el && window.MutationObserver) new MutationObserver(sync).observe(el,{subtree:true,childList:true,characterData:true});
+      sync();
+    })();
+    </script>
     <!-- Aplicar Stock Bajo -->
     <div style="margin-bottom:10px">
       <div style="display:flex;gap:8px">
@@ -921,8 +945,13 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       </div>
     </div>
     <div id="mapa-import-resultado"></div>
-    <div id="alertas-box"></div>
-    <div class="mapa-leyenda">
+    <details id="mapa-avisos" style="margin-bottom:10px">
+      <summary style="cursor:pointer;list-style:none;padding:10px 14px;background:#fff9ee;border:1px solid #ffe4a0;border-radius:12px;font-size:13px;font-weight:600;color:#856404">⚠️ Avisos del rack (posiciones vacías, reposición) <span style="float:right;font-size:11px;font-weight:400">ver ▾</span></summary>
+      <div id="alertas-box" style="margin-top:6px"></div>
+    </details>
+    <details style="margin-bottom:10px">
+      <summary style="cursor:pointer;list-style:none;padding:8px 14px;background:#fff;border:1px solid #e5e5ea;border-radius:12px;font-size:12px;color:#86868b">🎨 Referencias de colores <span style="float:right">ver ▾</span></summary>
+    <div class="mapa-leyenda" style="margin-top:6px">
       <div class="ley-item"><div class="ley-dot" style="background:#34c759"></div>Lleno/casi lleno</div>
       <div class="ley-item"><div class="ley-dot" style="background:#ff9500"></div>Medio</div>
       <div class="ley-item"><div class="ley-dot" style="background:#d70015"></div>Casi vacío</div>
@@ -932,6 +961,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       <div class="ley-item"><div class="ley-dot" style="background:#fff;border:2px solid #ff9500"></div>🟡 Menos de medio pallet — revisar/reubicar a puntera manualmente</div>
       <div class="ley-item"><div class="ley-dot" style="background:#0071e3"></div>🆕 Sugerido por el motor — todavía sin confirmar con Avance</div>
     </div>
+    </details>
     <!-- Filtro por nivel + exportar + expandir -->
     <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
       <button class="sort-btn active" id="niv-btn-all" onclick="setNivelFiltro('all',this)">Todos</button>
@@ -943,12 +973,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       <button class="sort-btn" onclick="expandirTodo()" style="margin-left:auto">↕️ Expandir todo</button>
     </div>
 
-    <div style="margin-bottom:10px">
-      <input type="text" id="mapa-buscar" placeholder="🔍 Buscar artículo, medida o diseño en el mapa..." 
-        autocomplete="off" autocorrect="off" spellcheck="false"
-        oninput="buscarEnMapa(this.value)"
-        style="width:100%;padding:9px 12px;border:1px solid #d2d2d7;border-radius:10px;font-size:14px;background:#fff;color:#1d1d1f;outline:none">
-      <div id="mapa-buscar-resultado" style="margin-top:6px"></div>
+    <div style="margin-bottom:8px">
       <button onclick="detectarPosicionesFantasma()" style="margin-top:8px;padding:6px 12px;background:#fff3cd;color:#856404;border:1px solid #ffe4a0;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">🩺 Detectar posiciones fantasma</button>
       <div id="mapa-fantasma-resultado" style="margin-top:6px"></div>
     </div>
