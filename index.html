@@ -1073,8 +1073,29 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 <div class="view" id="view-dif">
   <div class="diff-wrap">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;color:#86868b;text-transform:uppercase;letter-spacing:.5px">📊 Diferencias de Inventario</span>
-      <button onclick="limpiarDiferencias()" style="padding:6px 12px;background:#ffd6d9;color:#d70015;border:none;border-radius:8px;font-size:12px;cursor:pointer">🗑️ Limpiar</button>
+      <span style="font-size:13px;font-weight:600;color:#86868b;text-transform:uppercase;letter-spacing:.5px">📊 Diferencias contra la ficha de pila</span>
+      <div style="display:flex;gap:6px">
+        <button onclick="informeDiferencias('print')" style="padding:6px 12px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">🖨️ Informe</button>
+        <button onclick="informeDiferencias('xlsx')" style="padding:6px 12px;background:#34c759;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">📥 Excel</button>
+        <button onclick="limpiarDiferencias()" style="padding:6px 12px;background:#ffd6d9;color:#d70015;border:none;border-radius:8px;font-size:12px;cursor:pointer">🗑️ Limpiar</button>
+      </div>
+    </div>
+    <div id="diff-resumen"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">
+      <input id="diff-busca" type="search" placeholder="🔍 Artículo, medida, diseño, cliente, nro…" oninput="window._difQ=this.value;window._difFocus=true;renderDiferencias()"
+        style="flex:1;min-width:200px;padding:9px 12px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:13px">
+      <select id="diff-f-estado" onchange="renderDiferencias()" style="padding:8px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:12px;background:#fff">
+        <option value="ficha">Desde la última ficha</option><option value="pend">Pendientes (todas)</option><option value="res">Resueltas</option><option value="todas">Todas</option>
+      </select>
+      <select id="diff-f-tipo" onchange="renderDiferencias()" style="padding:8px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:12px;background:#fff">
+        <option value="">Faltantes y sobrantes</option><option value="F">📉 Solo faltantes</option><option value="S">📈 Solo sobrantes</option>
+      </select>
+      <select id="diff-f-origen" onchange="renderDiferencias()" style="padding:8px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:12px;background:#fff">
+        <option value="">Todo origen</option><option value="despacho">📤 Despachos</option><option value="ingreso">📥 Ingresos</option><option value="conteo">📦 Conteos</option>
+      </select>
+      <select id="diff-f-vista" onchange="renderDiferencias()" style="padding:8px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:12px;background:#fff">
+        <option value="lineas">Ver por movimiento</option><option value="art">Ver por artículo (acumulado)</option>
+      </select>
     </div>
     <div id="diff-lista"></div>
   </div>
@@ -5983,7 +6004,7 @@ function cydEjecutarDespacho(id){
   var huboSobranteDesp = false;
 
   tr.items.forEach(function(r){
-    var cantReal = r.cantReal||r.cant;
+    var cantReal = (r.cantReal!=null) ? r.cantReal : r.cant;
     var da0 = DATA.find(function(d){return d.art===r.art;});
 
     // Descontar del Mapa de Racks la posición que el operador confirmó/editó
@@ -6045,11 +6066,12 @@ function cydEjecutarDespacho(id){
       }
     }
 
-    if(cantReal !== cantSistema){
+    // Diferencia contra lo PEDIDO (pide 100, sale 98 → −2 faltante contra la ficha)
+    if(cantReal !== r.cant){
       diferencias.push({
         art:r.art, med:r.med, diseno:r.diseno, prov:r.prov,
         posRack:r.posRack||'', bloque:r.bloque||'',
-        cantPedida:cantSistema, cantReal:cantReal, diff:cantReal-cantSistema
+        cantPedida:r.cant, cantReal:cantReal, diff:cantReal-r.cant, stockWMS:cantSistema
       });
     }
   });
@@ -6057,9 +6079,9 @@ function cydEjecutarDespacho(id){
   saveDataStock();
 
   if(diferencias.length){
-    var histDif = JSON.parse(localStorage.getItem('wms_dif')||'[]');
-    histDif.unshift({fecha:fecha, hora:hora, destino:tr.destino||'', items:diferencias});
-    localStorage.setItem('wms_dif', JSON.stringify(histDif.slice(0,50)));
+    difRegistrar({fecha:fecha, hora:hora, destino:tr.destino||'', origen:'despacho', nro:tr.nroContenedor||'', trId:tr.id, items:diferencias});
+    var _netD = diferencias.reduce(function(s,d){return s+d.diff;},0);
+    showToast('📊 '+diferencias.length+' diferencia'+(diferencias.length>1?'s':'')+' contra la ficha ('+(_netD>0?'+':'')+_netD+' un.) — ver Diferencias');
   }
 
   if(repoSugerido.length){
@@ -6151,7 +6173,7 @@ function cydPlanillaDespacho(id){
   var rows = '';
   var numFila = 0;
   tr.items.forEach(function(r){
-    var cantReal = r.cantReal||r.cant;
+    var cantReal = (r.cantReal!=null) ? r.cantReal : r.cant;
     var diff = cantReal - r.cant;
     var ubic = r.posRack
       ? '<span style="color:#0071e3;font-weight:700">'+r.posRack+'</span>'
@@ -6256,7 +6278,8 @@ function cydEditarCantTransito(id, artIdx, delta){
   var lista = transitoGetAll();
   var tr = lista.find(function(t){return t.id===id;});
   if(!tr) return;
-  tr.items[artIdx].cantReal = Math.max(0, (tr.items[artIdx].cantReal||tr.items[artIdx].cant) + delta);
+  var _it = tr.items[artIdx];
+  _it.cantReal = Math.max(0, ((_it.cantReal!=null)?_it.cantReal:_it.cant) + delta);
   transitoSave(lista);
   // Actualizar solo el número en pantalla sin re-renderizar todo
   var el = document.getElementById('ctr-'+id+'-'+artIdx);
@@ -6358,7 +6381,7 @@ function cydPlanillaPicking(id){
   });
 
   function mkRow(r, seccion){
-    var cantReal = r.cantReal||r.cant;
+    var cantReal = (r.cantReal!=null) ? r.cantReal : r.cant;
     var diff = cantReal - r.cant;
     // Stock en vivo disponible para ESTE pedido (sin lo de otros pedidos pendientes)
     // (pedido ya despachado o artículo fuera de la base → stock congelado del pedido)
@@ -6616,9 +6639,8 @@ function confirmarDespacho(){
       }
     }
 
-    // Registrar diferencia contra el STOCK real del sistema (no contra el
-    // pedido) — es una diferencia de inventario, no una variación de despacho
-    if(item.cantReal !== stockAntesDespacho){
+    // Diferencia contra lo PEDIDO (se acumula contra la ficha de pila)
+    if(item.cantReal !== item.cant){
       diferencias.push({
         art: item.art,
         med: item.med,
@@ -6626,18 +6648,17 @@ function confirmarDespacho(){
         prov: item.prov,
         posRack: item.posRack||'',
         bloque: item.bloque||'',
-        cantPedida: stockAntesDespacho,
+        cantPedida: item.cant,
         cantReal: item.cantReal,
-        diff: item.cantReal - stockAntesDespacho,
+        diff: item.cantReal - item.cant,
+        stockWMS: stockAntesDespacho,
       });
     }
   });
 
   // Guardar diferencias
   if(diferencias.length){
-    const histDif = JSON.parse(localStorage.getItem('wms_dif')||'[]');
-    histDif.unshift({ fecha, hora, destino, items: diferencias });
-    localStorage.setItem('wms_dif', JSON.stringify(histDif.slice(0,50)));
+    difRegistrar({ fecha, hora, destino, origen:'despacho', items: diferencias });
   }
 
   // Guardar sugerencias de reposición
@@ -6674,24 +6695,225 @@ function confirmarDespacho(){
   }
 }
 
+// ═══ DIFERENCIAS ↔ FICHA DE PILA ═══════════════════════════════════════
+// Cada diferencia (despacho, ingreso o conteo) queda registrada contra la
+// ÚLTIMA ficha de pila cargada. Las no resueltas desde esa ficha se acumulan:
+//   stock real estimado = stock de la ficha + Σ diferencias (− faltantes, + sobrantes)
+// Una ficha nueva "pone en cero" el acumulado (cuenta desde su fecha).
+// v:2 = diferencia contra lo pedido/esperado. Registros viejos (sin v) se
+// calcularon contra el stock del sistema: se muestran pero NO suman.
+function fichaSnapGet(){ try{ return JSON.parse(localStorage.getItem('wms_ficha_snap')||'null'); }catch(e){ return null; } }
+function difTsDe(b){
+  if(b.ts) return b.ts;
+  var m = String(b.fecha||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(!m) return 0;
+  var h = String(b.hora||'').match(/(\d{1,2}):(\d{2})/);
+  var y = +m[3]; if(y<100) y+=2000;
+  var hh = h ? +h[1] : 0; if(h && /p\.?\s?m/i.test(b.hora) && hh<12) hh+=12;
+  return new Date(y, +m[2]-1, +m[1], hh, h?+h[2]:0).getTime();
+}
+function difRegistrar(batch){
+  var snap = fichaSnapGet();
+  batch.ts = batch.ts || Date.now();
+  batch.v = 2;
+  batch.fichaTs = snap && snap.ts || null;
+  (batch.items||[]).forEach(function(it){
+    it.v = 2;
+    if(!it.tipo) it.tipo = it.diff<0 ? 'Faltante' : 'Sobrante';
+    if(snap && snap.stock && snap.stock[String(it.art)]!==undefined) it.stockFicha = snap.stock[String(it.art)];
+  });
+  var hist = JSON.parse(localStorage.getItem('wms_dif')||'[]');
+  hist.unshift(batch);
+  localStorage.setItem('wms_dif', JSON.stringify(hist.slice(0,500)));
+}
+// Lista plana de todas las líneas, con su lote de origen
+function difTodas(){
+  var hist = JSON.parse(localStorage.getItem('wms_dif')||'[]'), out = [];
+  hist.forEach(function(b,bi){
+    var ts = difTsDe(b);
+    var origen = b.origen || (/Inventario/.test(b.destino||'') ? 'conteo' : 'despacho');
+    (b.items||[]).forEach(function(r,ii){
+      out.push(Object.assign({}, r, {bi:bi, ii:ii, ts:ts, fecha:b.fecha, hora:b.hora, destino:b.destino||'', origen:origen, nro:b.nro||'', v2:(r.v===2||b.v===2)}));
+    });
+  });
+  return out;
+}
+// Diferencias que cuentan contra la ficha actual (v2, no resueltas, desde la ficha)
+function difDesdeFicha(art){
+  var snap = fichaSnapGet(), desde = snap && snap.ts || 0;
+  return difTodas().filter(function(d){
+    return d.v2 && d.estado!=='resuelto' && d.ts>=desde && (art==null || String(d.art)===String(art));
+  });
+}
+// ── Informe de diferencias contra la última ficha (a favor / en contra), por artículo
+// Para ir buscando / ajustando hasta que el neto quede en 0. Solo lectura.
+function difInformeDatos(){
+  var snap = fichaSnapGet();
+  var g = {};
+  difDesdeFicha().forEach(function(d){
+    var k = String(d.art);
+    if(!g[k]){
+      var da = DATA.find(function(x){ return String(x.art)===k; }) || {};
+      var ub = [];
+      if(da.bloque) ub.push('Bloque '+da.bloque);
+      try{ Object.keys(ASIGN||{}).forEach(function(pid){ if(ASIGN[pid] && String(ASIGN[pid].art)===k) ub.push(pid+(ASIGN[pid].unidades!=null?' ('+ASIGN[pid].unidades+')':'')); }); }catch(e){}
+      try{ Object.entries(getPunteras()||{}).forEach(function(e){ (e[1]||[]).forEach(function(it){ if(it && String(it.art)===k && it.unidades>0) ub.push('Puntera '+e[0]+' ('+it.unidades+')'); }); }); }catch(e){}
+      var fic = snap && snap.stock && snap.stock[k]!==undefined ? +snap.stock[k] : null;
+      g[k] = {art:d.art, med:d.med||da.med||'', diseno:d.diseno||da.diseno||'', prov:d.prov||da.prov||'', ubic:ub.join(' · ')||(d.posRack||d.bloque||'—'),
+              ficha:fic, net:0, falt:0, sobr:0, wms:(da.art!=null && typeof stockFisico==='function') ? stockFisico(k) : null, movs:[]};
+    }
+    g[k].net += d.diff; if(d.diff<0) g[k].falt += d.diff; else g[k].sobr += d.diff;
+    g[k].movs.push(d);
+  });
+  var arr = Object.values(g);
+  return {
+    snap: snap,
+    enContra: arr.filter(function(r){ return r.net<0; }).sort(function(a,b){ return a.net-b.net; }),
+    aFavor:   arr.filter(function(r){ return r.net>0; }).sort(function(a,b){ return b.net-a.net; }),
+    compensados: arr.filter(function(r){ return r.net===0; })
+  };
+}
+function informeDiferencias(modo){
+  var D = difInformeDatos();
+  var tC = D.enContra.reduce(function(s,r){return s+r.net;},0), tF = D.aFavor.reduce(function(s,r){return s+r.net;},0);
+  var fFicha = D.snap && D.snap.ts ? new Date(D.snap.ts).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'sin ficha cargada';
+  var hoy = new Date().toLocaleString('es-AR');
+  var oriTxt = function(o){ return o==='ingreso'?'Ingreso':o==='conteo'?'Conteo':'Despacho'; };
+  var movTxt = function(m){ return m.fecha+' '+oriTxt(m.origen)+' '+(m.destino||'')+(m.nro?' #'+m.nro:'')+': '+m.cantPedida+'→'+m.cantReal+' ('+(m.diff>0?'+':'')+m.diff+')'; };
+  if(!D.enContra.length && !D.aFavor.length && !D.compensados.length){ showToast('✅ Sin diferencias pendientes contra la ficha ('+fFicha+')'); return; }
+
+  if(modo==='xlsx'){
+    if(typeof XLSX==='undefined'){ showToast('❌ No está cargada la librería de Excel'); return; }
+    var head = ['ART','MEDIDA','DISEÑO','PROVEEDOR','UBICACIÓN','FICHA','DIFERENCIA','REAL ESTIMADO','STOCK WMS','MOVIMIENTOS','CONTADO','ACCIÓN / NOTA'];
+    var fila = function(r){ return [r.art, r.med, r.diseno, r.prov, r.ubic, r.ficha===null?'':r.ficha, r.net, r.ficha===null?'':r.ficha+r.net, r.wms===null?'':r.wms, r.movs.map(movTxt).join(' | '), '', '']; };
+    var wb = XLSX.utils.book_new();
+    var res = [['INFORME DE DIFERENCIAS CONTRA LA FICHA DE PILA'],['Ficha cargada', fFicha],['Generado', hoy],[],
+      ['En contra (faltantes)', tC, D.enContra.length+' arts'],['A favor (sobrantes)', tF, D.aFavor.length+' arts'],['Neto', tC+tF],['Compensados (neto 0)', D.compensados.length+' arts']];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), 'Resumen');
+    [['En contra', D.enContra],['A favor', D.aFavor],['Compensados', D.compensados]].forEach(function(h){
+      var ws = XLSX.utils.aoa_to_sheet([head].concat(h[1].map(fila)));
+      ws['!cols'] = [{wch:8},{wch:14},{wch:10},{wch:12},{wch:28},{wch:8},{wch:11},{wch:13},{wch:10},{wch:70},{wch:10},{wch:30}];
+      XLSX.utils.book_append_sheet(wb, ws, h[0]);
+    });
+    XLSX.writeFile(wb, 'Diferencias_vs_ficha_'+new Date().toLocaleDateString('es-AR').replace(/\//g,'-')+'.xlsx');
+    return;
+  }
+
+  // Versión imprimible
+  var esc = function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); };
+  var tabla = function(titulo, color, lista, total){
+    if(!lista.length) return '';
+    var h = '<h3 style="color:'+color+'">'+titulo+' — '+lista.length+' arts · '+(total>0?'+':'')+total+' un.</h3>';
+    h += '<table><thead><tr><th style="width:14mm">Art</th><th style="width:32mm">Medida / diseño</th><th style="width:22mm">Prov</th><th style="width:40mm">Ubicación</th><th class="n">Ficha</th><th class="n">Dif.</th><th class="n">Real est.</th><th class="n">WMS</th><th>Movimientos</th><th style="width:16mm">Contado</th><th style="width:38mm">Acción / nota ✍</th></tr></thead><tbody>';
+    lista.forEach(function(r){
+      h += '<tr><td><b>'+esc(r.art)+'</b></td><td>'+esc(r.med)+' <span class="g">'+esc(r.diseno)+'</span></td><td>'+esc(r.prov)+'</td><td class="s">'+esc(r.ubic)+'</td>'+
+        '<td class="n">'+(r.ficha===null?'—':r.ficha)+'</td><td class="n" style="color:'+color+';font-weight:800">'+(r.net>0?'+':'')+r.net+'</td>'+
+        '<td class="n"><b>'+(r.ficha===null?'—':r.ficha+r.net)+'</b></td><td class="n">'+(r.wms===null?'—':r.wms)+'</td>'+
+        '<td class="s">'+r.movs.map(function(m){ return esc(movTxt(m)); }).join('<br>')+'</td><td class="box"></td><td class="box"></td></tr>';
+    });
+    return h+'</tbody></table>';
+  };
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Diferencias vs ficha</title><style>'+
+    '@page{size:A4 landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:10px;color:#1d1d1f;margin:0}'+
+    'h2{font-size:15px;margin:0 0 2px}h3{font-size:12px;margin:12px 0 4px}.meta{color:#666;margin-bottom:8px}'+
+    '.res{display:flex;gap:8px;margin-bottom:6px}.res div{flex:1;border:1px solid #ccc;border-radius:6px;padding:6px 8px}.res b{display:block;font-size:16px}'+
+    'table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#1d1d1f;color:#fff;text-align:left;padding:3px 4px;font-size:9px}'+
+    'td{border-bottom:1px solid #ddd;padding:3px 4px;vertical-align:top;word-wrap:break-word}.n{text-align:right;width:13mm}.g{color:#888}.s{font-size:8.5px;color:#444}'+
+    'td.box{border:1.5px solid #999}tr{page-break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
+    '<h2>📊 Informe de diferencias contra la ficha de pila</h2>'+
+    '<div class="meta">Ficha cargada: <b>'+fFicha+'</b> · Generado: '+hoy+' · Real est. = ficha + diferencia. Objetivo: neto 0 (buscar, ajustar o actualizar ficha).</div>'+
+    '<div class="res"><div>📉 En contra (faltantes)<b style="color:#d70015">'+tC+'</b>'+D.enContra.length+' artículos</div>'+
+    '<div>📈 A favor (sobrantes)<b style="color:#1c7c2c">'+(tF>0?'+':'')+tF+'</b>'+D.aFavor.length+' artículos</div>'+
+    '<div>Neto<b>'+((tC+tF)>0?'+':'')+(tC+tF)+'</b>'+D.compensados.length+' arts. compensados (neto 0)</div></div>'+
+    tabla('📉 EN CONTRA — faltantes (buscar en depósito)', '#d70015', D.enContra, tC)+
+    tabla('📈 A FAVOR — sobrantes (verificar / ajustar)', '#1c7c2c', D.aFavor, tF)+
+    tabla('↔️ COMPENSADOS — faltante y sobrante en el mismo artículo (revisar cruces)', '#a8710a', D.compensados, 0)+
+    '<div class="meta" style="margin-top:10px">Al resolver una diferencia, marcala en WMS › Diferencias › "Editar / resolver" para que deje de sumar.</div>'+
+    '<script>window.onload=function(){window.print();}<\/script></body></html>';
+  var w = window.open('', '_blank');
+  if(!w){ showToast('❌ El navegador bloqueó la ventana — permití ventanas emergentes'); return; }
+  w.document.write(html); w.document.close();
+}
+function difAcumulado(art){ return difDesdeFicha(art).reduce(function(s,d){ return s+(d.diff||0); },0); }
+
 let _diffEditing = null; // "batchIdx-itemIdx" en edición
 let _diffTipoTemp = {};
 
 function renderDiferencias(){
-  const histDif = JSON.parse(localStorage.getItem('wms_dif')||'[]');
-  const lista = document.getElementById('diff-lista');
-  if(!histDif.length){
-    lista.innerHTML='<div class="diff-empty">Sin diferencias registradas</div>';
-    return;
+  const lista = document.getElementById('diff-lista'); if(!lista) return;
+  const resumen = document.getElementById('diff-resumen');
+  const snap = fichaSnapGet();
+  const desde = snap && snap.ts || 0;
+  const val = id => (document.getElementById(id)||{}).value||'';
+  const fEst = val('diff-f-estado')||'ficha', fTipo = val('diff-f-tipo'), fOri = val('diff-f-origen'), fVista = val('diff-f-vista')||'lineas';
+  const q = String(window._difQ||'').trim().toLowerCase();
+  const todas = difTodas();
+
+  // ── Resumen contra la ficha
+  const act = difDesdeFicha();
+  const falt = act.filter(d=>d.diff<0).reduce((s,d)=>s+d.diff,0);
+  const sobr = act.filter(d=>d.diff>0).reduce((s,d)=>s+d.diff,0);
+  let totFicha = 0; if(snap && snap.stock) Object.keys(snap.stock).forEach(k=>{ totFicha += (+snap.stock[k]||0); });
+  const fFecha = desde ? new Date(desde).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : null;
+  const card = (t,v,c,sub) => `<div style="flex:1;min-width:120px;background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#86868b;text-transform:uppercase;letter-spacing:.3px">${t}</div><div style="font-size:22px;font-weight:800;color:${c}">${v}</div>${sub?`<div style="font-size:10px;color:#86868b">${sub}</div>`:''}</div>`;
+  if(resumen){
+    resumen.innerHTML = (fFecha?'':'<div style="background:#fff3cd;color:#856404;border-radius:10px;padding:8px 12px;font-size:12px;margin-bottom:8px">⚠️ No hay ficha de pila cargada: las diferencias se acumulan sin punto de partida.</div>')+
+      `<div style="display:flex;gap:8px;flex-wrap:wrap">`+
+      card('Stock según ficha', totFicha.toLocaleString('es-AR'), '#1d1d1f', fFecha?'cargada '+fFecha:'—')+
+      card('📉 Faltantes', falt.toLocaleString('es-AR'), falt?'#d70015':'#86868b', 'desde la ficha, sin resolver')+
+      card('📈 Sobrantes', (sobr?'+':'')+sobr.toLocaleString('es-AR'), sobr?'#1c7c2c':'#86868b', 'desde la ficha, sin resolver')+
+      card('Stock real estimado', (totFicha+falt+sobr).toLocaleString('es-AR'), (falt+sobr)?'#0071e3':'#1d1d1f', 'ficha '+((falt+sobr)>=0?'+ ':'− ')+Math.abs(falt+sobr)+' un.')+
+      `</div>`;
   }
-  lista.innerHTML = histDif.map((d,bi)=>`
-    <div class="diff-card">
-      <div class="diff-card-header">
-        <span class="diff-fecha">${d.fecha} ${d.hora}</span>
-        <span class="diff-cliente">${d.destino} · ${d.items.length} dif.</span>
-      </div>
-      ${d.items.map((r,ii)=>renderDiffLinea(r,bi,ii,d.fecha)).join('')}
-    </div>`).join('');
+
+  // ── Filtros
+  let filas = todas.filter(d=>{
+    if(fEst==='ficha' && !(d.v2 && d.estado!=='resuelto' && d.ts>=desde)) return false;
+    if(fEst==='pend' && d.estado==='resuelto') return false;
+    if(fEst==='res' && d.estado!=='resuelto') return false;
+    if(fTipo==='F' && !(d.diff<0)) return false;
+    if(fTipo==='S' && !(d.diff>0)) return false;
+    if(fOri && d.origen!==fOri) return false;
+    if(q){
+      const txt = [d.art,d.med,d.diseno,d.prov,d.destino,d.nro,d.posRack,d.bloque,d.nota,d.fecha].join(' ').toLowerCase();
+      if(!q.split(/\s+/).every(w=>txt.indexOf(w)>=0)) return false;
+    }
+    return true;
+  });
+  filas.sort((a,b)=>b.ts-a.ts);
+
+  if(!filas.length){
+    lista.innerHTML='<div class="diff-empty">Sin diferencias para ese filtro</div>';
+  } else if(fVista==='art'){
+    // ── Acumulado por artículo
+    const g = {};
+    filas.forEach(d=>{ const k=String(d.art); if(!g[k]) g[k]={art:d.art,med:d.med,diseno:d.diseno,prov:d.prov,net:0,n:0,ult:0,cuenta:0}; 
+      if(d.v2) { g[k].net+=d.diff; g[k].cuenta++; } g[k].n++; g[k].ult=Math.max(g[k].ult,d.ts); });
+    const arr = Object.values(g).sort((a,b)=>a.net-b.net);
+    lista.innerHTML = `<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <tr style="background:#1d1d1f;color:#fff"><th style="padding:7px 10px;text-align:left">Art</th><th style="padding:7px 10px;text-align:left">Medida / diseño</th><th style="padding:7px 10px;text-align:right">Ficha</th><th style="padding:7px 10px;text-align:right">Dif.</th><th style="padding:7px 10px;text-align:right">Real est.</th><th style="padding:7px 10px;text-align:right">Stock WMS</th><th style="padding:7px 10px;text-align:right">Mov.</th></tr>`+
+      arr.map((r,i)=>{
+        const f = snap && snap.stock ? snap.stock[String(r.art)] : undefined;
+        const da = DATA.find(x=>String(x.art)===String(r.art));
+        return `<tr style="background:${i%2?'#fafafa':'#fff'};cursor:pointer" onclick="window._difQ='${String(r.art)}';document.getElementById('diff-busca').value='${String(r.art)}';document.getElementById('diff-f-vista').value='lineas';renderDiferencias()">
+          <td style="padding:6px 10px;font-weight:700">${r.art}</td>
+          <td style="padding:6px 10px">${r.med||''} <span style="color:#86868b">${r.diseno||''} · ${r.prov||''}</span></td>
+          <td style="padding:6px 10px;text-align:right">${f!==undefined?f:'—'}</td>
+          <td style="padding:6px 10px;text-align:right;font-weight:800;color:${r.net<0?'#d70015':r.net>0?'#1c7c2c':'#86868b'}">${r.net>0?'+':''}${r.net}</td>
+          <td style="padding:6px 10px;text-align:right;font-weight:700;color:#0071e3">${f!==undefined?(+f+r.net):'—'}</td>
+          <td style="padding:6px 10px;text-align:right;color:#86868b">${da?(stockFisico(r.art)):'—'}</td>
+          <td style="padding:6px 10px;text-align:right;color:#86868b">${r.n}</td></tr>`;
+      }).join('')+`</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Tocá un artículo para ver sus movimientos. Real est. = ficha + diferencias.</div>`;
+  } else {
+    // ── Por movimiento, agrupado por día
+    let html='', dia='';
+    filas.forEach(d=>{
+      if(d.fecha!==dia){ if(dia) html+='</div>'; dia=d.fecha; html+=`<div class="diff-card"><div class="diff-card-header"><span class="diff-fecha">📅 ${d.fecha}</span></div>`; }
+      html += renderDiffLinea(d, d.bi, d.ii, null);
+    });
+    if(dia) html+='</div>';
+    lista.innerHTML = html;
+  }
+  if(window._difFocus){ const el=document.getElementById('diff-busca'); if(el){ el.focus(); const L=el.value.length; try{el.setSelectionRange(L,L);}catch(e){} } window._difFocus=false; }
 }
 
 function renderDiffLinea(r,bi,ii,fechaPedido){
@@ -6732,20 +6954,27 @@ function renderDiffLinea(r,bi,ii,fechaPedido){
     </div>`;
   }
 
+  const ori = r.origen||'despacho';
+  const lbl = ori==='ingreso' ? ['Esperado','Recibido','📥 Ingreso'] : ori==='conteo' ? ['Sistema','Contado','📦 Conteo'] : ['Pedido','Despachado','📤 Despacho'];
+  const real = (artStock && typeof stockFisico==='function') ? stockFisico(r.art) : stockActual;
   return `<div class="diff-row" style="${resuelto?'opacity:.55':''}">
     <div style="flex:1;min-width:0">
-      <div style="font-size:12px;font-weight:600">${r.med} ${r.diseno}${resuelto?' <span style="color:#248a3d;font-weight:700;font-size:10px">· ✔ Resuelto</span>':''}</div>
-      <div style="font-size:11px;color:#86868b">${r.prov} · ${r.posRack||r.bloque||'—'}</div>
-      ${fechaPedido?`<div style="font-size:10px;color:#86868b">📅 Pedido del ${fechaPedido}</div>`:''}
-      ${r.tipo?`<span class="pensa-tag" style="margin-top:4px;display:inline-block;background:${r.tipo==='Cruce'?'#fff3cd':r.tipo==='Sobrante'?'#e8f8ee':'#fdeaea'};color:${r.tipo==='Cruce'?'#a8710a':r.tipo==='Sobrante'?'#248a3d':'#d70015'}">${r.tipo==='Cruce'?'🔀':r.tipo==='Sobrante'?'📈':'📉'} ${r.tipo}</span>`:''}
+      <div style="font-size:12px;font-weight:700">${r.art} · ${r.med||''} ${r.diseno||''}${resuelto?' <span style="color:#248a3d;font-weight:700;font-size:10px">· ✔ Resuelto</span>':''}</div>
+      <div style="font-size:11px;color:#86868b">${lbl[2]} · <b style="color:#1d1d1f">${(r.destino||'—').replace(/</g,'&lt;')}</b>${r.nro?' · Nro '+r.nro:''}${r.hora?' · '+r.hora:''}</div>
+      <div style="font-size:11px;color:#86868b">${r.prov||''} · ${r.posRack||r.bloque||'—'}</div>
+      ${r.tipo?`<span class="pensa-tag" style="margin-top:4px;display:inline-block;background:${r.tipo==='Cruce'?'#fff3cd':r.tipo==='Sobrante'?'#e8f8ee':'#fdeaea'};color:${r.tipo==='Cruce'?'#a8710a':r.tipo==='Sobrante'?'#1c7c2c':'#d70015'}">${r.tipo==='Cruce'?'🔀':r.tipo==='Sobrante'?'📈':'📉'} ${r.tipo}</span>`:''}
+      ${r.v2===false?`<span style="margin-left:4px;font-size:10px;color:#a8710a;background:#fff3cd;border-radius:6px;padding:1px 6px">formato viejo — no suma contra la ficha</span>`:''}
       ${r.nota?`<div style="font-size:11px;color:#48484a;margin-top:4px;font-style:italic">📝 ${r.nota.replace(/</g,'&lt;')}</div>`:''}
-      ${stockActual!==null?`<div style="margin-top:6px"><div style="font-size:9px;color:#86868b;text-transform:uppercase;letter-spacing:.3px">Stock actual</div><div style="font-size:22px;font-weight:800;color:#1d1d1f;line-height:1.1">${stockActual}</div></div>`:''}
+      <div style="display:flex;gap:16px;margin-top:6px;font-size:11px;color:#86868b">
+        ${r.stockFicha!==undefined?`<div>Ficha<br><b style="font-size:15px;color:#1d1d1f">${r.stockFicha}</b></div>`:''}
+        ${real!==null&&real!==undefined?`<div>Stock WMS hoy<br><b style="font-size:15px;color:#1d1d1f">${real}</b></div>`:''}
+      </div>
     </div>
     <div style="text-align:right;flex-shrink:0">
-      <div style="font-size:12px">Pedidas: <strong>${r.cantPedida}</strong></div>
-      <div style="font-size:12px">Preparadas: <strong>${r.cantReal}</strong></div>
-      <div style="font-size:12px;font-weight:700;color:${r.diff<0?'#d70015':'#1c7c2c'}">Dif: ${r.diff>0?'+':''}${r.diff}</div>
-      <button onclick="editarLineaDiff('${key}')" style="margin-top:4px;border:none;background:none;color:#0071e3;font-size:11px;font-weight:600;cursor:pointer">✎ Editar</button>
+      <div style="font-size:12px">${lbl[0]}: <strong>${r.cantPedida}</strong></div>
+      <div style="font-size:12px">${lbl[1]}: <strong>${r.cantReal}</strong></div>
+      <div style="font-size:16px;font-weight:800;color:${r.diff<0?'#d70015':'#1c7c2c'}">${r.diff>0?'+':''}${r.diff}</div>
+      <button onclick="editarLineaDiff('${key}')" style="margin-top:4px;border:none;background:none;color:#0071e3;font-size:11px;font-weight:600;cursor:pointer">✎ Editar / resolver</button>
     </div>
   </div>`;
 }
@@ -7087,14 +7316,12 @@ function confirmarConteoDiseno(){
   localStorage.setItem('wms_inv_v2', JSON.stringify(contados));
 
   if(difs.length){
-    const histDif = JSON.parse(localStorage.getItem('wms_dif')||'[]');
-    histDif.unshift({
+    difRegistrar({
       fecha: new Date().toLocaleDateString('es-AR'),
       hora: new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
-      destino: '📦 Inventario — '+_invDisenoActivo,
+      destino: '📦 Inventario — '+_invDisenoActivo, origen:'conteo',
       items: difs,
     });
-    localStorage.setItem('wms_dif', JSON.stringify(histDif.slice(0,100)));
   }
 
   _invDisenoActivo = null;
@@ -11735,6 +11962,7 @@ if('serviceWorker' in navigator){
             <option value="ingresos">Ingresos</option>
             <option value="salidas">Salidas (despachos)</option>
             <option value="pedidos">Pedidos</option>
+            <option value="diferencias">Diferencias</option>
           </select></label>
         <button onclick="fpBuscar()" style="padding:9px 18px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔍 Buscar</button>
       </div>
@@ -12529,11 +12757,18 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
   // la posición que el operador confirmó/editó en la pantalla de tránsito —
   // ya no queda solo como sugerencia informativa, se aplica acá al recibir
   var huboRack = false, huboSobrante = false;
+  var _difIng = [];
   tr.items.forEach(function(r){
     var da = DATA.find(function(d){return d.art===r.art;});
+    // Cantidad realmente recibida (editable en tránsito); si no se tocó = lo esperado
+    var cantRec = (r.cantReal!=null) ? r.cantReal : r.cant;
+    if(cantRec !== r.cant){
+      _difIng.push({art:r.art, med:r.med, diseno:r.diseno, prov:r.prov, posRack:'', bloque:'',
+        cantPedida:r.cant, cantReal:cantRec, diff:cantRec-r.cant, stockWMS:da?(da.stock||0):null});
+    }
     if(da){
-      da.stock = (da.stock||0) + r.cant;
-      da.pall  = Math.floor(da.stock / (da.max_pos||32));
+      da.stock = (da.stock||0) + cantRec;
+      da.pall  = Math.floor(Math.max(0,da.stock) / (da.max_pos||32));
       recalcularCond(da);
     }
     var sug = r.sugerencia||{};
@@ -12542,7 +12777,7 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
       var posArr = parsearPosicionesInput(posEfectiva);
       if(posArr.length){
         huboRack = true;
-        var resPos = aplicarPosicionesEntrada(r.art, posArr, r.cant);
+        var resPos = aplicarPosicionesEntrada(r.art, posArr, cantRec);
         if(resPos.sobrante>0){
           huboSobrante = true;
           showToast('⚠️ Art '+r.art+': '+resPos.sobrante+' un. no entraron en '+posEfectiva+' — revisar Mapa Racks');
@@ -12556,6 +12791,12 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
   try{ aplicarUbicNave(tr); }catch(e){ console.warn('No se pudo ubicar en la nave', e); }
   saveDataStock();
   if(huboRack && typeof renderMapa==='function') renderMapa();
+  if(_difIng.length){
+    difRegistrar({fecha:fecha, hora:new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
+      destino:(tr.tipoLabel||'Ingreso')+(tr.tte?' · TTE '+tr.tte:''), origen:'ingreso', nro:tr.nroContenedor||'', trId:tr.id, items:_difIng});
+    var _netI = _difIng.reduce(function(s,d){return s+d.diff;},0);
+    showToast('📊 '+_difIng.length+' diferencia'+(_difIng.length>1?'s':'')+' en el ingreso ('+(_netI>0?'+':'')+_netI+' un.) — ver Diferencias');
+  }
 
   // Guardar en historial carga
   var rems = {};
@@ -12563,7 +12804,7 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
     var k = r.nroRem||fecha;
     if(!rems[k]) rems[k]={nroRem:k, fecha:tr.fecha, fechaISO, tte:tr.tte, cliente:r.cliente, tipo:'carga',
       tipoIngreso:tr.tipoLabel, nroContenedor:tr.nroContenedor, items:[]};
-    rems[k].items.push({art:r.art, med:r.med, diseno:r.diseno, prov:r.prov, cant:r.cant, pallets:r.pallets, nroFact:r.nroFact});
+    rems[k].items.push({art:r.art, med:r.med, diseno:r.diseno, prov:r.prov, cant:(r.cantReal!=null?r.cantReal:r.cant), esperado:r.cant, pallets:r.pallets, nroFact:r.nroFact});
   });
   var hist = cydGetHist('carga');
   Object.values(rems).forEach(function(rem){ hist.unshift(rem); });
@@ -12927,7 +13168,7 @@ function cydRenderTransito(){
     if(tr.flujo==='salida'){
       html += '<tr style="background:#f5f5f7"><th style="padding:5px 8px;text-align:left">Art</th><th style="padding:5px 8px;text-align:left">Medida</th><th style="padding:5px 8px;text-align:left">Diseño</th><th style="padding:5px 8px;text-align:left">Ubicación</th><th style="padding:5px 8px;text-align:right">Stock</th><th style="padding:5px 8px;text-align:right">Pedido</th><th style="padding:5px 8px;text-align:center">Preparado</th><th style="padding:5px 8px;text-align:right">Cargado</th><th style="padding:5px 8px;text-align:right">Real</th><th style="padding:5px 8px;text-align:right">Dif</th></tr>';
     } else {
-      html += '<tr style="background:#f5f5f7"><th style="padding:5px 8px;text-align:left">Art</th><th style="padding:5px 8px;text-align:left">Medida</th><th style="padding:5px 8px;text-align:left">Diseño</th><th style="padding:5px 8px;text-align:right">Stock</th><th style="padding:5px 8px;text-align:right">Entra</th><th style="padding:5px 8px;text-align:right">Nuevo</th><th style="padding:5px 8px;text-align:right">Pallets</th><th style="padding:5px 8px;text-align:left">Destino sugerido</th></tr>';
+      html += '<tr style="background:#f5f5f7"><th style="padding:5px 8px;text-align:left">Art</th><th style="padding:5px 8px;text-align:left">Medida</th><th style="padding:5px 8px;text-align:left">Diseño</th><th style="padding:5px 8px;text-align:right">Stock</th><th style="padding:5px 8px;text-align:right">Entra</th><th style="padding:5px 8px;text-align:right">Recibido</th><th style="padding:5px 8px;text-align:right">Nuevo</th><th style="padding:5px 8px;text-align:right">Pallets</th><th style="padding:5px 8px;text-align:left">Destino sugerido</th></tr>';
     }
 
     var esSalidaTab = tr.flujo === 'salida';
@@ -12935,7 +13176,7 @@ function cydRenderTransito(){
       var bg = i%2?'background:#fafafa':'';
       if(esSalidaTab){
         // SALIDA: mostrar posición, cant pedida vs real editable
-        var cantReal = r.cantReal||r.cant;
+        var cantReal = (r.cantReal!=null) ? r.cantReal : r.cant;
         var diff = cantReal - r.cant;
         var tipoSal = r.tipo || (r.posRack?'rack':(r.bloque?'bloque':''));
         var ubic;
@@ -12992,7 +13233,18 @@ function cydRenderTransito(){
         html += '<td style="padding:4px 8px;color:#86868b">'+(r.diseno||'—')+'</td>';
         html += '<td style="padding:4px 8px;text-align:right;color:#86868b">'+r.stockActual+'</td>';
         html += '<td style="padding:4px 8px;text-align:right;font-weight:700;color:#34c759">+'+r.cant+'</td>';
-        html += '<td style="padding:4px 8px;text-align:right;font-weight:700">'+(r.stockActual+r.cant)+'</td>';
+        var _rec = (r.cantReal!=null) ? r.cantReal : r.cant, _dRec = _rec - r.cant;
+        html += '<td style="padding:4px 8px;text-align:right;white-space:nowrap">';
+        if(esPend){
+          html += '<button onclick="cydEditarCantTransito(&quot;'+tr.id+'&quot;,'+i+',-1)" style="padding:1px 6px;border:1px solid #d2d2d7;border-radius:4px;background:#fff;cursor:pointer">-</button> ';
+          html += '<span id="ctr-'+tr.id+'-'+i+'" style="font-weight:700;display:inline-block;min-width:26px;text-align:center">'+_rec+'</span>';
+          html += ' <button onclick="cydEditarCantTransito(&quot;'+tr.id+'&quot;,'+i+',1)" style="padding:1px 6px;border:1px solid #d2d2d7;border-radius:4px;background:#fff;cursor:pointer">+</button>';
+        } else {
+          html += '<b>'+_rec+'</b>';
+        }
+        html += '<div id="ctd-'+tr.id+'-'+i+'" style="font-size:10px;font-weight:700;color:'+(_dRec===0?'#34c759':'#d70015')+'">'+(_dRec===0?'OK':(_dRec>0?'+':'')+_dRec)+'</div>';
+        html += '</td>';
+        html += '<td style="padding:4px 8px;text-align:right;font-weight:700">'+(r.stockActual+_rec)+'</td>';
         html += '<td style="padding:4px 8px;text-align:right">'+(sug.pallets||'—')+'</td>';
         html += '<td style="padding:4px 8px;font-weight:600;color:'+colorDest+'">';
         html += '<div style="font-size:10px;color:#86868b;font-weight:400;margin-bottom:2px">'+(sug.detalle||'—')+'</div>';
@@ -13146,6 +13398,19 @@ function fpBuscar(){
     }catch(e){}
   }
 
+  // Diferencias (faltantes / sobrantes) registradas al despachar, recibir o contar
+  if(tipo==='todos' || tipo==='diferencias'){
+    difTodas().forEach(function(d){
+      if(!d.v2) return;
+      if(!artOk(d.art, d.med, d.diseno, d.prov)) return;
+      var isoD = d.ts ? new Date(d.ts).toISOString().slice(0,10) : fpISO(d.fecha);
+      if(!enRango(isoD)) return;
+      var o = d.origen==='ingreso'?'ingreso':d.origen==='conteo'?'conteo':'despacho';
+      filas.push({iso:isoD, fecha:d.fecha, hora:d.hora||'', comp:(d.diff<0?'📉 Faltante':'📈 Sobrante')+' ('+o+')', nro:d.nro||'', cant:d.diff,
+        art:d.art, med:d.med, dis:d.diseno, quien:d.destino||'', prep:'', com:(d.estado==='resuelto'?'✔ resuelto · ':'')+(o==='ingreso'?'esperado ':o==='conteo'?'sistema ':'pedido ')+d.cantPedida+' → '+d.cantReal+(d.nota?' · '+d.nota:''), clase:'dif'});
+    });
+  }
+
   filas.sort(function(a,b){ return (a.iso+(a.hora||'')).localeCompare(b.iso+(b.hora||'')); });
 
   // Encabezado del artículo + saldos de hoy (solo si es un artículo puntual)
@@ -13157,20 +13422,38 @@ function fpBuscar(){
     transitoGetAll().forEach(function(tr){ if(tr.flujo!=='salida' && tr.estado==='transito') (tr.items||[]).forEach(function(r){ if(String(r.art)===q) enTr+=(r.cant||0); }); });
     html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin-bottom:10px">';
     html += '<div style="flex:2;min-width:220px;border:1.5px solid #1d1d1f;border-radius:10px;padding:10px 14px;font-size:17px;font-weight:800;color:#0a2a8a;display:flex;align-items:center">'+esc(q)+' · '+esc(d0.med)+' '+esc(d0.diseno)+' · '+esc(d0.prov)+'</div>';
-    [['Saldo actual (físico)', stockFisico(q), '#0a2a8a'],['Comprometido en pedidos', compr, compr?'#d70015':'#86868b'],['Ingresos en tránsito', enTr, enTr?'#ff9500':'#86868b']].forEach(function(k){
-      html += '<div style="flex:1;min-width:120px;border:1px solid #d2d2d7;border-radius:10px;padding:8px 12px;background:#fff"><div style="font-size:10px;color:#86868b">'+k[0]+'</div><div style="font-size:20px;font-weight:800;color:'+k[2]+'">'+k[1].toLocaleString('es-AR')+'</div></div>';
+    var _snap = fichaSnapGet(), _fic = (_snap && _snap.stock && _snap.stock[q]!==undefined) ? +_snap.stock[q] : null, _dif = difAcumulado(q);
+    [['Stock según ficha'+(_snap&&_snap.ts?' ('+new Date(_snap.ts).toLocaleDateString('es-AR')+')':''), _fic===null?'—':_fic, '#1d1d1f'],
+     ['Diferencias desde la ficha', (_dif>0?'+':'')+_dif, _dif<0?'#d70015':_dif>0?'#1c7c2c':'#86868b'],
+     ['Stock real estimado', _fic===null?'—':(_fic+_dif), '#0071e3'],
+     ['Saldo WMS (físico)', stockFisico(q), '#0a2a8a'],['Comprometido en pedidos', compr, compr?'#d70015':'#86868b'],['Ingresos en tránsito', enTr, enTr?'#ff9500':'#86868b']].forEach(function(k){
+      html += '<div style="flex:1;min-width:120px;border:1px solid #d2d2d7;border-radius:10px;padding:8px 12px;background:#fff"><div style="font-size:10px;color:#86868b">'+k[0]+'</div><div style="font-size:20px;font-weight:800;color:'+k[2]+'">'+(typeof k[1]==='number'?k[1].toLocaleString('es-AR'):k[1])+'</div></div>';
     });
     html += '</div>';
   }
 
-  var tIn = 0, tOut = 0, tPed = 0;
-  filas.forEach(function(f){ if(f.clase==='in') tIn+=f.cant; if(f.clase==='out') tOut+=f.cant; if(f.clase==='ped') tPed+=f.cant; });
-  html += '<div style="font-size:12px;color:#86868b;margin-bottom:6px">'+filas.length+' movimientos · Ingresos <b style="color:#34c759">+'+tIn+'</b> · Despachos <b style="color:#d70015">'+tOut+'</b> · Pedidos <b style="color:#0071e3">'+tPed+'</b></div>';
+  if(!exacto){
+    var _sn = fichaSnapGet(), _tot = 0;
+    if(_sn && _sn.stock) Object.keys(_sn.stock).forEach(function(k){ _tot += (+_sn.stock[k]||0); });
+    var _act = difDesdeFicha(), _f = 0, _s = 0;
+    _act.forEach(function(d){ if(d.diff<0) _f+=d.diff; else _s+=d.diff; });
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+    [['Stock según ficha'+(_sn&&_sn.ts?' ('+new Date(_sn.ts).toLocaleDateString('es-AR')+')':''), _tot.toLocaleString('es-AR'), '#1d1d1f'],
+     ['📉 Faltantes desde la ficha', _f.toLocaleString('es-AR'), _f?'#d70015':'#86868b'],
+     ['📈 Sobrantes desde la ficha', (_s?'+':'')+_s.toLocaleString('es-AR'), _s?'#1c7c2c':'#86868b'],
+     ['Stock real estimado', (_tot+_f+_s).toLocaleString('es-AR'), '#0071e3']].forEach(function(k){
+      html += '<div style="flex:1;min-width:140px;border:1px solid #d2d2d7;border-radius:10px;padding:8px 12px;background:#fff"><div style="font-size:10px;color:#86868b">'+k[0]+'</div><div style="font-size:20px;font-weight:800;color:'+k[2]+'">'+k[1]+'</div></div>';
+    });
+    html += '</div>';
+  }
+  var tIn = 0, tOut = 0, tPed = 0, tDif = 0;
+  filas.forEach(function(f){ if(f.clase==='in') tIn+=f.cant; if(f.clase==='out') tOut+=f.cant; if(f.clase==='ped') tPed+=f.cant; if(f.clase==='dif') tDif+=f.cant; });
+  html += '<div style="font-size:12px;color:#86868b;margin-bottom:6px">'+filas.length+' movimientos · Ingresos <b style="color:#34c759">+'+tIn+'</b> · Despachos <b style="color:#d70015">'+tOut+'</b> · Pedidos <b style="color:#0071e3">'+tPed+'</b> · Diferencias <b style="color:#b3261e">'+(tDif>0?'+':'')+tDif+'</b></div>';
   if(!filas.length){
     out.innerHTML = html + '<div style="text-align:center;padding:30px;color:#86868b;font-size:13px">Sin movimientos para ese filtro</div>';
     return;
   }
-  var col = {in:'#34c759', out:'#d70015', ped:'#0071e3', pend:'#ff9500', ficha:'#7a3fb0'};
+  var col = {in:'#34c759', out:'#d70015', ped:'#0071e3', pend:'#ff9500', ficha:'#7a3fb0', dif:'#b3261e'};
   html += '<div style="overflow-x:auto;border:1px solid #d2d2d7;border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:11.5px">';
   html += '<tr style="background:#1d1d1f;color:#fff">'+['Fecha','Hora','Comprobante','Nro','Art','Medida','Cantidad','Cliente / Proveedor','Preparó','Comentario'].map(function(t,i){ return '<th style="padding:6px 8px;text-align:'+(i===6?'right':'left')+';white-space:nowrap">'+t+'</th>'; }).join('')+'</tr>';
   filas.forEach(function(f,i){
