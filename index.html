@@ -3096,6 +3096,7 @@ function render(){
       <!-- Stock y condición DISCRETO -->
       <div style="display:flex;align-items:center;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;flex-wrap:wrap">
         <span style="font-size:12px;color:#86868b">Stock: <strong style="color:#1d1d1f">${(r.stock||0).toLocaleString('es-AR')}</strong></span>
+        <button onclick="event.stopPropagation();ajustarStockManual(${JSON.stringify(String(r.art)).replace(/"/g,'&quot;')})" title="Contar / corregir el stock (genera faltante o sobrante en Diferencias)" style="font-size:11px;font-weight:600;padding:2px 8px;border:1px solid #d2d2d7;border-radius:6px;background:#fff;color:#0071e3;cursor:pointer">✎ Contar</button>
         <span style="font-size:12px;color:#86868b">Pallets: <strong style="color:#1d1d1f">${r.pall||0}</strong></span>
         <span style="font-size:12px;color:#86868b">Rot: <strong style="color:#1d1d1f">${r.rot||0}</strong>/mes</span>
         <span class="badge ${r.cond==='bajo stock'?'bajo':'sobre'}" style="margin-left:auto">${r.cond}</span>
@@ -7146,6 +7147,33 @@ function renderPreparacion(lista){
       return '<tr style="background:'+(i%2?'#fafafa':'#fff')+'"><td style="padding:5px 8px;white-space:nowrap">'+(x.fecha||'')+' '+(x.hora||'')+'</td><td style="padding:5px 8px">'+String(x.destino||'').replace(/</g,'&lt;')+'</td><td style="padding:5px 8px">'+(x.nro||'')+'</td><td style="padding:5px 8px">'+String(x.preparador||'').replace(/</g,'&lt;')+'</td><td style="padding:5px 8px">'+(x.arts||0)+'</td><td style="padding:5px 8px">'+(x.pedidas||0)+'</td><td style="padding:5px 8px">'+(x.preparadas||0)+'</td><td style="padding:5px 8px;font-weight:800;color:'+(d<0?'#d70015':d>0?'#1c7c2c':'#34c759')+'">'+(d>0?'+':'')+d+'</td><td style="padding:5px 8px;font-weight:700;color:'+(d<0?'#d70015':d>0?'#1c7c2c':'#34c759')+'">'+pctTxt(v)+'</td><td style="padding:5px 8px">'+(x.lineasDif||0)+'</td></tr>'; }).join('')+
     '</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Se guarda solo al confirmar cada despacho. El buscador filtra por cliente, nro, preparador o fecha.</div>';
   lista.innerHTML = html;
+}
+
+// Ajuste manual desde la tarjeta de Stock: si el WMS dice 4 y contaste 0,
+// deja el stock en 0 y registra −4 como FALTANTE pendiente en Diferencias
+// (origen "conteo"), para buscarlo como cualquier otra diferencia.
+function ajustarStockManual(artId){
+  var da = DATA.find(function(r){ return String(r.art)===String(artId); });
+  if(!da){ showToast('Artículo no encontrado'); return; }
+  var antes = da.stock||0;
+  var v = prompt('✎ Contar '+da.art+' · '+da.med+' '+da.diseno+'\n\nStock en el WMS: '+antes+'\n¿Cuántas hay realmente?', antes);
+  if(v===null) return;
+  var cont = parseInt(String(v).replace(/\D/g,''),10);
+  if(isNaN(cont) || cont<0){ showToast('❌ Cantidad inválida'); return; }
+  if(cont===antes){ showToast('Sin cambios — coincide con el WMS'); return; }
+  var diff = cont - antes;
+  var nota = prompt((diff<0?'📉 Faltante ':'📈 Sobrante ')+(diff>0?'+':'')+diff+' un.\nNota (opcional, ej: dónde se contó):', '') || '';
+  var ahora = new Date();
+  difRegistrar({fecha:ahora.toLocaleDateString('es-AR'), hora:ahora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
+    destino:'✎ Ajuste manual (Stock)', origen:'conteo',
+    items:[{art:da.art, med:da.med, diseno:da.diseno, prov:da.prov, posRack:'', bloque:da.bloque||'',
+      cantPedida:antes, cantReal:cont, diff:diff, stockWMS:antes, nota:nota}]});
+  da.stock = cont;
+  da.pall = Math.floor(Math.max(0,cont)/(da.max_pos||32));
+  try{ recalcularCond(da); }catch(e){}
+  saveDataStock();
+  try{ render(); }catch(e){}
+  showToast((diff<0?'📉 Faltante ':'📈 Sobrante ')+(diff>0?'+':'')+diff+' registrado en Diferencias — stock '+antes+' → '+cont);
 }
 
 function difAcumulado(art){ return difDesdeFicha(art).reduce(function(s,d){ return s+(d.diff||0); },0); }
