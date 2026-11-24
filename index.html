@@ -1970,6 +1970,12 @@ let currentUnidades=0;
 let currentMax=0;
 
 function saveAsign(){ localStorage.setItem('wms_asign2', JSON.stringify(ASIGN)); }
+// Posiciones multi-artículo (reemplazan a las punteras): pasillo 6, nivel 1,
+// ambos frentes. Guardan hasta POS_MULTI_MAX artículos: el principal (art/unidades)
+// + los demás en .compartidos (mismo campo que ya usa el motor para compartir pallet,
+// así pedidos, picking y descuentos de rack ya los contemplan).
+var POS_MULTI_MAX = 3;
+function posMultiArt(pid){ return /^6[SN]-N1-P\d+$/.test(String(pid||'')); }
 
 // --- TABS ---
 
@@ -3121,13 +3127,14 @@ function renderMapa(){
         const maxU=art?art.max_pos:0;
         const cls=celldaColor(unid,maxU);
         const pct=maxU?Math.round((unid/maxU)*100):0;
-        const label=art?art.diseno.substring(0,5):'';
+        const _nComp=(asig&&asig.compartidos)?asig.compartidos.filter(c=>c&&c.art).length:0;
+        const label=art?(_nComp?art.diseno.substring(0,4)+' +'+_nComp:art.diseno.substring(0,5)):'';
         const motivoNC = art ? rackMotivoNoCalifica(art) : null;
         const borde = motivoNC ? (motivoNC.severidad==='dura' ? '3px solid #d70015' : '3px solid #ff9500') : '';
         const badge = motivoNC ? `<div style="position:absolute;top:2px;right:2px;font-size:10px" title="${motivoNC.motivo}">${motivoNC.severidad==='dura'?'🔴':'🟡'}</div>` : '';
         const faltaConfirmar = asig && asig.art && !asig.confirmadoAvance;
         const badgeNuevo = faltaConfirmar ? `<div style="position:absolute;top:2px;left:2px;font-size:9px;background:#0071e3;color:#fff;border-radius:3px;padding:0 2px" title="Sugerido por el motor — todavía no confirmado con Avance">🆕</div>` : '';
-        html+=`<div class="celda ${cls}" style="${borde?'border:'+borde+';position:relative':'position:relative'}" onclick="clickCelda('${posId}')" title="${posId}${art?' · '+art.med+' '+art.diseno+(motivoNC?' · ⚠️ '+motivoNC.motivo:''):''}${faltaConfirmar?' · 🆕 sugerido, falta cargar avance':''}">
+        html+=`<div class="celda ${cls}" style="${borde?'border:'+borde+';position:relative':'position:relative'}" onclick="clickCelda('${posId}')" title="${posId}${posMultiArt(posId)?' (hasta '+POS_MULTI_MAX+' arts)':''}${_nComp?' · +'+_nComp+' art. más: '+asig.compartidos.map(c=>c.art+' ('+c.unidades+')').join(', '):''}${art?' · '+art.med+' '+art.diseno+(motivoNC?' · ⚠️ '+motivoNC.motivo:''):''}${faltaConfirmar?' · 🆕 sugerido, falta cargar avance':''}">
           ${badge}
           ${badgeNuevo}
           ${label}
@@ -3305,7 +3312,9 @@ function clickCelda(posId){
   }
 }
 
-function showModalOcupada(posId,art){
+var _compEdit = null; // copia editable de .compartidos mientras el modal está abierto
+function showModalOcupada(posId,art,mantenerComp){
+  if(!mantenerComp) _compEdit = JSON.parse(JSON.stringify((ASIGN[posId]||{}).compartidos||[]));
   currentUnidades=ASIGN[posId]?ASIGN[posId].unidades:0;
   currentMax=(PALL_BASE&&PALL_BASE[String(art.art)]?PALL_BASE[String(art.art)].p_rack:0)||art.max_pos||0;
   const comp=(ASIGN[posId]||{}).compartidos||[];
@@ -3337,13 +3346,66 @@ function showModalOcupada(posId,art){
       <div class="unid-max">Referencia: ${maxEfectivo} un.${comp.length>0?' (mitad del pallet)':' por pallet'} — se puede superar si hay unidades sueltas</div>
       <div class="barra-pos"><div class="barra-pos-fill" id="barra-fill" style="width:${pct}%;background:${barColor}"></div></div>
     </div>
-    ${(()=>{const comp=(ASIGN[posId]||{}).compartidos||[];if(!comp.length)return '';return '<div style="background:#f5f5f7;border-radius:10px;padding:10px 12px;margin-top:8px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#86868b;margin-bottom:6px">Comparte posición con:</div>'+comp.map(c=>{const ca=DATA.find(r=>r.art==c.art);if(!ca)return '';return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:.5px solid #e5e5ea"><div><div style="font-size:12px;font-weight:600">'+ca.med+' — '+ca.diseno+'</div><div style="font-size:10px;color:#86868b">'+ca.prov+'</div></div><span style="font-size:12px;font-weight:700;color:#0071e3">'+c.unidades+' un.</span></div>';}).join('')+'</div>';})()}
+    ${posMultiArt(posId) ? htmlCompartidosEditables(posId) : ''}
+    ${(()=>{if(posMultiArt(posId))return '';const comp=(ASIGN[posId]||{}).compartidos||[];if(!comp.length)return '';return '<div style="background:#f5f5f7;border-radius:10px;padding:10px 12px;margin-top:8px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#86868b;margin-bottom:6px">Comparte posición con:</div>'+comp.map(c=>{const ca=DATA.find(r=>r.art==c.art);if(!ca)return '';return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:.5px solid #e5e5ea"><div><div style="font-size:12px;font-weight:600">'+ca.med+' — '+ca.diseno+'</div><div style="font-size:10px;color:#86868b">'+ca.prov+'</div></div><span style="font-size:12px;font-weight:700;color:#0071e3">'+c.unidades+' un.</span></div>';}).join('')+'</div>';})()}
     <div class="btn-row">
       <button class="btn-primary" onclick="guardarUnidades()">💾 Guardar</button>
       <button class="btn-danger" onclick="vaciarPosicion()">🗑️ Vaciar</button>
     </div>
     <button class="btn-secondary" onclick="closeModalDirect()">Cancelar</button>`;
   document.getElementById('modal-bg').classList.add('show');
+}
+
+function htmlCompartidosEditables(posId){
+  var comp = _compEdit||[];
+  var h = '<div style="background:#f5f5f7;border-radius:10px;padding:10px 12px;margin-top:8px">';
+  h += '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:#86868b;margin-bottom:6px">Posición multi-artículo — '+(1+comp.length)+'/'+POS_MULTI_MAX+' artículos</div>';
+  comp.forEach(function(c,i){
+    var ca = DATA.find(function(r){return r.art==c.art;});
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-bottom:.5px solid #e5e5ea">';
+    h += '<div style="min-width:0"><div style="font-size:12px;font-weight:600">'+(ca?ca.med+' — '+ca.diseno:'Art '+c.art)+'</div><div style="font-size:10px;color:#86868b">'+c.art+(ca?' · '+ca.prov+' · stock '+(ca.stock||0):'')+'</div></div>';
+    h += '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">';
+    h += '<button onclick="cambiarUnidComp('+i+',-1)" style="width:28px;height:28px;border:1px solid #d2d2d7;border-radius:6px;background:#fff;cursor:pointer">−</button>';
+    h += '<input type="number" min="0" value="'+(c.unidades||0)+'" onchange="setUnidComp('+i+',this.value)" style="width:52px;text-align:center;padding:4px;border:1px solid #d2d2d7;border-radius:6px;font-weight:700">';
+    h += '<button onclick="cambiarUnidComp('+i+',1)" style="width:28px;height:28px;border:1px solid #d2d2d7;border-radius:6px;background:#fff;cursor:pointer">+</button>';
+    h += '<button onclick="quitarCompartido('+i+')" title="Sacar de la posición" style="width:28px;height:28px;border:none;border-radius:6px;background:#ffd6d9;color:#d70015;cursor:pointer">✕</button>';
+    h += '</div></div>';
+  });
+  if(1+comp.length < POS_MULTI_MAX){
+    h += '<input type="text" id="search-art-comp" placeholder="➕ Agregar otro artículo: código, medida o diseño..." oninput="searchArtComp(this.value)" autocomplete="off" style="width:100%;margin-top:8px;padding:8px 10px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;box-sizing:border-box">';
+    h += '<div id="art-results-comp" style="max-height:180px;overflow-y:auto"></div>';
+  }
+  h += '<div style="font-size:10px;color:#86868b;margin-top:6px">Los cambios se guardan con 💾 Guardar.</div>';
+  return h+'</div>';
+}
+function _refrescarModalMulti(){
+  var a = ASIGN[currentPosId]; if(!a) return;
+  var art = DATA.find(function(r){return r.art==a.art;}); if(!art) return;
+  var u = currentUnidades;
+  showModalOcupada(currentPosId, art, true);
+  currentUnidades = u; var el=document.getElementById('unid-num'); if(el) el.textContent=u;
+}
+function cambiarUnidComp(i,d){ if(!_compEdit||!_compEdit[i]) return; _compEdit[i].unidades=Math.max(0,(_compEdit[i].unidades||0)+d); _refrescarModalMulti(); }
+function setUnidComp(i,v){ if(!_compEdit||!_compEdit[i]) return; _compEdit[i].unidades=Math.max(0,parseInt(v)||0); }
+function quitarCompartido(i){ if(!_compEdit) return; _compEdit.splice(i,1); _refrescarModalMulti(); }
+function searchArtComp(q){
+  var res=document.getElementById('art-results-comp'); if(!res) return;
+  if(!q||q.length<2){res.innerHTML='';return;}
+  var ql=q.toLowerCase(), a=ASIGN[currentPosId]||{};
+  var ya=new Set([String(a.art)].concat((_compEdit||[]).map(function(c){return String(c.art);})));
+  var found=DATA.filter(function(r){return !ya.has(String(r.art)) && (r.art+' '+r.diseno+' '+r.med+' '+r.prov).toLowerCase().indexOf(ql)>=0;}).slice(0,8);
+  if(!found.length){res.innerHTML='<div style="color:#86868b;font-size:12px;padding:6px">Sin resultados</div>';return;}
+  res.innerHTML=found.map(function(r){
+    var enOtra = Object.keys(ASIGN).filter(function(pid){ var v=ASIGN[pid]; return pid!==currentPosId && v && (String(v.art)===String(r.art) || (v.compartidos||[]).some(function(c){return String(c.art)===String(r.art);})); });
+    return '<div class="search-result-item" onclick="agregarCompartido('+r.art+')"><div style="font-weight:600;font-size:13px">'+r.med+' — '+r.diseno+' <span style="color:#86868b;font-weight:400">('+r.art+')</span></div><div style="font-size:11px;color:#86868b">'+r.prov+' · stock '+(r.stock||0)+(enOtra.length?' · <b style="color:#ff9500">ya está en '+enOtra.join(', ')+'</b>':'')+'</div></div>';
+  }).join('');
+}
+function agregarCompartido(artId){
+  if(!_compEdit) _compEdit=[];
+  if(1+_compEdit.length >= POS_MULTI_MAX){ showToast('Máximo '+POS_MULTI_MAX+' artículos por posición'); return; }
+  var r = DATA.find(function(x){return x.art==artId;}); if(!r) return;
+  _compEdit.push({art:r.art, unidades:Math.max(0, Math.min(r.stock||0, r.max_pos||r.stock||0))});
+  _refrescarModalMulti();
 }
 
 function showModalVacia(posId){
@@ -3370,7 +3432,16 @@ function guardarUnidades(){
   if(!ASIGN[currentPosId])return;
   ASIGN[currentPosId].unidades=currentUnidades;
   ASIGN[currentPosId].confirmadoAvance=true;
+  if(posMultiArt(currentPosId) && _compEdit){
+    ASIGN[currentPosId].compartidos = _compEdit.map(function(c){ return {art:c.art, unidades:c.unidades||0}; });
+    _compEdit.forEach(function(c){ registrarMovimiento(currentPosId, c.art, 'ajustar', c.unidades||0); });
+  }
   saveAsign();
+  try{
+    var _rs = loadRackStock();
+    _rs[currentPosId] = {art:ASIGN[currentPosId].art, stock:currentUnidades, min_u:(_rs[currentPosId]&&_rs[currentPosId].min_u)||1, compartidos:ASIGN[currentPosId].compartidos||[]};
+    saveRackStock(_rs);
+  }catch(e){}
   closeModalDirect();
   renderMapa();
   // Refresh stock view if active
@@ -3380,7 +3451,18 @@ function guardarUnidades(){
 }
 
 function vaciarPosicion(){
+  var _c = (_compEdit && posMultiArt(currentPosId)) ? _compEdit : ((ASIGN[currentPosId]||{}).compartidos||[]);
+  if(_c.length && confirm('Esta posición tiene '+(_c.length+1)+' artículos.\n\nAceptar = sacar solo el principal (el siguiente pasa a principal)\nCancelar = vaciar la posición completa')){
+    var nx = _c[0];
+    ASIGN[currentPosId] = {art:nx.art, unidades:nx.unidades||0, compartidos:_c.slice(1), confirmadoAvance:true};
+    saveAsign();
+    try{ var _rs2=loadRackStock(); _rs2[currentPosId]={art:nx.art, stock:nx.unidades||0, min_u:1, compartidos:_c.slice(1)}; saveRackStock(_rs2); }catch(e){}
+    closeModalDirect(); renderMapa();
+    showToast('🗑️ Sacado el principal — ahora '+nx.art+' es el principal');
+    return;
+  }
   delete ASIGN[currentPosId];
+  try{ var _rs3=loadRackStock(); delete _rs3[currentPosId]; saveRackStock(_rs3); }catch(e){}
   saveAsign();
   closeModalDirect();
   renderMapa();
@@ -4178,7 +4260,13 @@ function reevaluarRack(){
 
   // Recién ahora se liberan, ya confirmado
   aLiberar.forEach(function(x){
-    delete ASIGN[x.posId];
+    var _cc = (ASIGN[x.posId]&&ASIGN[x.posId].compartidos)||[];
+    if(posMultiArt(x.posId) && _cc.length){
+      // posición multi: sale solo el que no califica, el siguiente pasa a principal
+      ASIGN[x.posId] = {art:_cc[0].art, unidades:_cc[0].unidades||0, compartidos:_cc.slice(1), confirmadoAvance:true};
+    } else {
+      delete ASIGN[x.posId];
+    }
     liberadas++;
   });
 
@@ -4201,6 +4289,7 @@ function reevaluarRack(){
 
   // PASO 3: candidatos en nave que no están en rack ni en puntera
   var enRack = new Set(Object.values(ASIGN).filter(function(v){return v&&v.art;}).map(function(v){return String(v.art);}));
+  Object.values(ASIGN).forEach(function(v){ (v&&v.compartidos||[]).forEach(function(c){ if(c&&c.art) enRack.add(String(c.art)); }); });
   var enPunteraReeval = articulosAsignadosSet(getPunteras(), null);
   var candidatosNave = DATA.filter(function(r){
     if(enRack.has(String(r.art))) return false;
@@ -5683,6 +5772,11 @@ function buscarEnMapa(q){
     if(s.includes(ql)){
       encontrados.push({pos, art, unidades: v.unidades, tipo:'rack'});
     }
+    (v.compartidos||[]).forEach(function(c){
+      const ca = DATA.find(r=>r.art==c.art); if(!ca) return;
+      const sc = (ca.art+' '+ca.med+' '+ca.diseno+' '+ca.prov+' '+ca.tipo).toLowerCase();
+      if(sc.includes(ql)) encontrados.push({pos, art:ca, unidades:c.unidades, tipo:'rack'});
+    });
   });
 
   // Buscar también en las punteras — antes solo miraba el rack, así que un
@@ -7527,6 +7621,10 @@ function imprimirMapa(){
     else if(motivoNCexp && motivoNCexp.severidad==='dura') referencia = '🔴 YA NO CALIFICA — se libera';
     else if(motivoNCexp && motivoNCexp.severidad==='blanda') referencia = '🟡 MENOS DE MEDIO PALLET — revisar';
     wsData.push([pos, art.art, art.med, art.diseno, art.prov, v.unidades||0, art.stock||0, art.cond, nivel, referencia]);
+    (v.compartidos||[]).forEach(function(c){
+      const ca = DATA.find(r=>r.art==c.art); if(!ca) return;
+      wsData.push([pos, ca.art, ca.med, ca.diseno, ca.prov, c.unidades||0, ca.stock||0, ca.cond, nivel, 'COMPARTIDA (misma posición)']);
+    });
   });
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -7859,6 +7957,22 @@ function importarMapaRacksArchivo(file){
         const yaIgual = ASIGN[pos] && ASIGN[pos].unidades===cant && String(ASIGN[pos].art)===String(art.art);
         if(yaIgual){ filasSinCambio++; return; }
 
+        // Artículo compartido de la posición (o posición multi-artículo con lugar libre)
+        if(ASIGN[pos] && ASIGN[pos].art && String(ASIGN[pos].art)!==String(art.art)){
+          const compArr = ASIGN[pos].compartidos||[];
+          const ci = compArr.findIndex(function(c){ return String(c.art)===String(art.art); });
+          if(ci>=0){
+            if(compArr[ci].unidades===cant){ filasSinCambio++; return; }
+            cambios.push({pos:pos, art:art.art, unidadesNuevas:cant, esNueva:false, comp:true});
+            return;
+          }
+          const yaAgregados = cambios.filter(function(c){ return c.pos===pos && c.comp && c.compNuevo; }).length;
+          if(posMultiArt(pos) && 1+compArr.length+yaAgregados < POS_MULTI_MAX){
+            cambios.push({pos:pos, art:art.art, unidadesNuevas:cant, esNueva:false, comp:true, compNuevo:true});
+            return;
+          }
+        }
+
         cambios.push({pos:pos, art:art.art, unidadesNuevas:cant, esNueva: !ASIGN[pos]});
       });
 
@@ -7876,6 +7990,13 @@ function importarMapaRacksArchivo(file){
       if(!confirm('Se van a actualizar '+cambios.length+' posiciones ('+nuevas+' nuevas, '+actualizadas+' con cambio de cantidad) — '+totalUnidades+' unidades en total. ¿Continuar?')) return;
 
       cambios.forEach(function(c){
+        if(c.comp){
+          const cs = ASIGN[c.pos].compartidos = ASIGN[c.pos].compartidos||[];
+          const ci = cs.findIndex(function(x){ return String(x.art)===String(c.art); });
+          if(ci>=0) cs[ci].unidades = c.unidadesNuevas; else cs.push({art:c.art, unidades:c.unidadesNuevas});
+          registrarMovimiento(c.pos, c.art, 'ajustar', c.unidadesNuevas);
+          return;
+        }
         const prevCompartidos = (ASIGN[c.pos] && String(ASIGN[c.pos].art)===String(c.art)) ? (ASIGN[c.pos].compartidos||[]) : [];
         ASIGN[c.pos] = {art:c.art, unidades:c.unidadesNuevas, compartidos:prevCompartidos, confirmadoAvance:true};
         registrarMovimiento(c.pos, c.art, 'ajustar', c.unidadesNuevas);
@@ -7886,6 +8007,7 @@ function importarMapaRacksArchivo(file){
       // valor teórico que dejó el último "Aplicar motor" (asumía todo cargado).
       var rackStSync = loadRackStock();
       cambios.forEach(function(c){
+        if(c.comp){ if(rackStSync[c.pos]) rackStSync[c.pos].compartidos = ASIGN[c.pos].compartidos||[]; return; }
         rackStSync[c.pos] = {
           art: c.art,
           stock: c.unidadesNuevas,
