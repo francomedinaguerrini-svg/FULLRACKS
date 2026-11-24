@@ -621,7 +621,8 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
     <div class="tab-row2-item" id="row2tab-nave" onclick="switchTab('nave',this)">🏭 Nave</div>
     <div class="tab-row2-item" id="row2tab-rot" onclick="switchTab('rot',this)">🔥 Rotación</div>
     <div class="tab-row2-item" id="row2tab-termometro" onclick="switchTab('termometro',this)">🌡️ Termómetro</div>
-    <div class="tab-row2-item" id="row2tab-punteras" onclick="switchTab('punteras',this)">🔚 Punteras</div>
+    <div class="tab-row2-item" id="row2tab-punteras" onclick="switchTab('punteras',this)" style="display:none">🔚 Punteras</div>
+    <div class="tab-row2-item" onclick="verMigracionPunteras()" title="Listado de lo que estaba en punteras y a qué bloque se mandó">🔚 Ex-punteras</div>
 
     <div class="tab-row2-group">🔢 Control de stock</div>
     <div class="tab-row2-item" id="row2tab-inv" onclick="switchTab('inv',this)">🔢 Inventario</div>
@@ -958,7 +959,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       <div class="ley-item"><div class="ley-dot" style="background:#e5e5ea"></div>Vacía</div>
       <div class="ley-item"><div class="ley-dot" style="background:#ff9500;border:2px solid #d70015"></div>⚠️ Reponer</div>
       <div class="ley-item"><div class="ley-dot" style="background:#fff;border:2px solid #d70015"></div>🔴 Ya no califica — Reevaluar lo va a liberar</div>
-      <div class="ley-item"><div class="ley-dot" style="background:#fff;border:2px solid #ff9500"></div>🟡 Menos de medio pallet — revisar/reubicar a puntera manualmente</div>
+      <div class="ley-item"><div class="ley-dot" style="background:#fff;border:2px solid #ff9500"></div>🟡 Menos de medio pallet — poco stock (preferencia pasillo 6 N1)</div>
       <div class="ley-item"><div class="ley-dot" style="background:#0071e3"></div>🆕 Sugerido por el motor — todavía sin confirmar con Avance</div>
     </div>
     </details>
@@ -1840,7 +1841,7 @@ function chequearCambioUbicacion(art, stockAntes, stockDespues, cantIngreso){
   var tipo = null;
 
   if(pAntes>=1 && pDespues<1 && stockDespues>0){
-    tipo = 'puntera';
+    tipo = PUNTERAS_ACTIVAS ? 'puntera' : 'rack_poco';
   } else if(pAntes<1 && pDespues>=1){
     // Cruzó el umbral de 1 pallet — ¿le corresponde rack o bloque?
     // Rack: 1 a 6 pallets, no excluido (camión/Speedway/agrícola/AT51-AT52-MT51), rotación < 5.5/sem.
@@ -1899,16 +1900,16 @@ function renderSugerenciasUbicacion(){
   html += '<button onclick="limpiarSugerenciasUbicacion()" style="border:none;background:none;color:#86868b;font-size:11px;cursor:pointer">Descartar todas</button>';
   html += '</div>';
   sug.forEach(function(s, idx){
-    var esPuntera = s.tipo==='puntera';
+    var esPuntera = s.tipo==='puntera' || s.tipo==='rack_poco';
     var esRack = s.tipo==='rack';
     var destinoLbl = esRack ? 'rack' : 'bloque';
     var textoDestino = (s.enPuntera>0 && s.cantIngreso>0)
       ? '📦 Unificar: sacar '+s.enPuntera+' (puntera) + '+s.cantIngreso+' (ingreso) — llevar junto a '+destinoLbl
-      : (esRack ? '📦 Llegaron a '+s.stock+' un. — mover a rack (queda en el rango 1-6 pallets)' : '📦 Llegaron a '+s.stock+' un. — sacar de puntera y llevar a bloque');
+      : (esRack ? '📦 Llegaron a '+s.stock+' un. — mover a rack (queda en el rango 1-6 pallets)' : '📦 Llegaron a '+s.stock+' un. — llevar a bloque');
     html += '<div style="display:flex;align-items:center;gap:8px;background:#f5f5f7;border-radius:8px;padding:8px;margin-bottom:6px">';
     html += '<div style="flex:1;min-width:0">';
     html += '<div style="font-size:12px;font-weight:600">'+s.med+' '+s.diseno+' <span style="color:#86868b;font-weight:400">('+s.art+')</span></div>';
-    html += '<div style="font-size:11px;color:'+(esPuntera?'#0071e3':(esRack?'#0071e3':'#856404'))+'">'+(esPuntera?'🔚 Quedan '+s.stock+' un. — llevar a puntera':textoDestino)+'</div>';
+    html += '<div style="font-size:11px;color:'+(esPuntera?'#0071e3':(esRack?'#0071e3':'#856404'))+'">'+(esPuntera?'📦 Quedan '+s.stock+' un. — poco stock: asignar en rack selectivo (pasillo 6 N1)':textoDestino)+'</div>';
     html += '</div>';
     html += '<button onclick="descartarSugerenciaUbicacion('+idx+')" style="border:none;background:#e5e5ea;color:#1d1d1f;border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer">✓ Listo</button>';
     html += '</div>';
@@ -3146,6 +3147,7 @@ function renderMapa(){
 }
 
 function renderBloquePuntera(zona){
+  if(!PUNTERAS_ACTIVAS) return '';
   const punteras = (typeof getPunteras==='function') ? getPunteras() : {};
   let conAlgo = 0;
   let html = `<div class="frente-block" id="fb-punt-${zona}" style="border-color:#0071e3">
@@ -4131,7 +4133,7 @@ function rackMotivoNoCalifica(art){
   }
   if((art.pall||0) > RACK_PALL_MAX) return {motivo:'más de '+RACK_PALL_MAX+' pallets ('+art.pall+')', severidad:'dura'};
   var mitad = (art.max_pos||32)/2;
-  if((art.stock||0) < mitad) return {motivo:'menos de medio pallet ('+(art.stock||0)+'/'+(art.max_pos||32)+') — corresponde puntera', severidad:'blanda'};
+  if((art.stock||0) < mitad) return {motivo:'menos de medio pallet ('+(art.stock||0)+'/'+(art.max_pos||32)+') — poco stock: rack selectivo (pasillo 6 N1)', severidad:'blanda'};
   if(art.bloque){
     var bs = art.bloque.includes('/')?art.bloque.split('/'):[art.bloque];
     if(bs.some(function(b){return RACK_BLOQUES_EXCL.indexOf(b.trim())>=0;})) return {motivo:'bloque 1/2 ('+art.bloque+')', severidad:'dura'};
@@ -4669,6 +4671,7 @@ function togglePanelPunteras(){
 function renderCandidatosPunteras(){
   const box = document.getElementById('alertas-box');
   if(!box) return;
+  if(!PUNTERAS_ACTIVAS){ const pv=document.getElementById('panel-punteras-candidatos'); if(pv) pv.remove(); return; }
 
   const candidatosPuntera = candidatosParaPuntera(); // ya viene ordenado de menor a mayor stock
 
@@ -5039,8 +5042,96 @@ function esCamion(item){
 // (al renderizar la ubicación de cada artículo en Stock) — si quedaban
 // definidas en un tag de script posterior, tiraban "getPunteras is not
 // defined" apenas cargaba la página.
-function getPunteras(){ return JSON.parse(localStorage.getItem('wms_punteras')||'{}'); }
-function savePunteras(obj){ localStorage.setItem('wms_punteras', JSON.stringify(obj)); }
+// Módulo Punteras DADO DE BAJA (24/11/2026): las punteras físicas pasan a usar
+// posiciones del Mapa de Racks (preferentemente 6S-N1 / 6N-N1, compartidas).
+// Con PUNTERAS_ACTIVAS=false nadie lee ni escribe punteras: pedidos, picking,
+// buscadores, plano y exports las ven vacías. Lo que había se mandó a bloques
+// (migrarPunterasABloques) y queda un backup en 'wms_punteras_backup'.
+var PUNTERAS_ACTIVAS = false;
+function getPunteras(){ if(!PUNTERAS_ACTIVAS) return {}; return JSON.parse(localStorage.getItem('wms_punteras')||'{}'); }
+function savePunteras(obj){ if(!PUNTERAS_ACTIVAS) return; localStorage.setItem('wms_punteras', JSON.stringify(obj)); }
+
+// Pasa lo que estaba en punteras a bloques: si el artículo no tiene bloque,
+// le asigna el bloque donde está la mayor parte de su mismo diseño (y proveedor).
+// No toca stock ni Mapa de Racks. Corre una sola vez.
+function migrarPunterasABloques(){
+  if(PUNTERAS_ACTIVAS || localStorage.getItem('wms_punteras_migrado')) return;
+  var raw; try{ raw = JSON.parse(localStorage.getItem('wms_punteras')||'{}'); }catch(e){ raw = {}; }
+  var porArt = {};
+  Object.keys(raw).forEach(function(pid){
+    (raw[pid]||[]).forEach(function(it){
+      if(!it || !(it.unidades>0)) return;
+      var k = String(it.art);
+      if(!porArt[k]) porArt[k] = {un:0, parrillas:[]};
+      porArt[k].un += it.unidades; porArt[k].parrillas.push(pid+' ('+it.unidades+')');
+    });
+  });
+  function bloquePorDiseno(da){
+    var votos = {};
+    DATA.forEach(function(r){
+      if(String(r.art)===String(da.art) || !r.bloque || r.diseno!==da.diseno) return;
+      var peso = (r.stock>0?r.stock:1) * (r.prov===da.prov?2:1);
+      votos[r.bloque] = (votos[r.bloque]||0) + peso;
+    });
+    var mejor = '', max = 0;
+    Object.keys(votos).forEach(function(b){ if(votos[b]>max){ max=votos[b]; mejor=b; } });
+    return mejor;
+  }
+  var informe = [];
+  Object.keys(porArt).forEach(function(k){
+    var da = DATA.find(function(r){ return String(r.art)===k; });
+    var fila = {art:k, med:da?da.med:'', diseno:da?da.diseno:'', prov:da?da.prov:'', un:porArt[k].un, desde:porArt[k].parrillas.join(' + '), bloque:'', nota:''};
+    if(!da){ fila.nota = 'no está en la base'; }
+    else if(da.bloque){ fila.bloque = da.bloque; fila.nota = 'ya tenía bloque'; }
+    else {
+      var b = bloquePorDiseno(da);
+      if(b){ da.bloque = b; fila.bloque = b; fila.nota = 'bloque de su diseño'; }
+      else { fila.nota = 'SIN BLOQUE — no hay otro artículo de su diseño con bloque, asignar a mano'; }
+    }
+    informe.push(fila);
+  });
+  try{
+    localStorage.setItem('wms_punteras_backup', JSON.stringify(raw));
+    localStorage.setItem('wms_punteras_migracion', JSON.stringify({ts:Date.now(), filas:informe}));
+    // Tareas "sacar de puntera" que quedaron pendientes ya no aplican
+    if(typeof getPensamientos==='function'){
+      var arr = getPensamientos().filter(function(t){ return !(t._punteraArt && t.estado==='pendiente'); });
+      savePensamientos(arr);
+    }
+    localStorage.setItem('wms_punteras', '{}');
+    localStorage.setItem('wms_punteras_migrado', '1');
+    if(informe.length){ saveDataStock(); setTimeout(verMigracionPunteras, 1500); }
+  }catch(e){ console.warn('Migración punteras', e); }
+}
+function verMigracionPunteras(){
+  var m; try{ m = JSON.parse(localStorage.getItem('wms_punteras_migracion')||'null'); }catch(e){ m=null; }
+  if(!m || !m.filas || !m.filas.length){ showToast('No había artículos en punteras'); return; }
+  var esc = function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); };
+  var sinB = m.filas.filter(function(f){ return !f.bloque; }).length;
+  var html = '<div id="mig-punt" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center;padding:12px" onclick="if(event.target===this)this.remove()">'+
+    '<div style="background:#fff;border-radius:14px;max-width:900px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
+    '<div style="padding:14px 16px;border-bottom:1px solid #e5e5ea"><div style="font-size:15px;font-weight:800">🔚 Punteras dadas de baja — artículos mandados a bloque</div>'+
+    '<div style="font-size:12px;color:#86868b;margin-top:2px">'+m.filas.length+' artículos · '+(sinB?'<b style="color:#d70015">'+sinB+' sin bloque (asignar a mano)</b> · ':'')+'el stock no cambió, solo la ubicación. Movelos físicamente y cargalos en Mapa Racks si van a rack (6S-N1 / 6N-N1).</div></div>'+
+    '<div style="overflow:auto;flex:1"><table style="width:100%;border-collapse:collapse;font-size:12px">'+
+    '<tr style="background:#1d1d1f;color:#fff;position:sticky;top:0"><th style="padding:6px 8px;text-align:left">Art</th><th style="padding:6px 8px;text-align:left">Medida / diseño</th><th style="padding:6px 8px;text-align:left">Estaba en</th><th style="padding:6px 8px;text-align:right">Un.</th><th style="padding:6px 8px;text-align:left">Bloque</th><th style="padding:6px 8px;text-align:left">Nota</th></tr>'+
+    m.filas.map(function(f,i){ return '<tr style="background:'+(f.bloque?(i%2?'#fafafa':'#fff'):'#fff0f0')+'"><td style="padding:5px 8px;font-weight:700">'+esc(f.art)+'</td><td style="padding:5px 8px">'+esc(f.med)+' <span style="color:#86868b">'+esc(f.diseno)+' · '+esc(f.prov)+'</span></td><td style="padding:5px 8px;font-size:11px">'+esc(f.desde)+'</td><td style="padding:5px 8px;text-align:right">'+f.un+'</td><td style="padding:5px 8px;font-weight:700;color:#ff9500">'+(esc(f.bloque)||'—')+'</td><td style="padding:5px 8px;font-size:11px;color:'+(f.bloque?'#86868b':'#d70015')+'">'+esc(f.nota)+'</td></tr>'; }).join('')+
+    '</table></div>'+
+    '<div style="padding:10px 16px;border-top:1px solid #e5e5ea;display:flex;gap:8px;justify-content:flex-end">'+
+    '<button onclick="exportarMigracionPunteras()" style="padding:8px 14px;background:#34c759;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">📥 Excel</button>'+
+    '<button onclick="document.getElementById(\'mig-punt\').remove()" style="padding:8px 14px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer">Cerrar</button></div>'+
+    '</div></div>';
+  var old = document.getElementById('mig-punt'); if(old) old.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+function exportarMigracionPunteras(){
+  var m; try{ m = JSON.parse(localStorage.getItem('wms_punteras_migracion')||'null'); }catch(e){ m=null; }
+  if(!m || typeof XLSX==='undefined') return;
+  var ws = XLSX.utils.aoa_to_sheet([['ART','MEDIDA','DISEÑO','PROVEEDOR','ESTABA EN','UNIDADES','BLOQUE ASIGNADO','NOTA','MOVIDO ✍']].concat(
+    m.filas.map(function(f){ return [f.art,f.med,f.diseno,f.prov,f.desde,f.un,f.bloque,f.nota,'']; })));
+  ws['!cols']=[{wch:8},{wch:14},{wch:10},{wch:12},{wch:28},{wch:9},{wch:12},{wch:40},{wch:10}];
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Punteras a bloque');
+  XLSX.writeFile(wb, 'Punteras_a_bloques.xlsx');
+}
 function capacidadUsada(items){
   return (items||[]).reduce(function(s,it){return s+(it.unidades||0);},0);
 }
@@ -6423,7 +6514,7 @@ function cydPlanillaPicking(id){
       var maxPosArt = artFull ? (artFull.max_pos||32) : 32;
       var restante = (r.stock||0) - cantReal;
       if(restante>0 && restante < maxPosArt/2){
-        ubic += '<div style="color:#ff9500;font-weight:700;font-size:8px;margin-top:2px">⚠️ Quedan '+restante+' — llevar a puntera</div>';
+        ubic += '<div style="color:#ff9500;font-weight:700;font-size:8px;margin-top:2px">⚠️ Quedan '+restante+' — poco stock: reubicar (rack 6-N1)</div>';
       } else if(restante>0 && artFull && typeof rackMotivoNoCalifica==='function'){
         // Sugerencia de rack — NUNCA automática, solo informativa. Se
         // confirma a mano en Mapa Racks. Solo tiene sentido si el artículo
@@ -6449,9 +6540,10 @@ function cydPlanillaPicking(id){
       '<td style="color:#555">'+(r.prov||'')+'</td>'+
       '<td>'+ubic+'</td>'+
       '<td style="text-align:center;font-weight:700;color:#0071e3">'+rango+'</td>'+
-      '<td style="text-align:right;font-weight:700;color:#d70015">'+r.cant+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#d70015">'+(masQueStock?'⚠️ ':'')+r.cant+'</td>'+
       '<td style="text-align:right;color:#86868b">'+(r.stock||0)+'</td>'+
-      (masQueStock?'<td style="text-align:center;color:#d70015;font-weight:700;font-size:10px">⚠️</td>':(diff!==0?'<td style="text-align:right;color:#d70015;font-weight:700">'+(diff>0?'+':'')+diff+'</td>':'<td style="text-align:right;color:#34c759">OK</td>'))+
+      (function(){ var dA = (typeof difAcumulado==='function') ? difAcumulado(r.art) : 0;
+        return '<td style="text-align:right;font-weight:800;color:'+(dA<0?'#d70015':dA>0?'#1c7c2c':'#c7c7cc')+'">'+(dA? (dA>0?'+':'')+dA : '—')+'</td>'; })()+
       '<td style="border:2px solid #bbb">&nbsp;</td>'+
       '<td style="border:2px solid #bbb">&nbsp;</td>'+
       '</tr>';
@@ -6459,7 +6551,7 @@ function cydPlanillaPicking(id){
 
   // Anchos fijos (proporción sobre 277 mm = A4 apaisada) iguales en todas las secciones:
   // ocupa todo el ancho de la hoja, con lugar para "Control oficina" (diferencias a buscar)
-  var _pkCols = '<colgroup>'+[15,26,20,26,62,13,12,13,10,35,45].map(function(w){return '<col style="width:'+(w*100/277).toFixed(2)+'%">';}).join('')+'</colgroup>';
+  var _pkCols = '<colgroup>'+[15,26,20,26,60,13,12,13,14,33,45].map(function(w){return '<col style="width:'+(w*100/277).toFixed(2)+'%">';}).join('')+'</colgroup>';
   var totalCant = tr.items.reduce(function(s,r){return s+(r.cantReal||r.cant);},0);
   var rowsPuntera = enPuntera.map(function(r){return mkRow(r,'puntera');}).join('');
   var rowsRack   = enRack.map(function(r){return mkRow(r,'rack');}).join('');
@@ -6509,21 +6601,21 @@ function cydPlanillaPicking(id){
     '</div>'+
     (enPuntera.length?
       '<div class="sec sec-puntera">🔚 PUNTERA — preparar primero ('+enPuntera.length+' arts)</div>'+
-      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Puntera</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
+      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Puntera</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif. ficha</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
       '<tbody>'+rowsPuntera+'</tbody></table>':'')+
     (enRack.length?
       '<div class="sec sec-rack">RACK — preparar primero ('+enRack.length+' arts · N1 antes que N4)</div>'+
-      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Posición rack</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
+      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Posición rack</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif. ficha</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
       '<tbody>'+rowsRack+'</tbody></table>':'')+
     (enBloque.length?
       '<div class="sec sec-bloque">BLOQUES ('+enBloque.length+' arts)</div>'+
-      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Bloque</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
+      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Bloque</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif. ficha</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
       '<tbody>'+rowsBloque+'</tbody></table>':'')+
     (sinUbic.length?
       '<div class="sec sec-sin">SIN UBICACIÓN ('+sinUbic.length+' arts)</div>'+
-      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Ubicación</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
+      '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Ubicación</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif. ficha</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
       '<tbody>'+rowsSin+'</tbody></table>':'')+
-    '<div class="pie">Amarillo / ⚠️ = el pedido pide más que el stock: revisar · Violeta = puntera · Azul = rack · Naranja = bloque · '+
+    '<div class="pie">Amarillo / ⚠️ en Cant = el pedido pide más que el stock: revisar · Dif. ficha = faltantes(−)/sobrantes(+) pendientes de ese artículo desde la última ficha (módulo Diferencias) · Violeta = puntera · Azul = rack · Naranja = bloque · '+
     'Generado '+new Date().toLocaleString('es-AR')+' — WMS Halpern Depósito</div>'+
     '<script>window.onload=function(){window.print();}<\/script>'+
     '</body></html>'
@@ -7499,7 +7591,7 @@ function imprimirMapa(){
   // (stock > 0 y ≤ 1000 un., < 1 pallet, no en rack, no ya en puntera, rotación no muy alta)
   const candidatosPunteraExp = candidatosParaPuntera();
 
-  if(candidatosPunteraExp.length){
+  if(PUNTERAS_ACTIVAS && candidatosPunteraExp.length){
     const wsPunt = [
       ['SUGERENCIA PUNTERA — STOCK > 0 Y ≤ 1000 UN., < 1 PALLET (asignación manual) — '+new Date().toLocaleDateString('es-AR')],
       ['Total: '+candidatosPunteraExp.length+' artículos · Ordenado de menor a mayor stock'],
@@ -7604,9 +7696,11 @@ function imprimirMapa(){
       wsPunt.push([parrillaId, art.art, art.med, art.diseno, art.prov, it.unidades||0, art.stock||0, art.cond||'']);
     });
   });
+  if(PUNTERAS_ACTIVAS){
   const wsP = XLSX.utils.aoa_to_sheet(wsPunt);
   wsP['!cols'] = [{wch:12},{wch:8},{wch:14},{wch:10},{wch:12},{wch:10},{wch:10},{wch:12}];
   XLSX.utils.book_append_sheet(wb, wsP, 'Punteras');
+  }
 
   XLSX.writeFile(wb, `Mapa_Racks_${new Date().toLocaleDateString('es-AR').replace(/\//g,'-')}.xlsx`);
   showToast('✅ Mapa exportado · '+(candidatosNave.length||0)+' sin rack incluidos');
@@ -7622,6 +7716,7 @@ function imprimirMapa(){
 // Procesa la hoja "Punteras" del archivo importado, independiente de lo que
 // pase con la hoja "Mapa Racks" — así corre siempre, tenga o no cambios el rack.
 function procesarHojaPunterasImport(wb2){
+  if(!PUNTERAS_ACTIVAS) return;
   if(wb2.SheetNames.indexOf('Punteras')<0) return;
   const wsPuntImport = wb2.Sheets['Punteras'];
   const rawPunt = XLSX.utils.sheet_to_json(wsPuntImport, {header:1, defval:''});
@@ -11816,6 +11911,7 @@ window.addEventListener('message', function(ev){
 
 ['buscar','f-prov','f-cond','f-wms','f-diseno'].forEach(id=>document.getElementById(id).addEventListener('input',render));
 init();
+try{ migrarPunterasABloques(); }catch(e){ console.warn(e); }
 </script>
 
 <script>
@@ -12449,7 +12545,29 @@ function _transitoPosicionSugeridaBase(artId, cantEntrada, loteUsadas, excludeTr
   // sugerencia de candidatos a puntera en Mapa Racks).
   var BLOQUES_RACK_SUG = ['1N','1S','2N','2S'];
   var yaEnBloqueRack = da.bloque && da.bloque.split('/').some(function(b){return BLOQUES_RACK_SUG.indexOf(b.trim())>=0;});
-  if(pallFuturo < 1 && stockFuturo > 0 && stockFuturo <= 1000 && rot < 5.5 && !yaEnBloqueRack){
+  if(!PUNTERAS_ACTIVAS && pallFuturo < 1 && stockFuturo > 0 && !yaEnBloqueRack){
+    // Punteras dadas de baja: poco stock → rack selectivo, preferencia pasillo 6 nivel 1
+    var posAsig6 = Object.keys(ASIGN).filter(function(pid){ var v=ASIGN[pid]; return v && String(v.art)===String(da.art) && (v.unidades||0)>0; });
+    if(posAsig6.length){
+      return {tipo:'rack', pos:posAsig6.join(', '), detalle:'Rack selectivo: ya está en '+posAsig6.join(', ')+' (poco stock)', pallets:pallFuturo.toFixed(1), exacto:true, posVacia:false};
+    }
+    var pend6 = (typeof pendientesOtro!=='undefined' && pendientesOtro) ? pendientesOtro : new Set();
+    var libre6 = null;
+    ['6S','6N'].some(function(fid){
+      for(var m6=1; m6<=14; m6++){
+        var pid6 = fid+'-N1-P'+(m6<10?'0'+m6:''+m6);
+        var v6 = ASIGN[pid6];
+        if((!v6 || !v6.art || !(v6.unidades>0)) && !loteUsadas.has(pid6) && !pend6.has(pid6)){ libre6 = {id:pid6, vacia:!!(v6&&v6.art)}; return true; }
+      }
+      return false;
+    });
+    if(libre6){
+      loteUsadas.add(libre6.id);
+      return {tipo:'rack', pos:libre6.id+(libre6.vacia?'':'🆕'), detalle:'Rack selectivo '+libre6.id+' — poco stock ('+pallFuturo.toFixed(2)+' pallets)', pallets:pallFuturo.toFixed(1), exacto:false, posVacia:libre6.vacia};
+    }
+    return {tipo:'rack', pos:'(asignar en rack selectivo)', detalle:'Rack selectivo — pasillo 6 nivel 1 lleno, elegir otra posición', pallets:pallFuturo.toFixed(1)};
+  }
+  if(PUNTERAS_ACTIVAS && pallFuturo < 1 && stockFuturo > 0 && stockFuturo <= 1000 && rot < 5.5 && !yaEnBloqueRack){
     return {
       tipo:    'puntera',
       pos:     '(asignar manualmente)',
