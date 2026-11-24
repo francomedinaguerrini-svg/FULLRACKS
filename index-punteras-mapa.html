@@ -1095,7 +1095,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
         <option value="">Todo origen</option><option value="despacho">📤 Despachos</option><option value="ingreso">📥 Ingresos</option><option value="conteo">📦 Conteos</option>
       </select>
       <select id="diff-f-vista" onchange="renderDiferencias()" style="padding:8px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:12px;background:#fff">
-        <option value="lineas">Ver por movimiento</option><option value="art">Ver por artículo (acumulado)</option>
+        <option value="lineas">Ver por movimiento</option><option value="art">Ver por artículo (acumulado)</option><option value="prep">📈 Preparación vs pedidas (histórico)</option>
       </select>
     </div>
     <div id="diff-lista"></div>
@@ -6284,6 +6284,7 @@ function cydEjecutarDespacho(id){
   });
 
   saveDataStock();
+  try{ prepRegistrarDesdeTransito(tr); }catch(e){ console.warn('prep hist', e); }
 
   if(diferencias.length){
     difRegistrar({fecha:fecha, hora:hora, destino:tr.destino||'', origen:'despacho', nro:tr.nroContenedor||'', trId:tr.id, items:diferencias});
@@ -6868,6 +6869,9 @@ function confirmarDespacho(){
   if(diferencias.length){
     difRegistrar({ fecha, hora, destino, origen:'despacho', items: diferencias });
   }
+  try{ prepRegistrar({ts:Date.now(), fecha, hora, destino, nro:'', preparador:'', arts:_confirmItems.length,
+    pedidas:_confirmItems.reduce((t,i)=>t+(i.cant||0),0), preparadas:_confirmItems.reduce((t,i)=>t+(i.cantReal||0),0),
+    lineasDif:_confirmItems.filter(i=>i.cantReal!==i.cant).length}); }catch(e){}
 
   // Guardar sugerencias de reposición
   if(repoSugerido.length){
@@ -6969,9 +6973,10 @@ function difInformeDatos(){
       try{ Object.entries(getPunteras()||{}).forEach(function(e){ (e[1]||[]).forEach(function(it){ if(it && String(it.art)===k && it.unidades>0) ub.push('Puntera '+e[0]+' ('+it.unidades+')'); }); }); }catch(e){}
       var fic = snap && snap.stock && snap.stock[k]!==undefined ? +snap.stock[k] : null;
       g[k] = {art:d.art, med:d.med||da.med||'', diseno:d.diseno||da.diseno||'', prov:d.prov||da.prov||'', ubic:ub.join(' · ')||(d.posRack||d.bloque||'—'),
-              ficha:fic, net:0, falt:0, sobr:0, wms:(da.art!=null && typeof stockFisico==='function') ? stockFisico(k) : null, movs:[]};
+              ficha:fic, net:0, falt:0, sobr:0, ped:0, wms:(da.art!=null && typeof stockFisico==='function') ? stockFisico(k) : null, movs:[]};
     }
     g[k].net += d.diff; if(d.diff<0) g[k].falt += d.diff; else g[k].sobr += d.diff;
+    if(d.origen!=='conteo') g[k].ped += (d.cantPedida||0);
     g[k].movs.push(d);
   });
   var arr = Object.values(g);
@@ -6984,56 +6989,76 @@ function difInformeDatos(){
 }
 function informeDiferencias(modo){
   var D = difInformeDatos();
-  var tC = D.enContra.reduce(function(s,r){return s+r.net;},0), tF = D.aFavor.reduce(function(s,r){return s+r.net;},0);
+  var sum = function(l,f){ return l.reduce(function(t,r){ return t+(r[f]||0); },0); };
+  var tC = sum(D.enContra,'net'), tF = sum(D.aFavor,'net');
+  var todos = D.enContra.concat(D.aFavor, D.compensados);
+  var tPed = sum(todos,'ped');
+  // % de diferencia contra lo pedido (ej: pedido 100, preparado 90 → −10%); se va acumulando
+  var pct = function(dif, ped){ return ped ? Math.round(dif/ped*1000)/10 : null; };
+  var pctTxt = function(v){ return v===null ? '—' : (v>0?'+':'')+String(v).replace('.',',')+'%'; };
   var fFicha = D.snap && D.snap.ts ? new Date(D.snap.ts).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'sin ficha cargada';
   var hoy = new Date().toLocaleString('es-AR');
   var oriTxt = function(o){ return o==='ingreso'?'Ingreso':o==='conteo'?'Conteo':'Despacho'; };
   var movTxt = function(m){ return m.fecha+' '+oriTxt(m.origen)+' '+(m.destino||'')+(m.nro?' #'+m.nro:'')+': '+m.cantPedida+'→'+m.cantReal+' ('+(m.diff>0?'+':'')+m.diff+')'; };
-  if(!D.enContra.length && !D.aFavor.length && !D.compensados.length){ showToast('✅ Sin diferencias pendientes contra la ficha ('+fFicha+')'); return; }
+  if(!todos.length){ showToast('✅ Sin diferencias pendientes'); return; }
 
   if(modo==='xlsx'){
     if(typeof XLSX==='undefined'){ showToast('❌ No está cargada la librería de Excel'); return; }
-    var head = ['ART','MEDIDA','DISEÑO','PROVEEDOR','UBICACIÓN','FICHA','DIFERENCIA','REAL ESTIMADO','STOCK WMS','MOVIMIENTOS','CONTADO','ACCIÓN / NOTA'];
-    var fila = function(r){ return [r.art, r.med, r.diseno, r.prov, r.ubic, r.ficha===null?'':r.ficha, r.net, r.ficha===null?'':r.ficha+r.net, r.wms===null?'':r.wms, r.movs.map(movTxt).join(' | '), '', '']; };
+    var head = ['ART','MEDIDA','DISEÑO','PROVEEDOR','UBICACIÓN','FICHA DE PILA','PEDIDAS','DIF. A BUSCAR','% S/PEDIDO','MOVIMIENTOS','CONTROL 1','CONTROL 2','ACCIÓN'];
+    var fila = function(r){ return [r.art, r.med, r.diseno, r.prov, r.ubic, r.ficha===null?'':r.ficha, r.ped||'', r.net, pct(r.net,r.ped)===null?'':pct(r.net,r.ped)/100, r.movs.map(movTxt).join(' | '), '', '', '']; };
     var wb = XLSX.utils.book_new();
     var res = [['INFORME DE DIFERENCIAS CONTRA LA FICHA DE PILA'],['Ficha cargada', fFicha],['Generado', hoy],[],
-      ['En contra (faltantes)', tC, D.enContra.length+' arts'],['A favor (sobrantes)', tF, D.aFavor.length+' arts'],['Neto', tC+tF],['Compensados (neto 0)', D.compensados.length+' arts']];
+      ['En contra (faltantes)', tC, D.enContra.length+' arts'],['A favor (sobrantes)', tF, D.aFavor.length+' arts'],['Neto', tC+tF],
+      ['Pedidas (total)', tPed],['% diferencia contra pedido', pct(tC+tF,tPed)===null?'':pct(tC+tF,tPed)/100],['Compensados (neto 0)', D.compensados.length+' arts']];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), 'Resumen');
     [['En contra', D.enContra],['A favor', D.aFavor],['Compensados', D.compensados]].forEach(function(h){
       var ws = XLSX.utils.aoa_to_sheet([head].concat(h[1].map(fila)));
-      ws['!cols'] = [{wch:8},{wch:14},{wch:10},{wch:12},{wch:28},{wch:8},{wch:11},{wch:13},{wch:10},{wch:70},{wch:10},{wch:30}];
+      ws['!cols'] = [{wch:8},{wch:14},{wch:10},{wch:12},{wch:24},{wch:12},{wch:9},{wch:12},{wch:10},{wch:60},{wch:10},{wch:10},{wch:28}];
+      for(var i=1;i<=h[1].length;i++){ var c=ws[XLSX.utils.encode_cell({r:i,c:8})]; if(c && typeof c.v==='number') c.z='0.0%'; }
       XLSX.utils.book_append_sheet(wb, ws, h[0]);
     });
+    try{
+      var ph = prepFiltrados();
+      var wsPrep = XLSX.utils.aoa_to_sheet([['FECHA','HORA','CLIENTE / DESTINO','NRO','PREPARÓ','ARTS','PEDIDAS','PREPARADAS','DIF.','% S/PEDIDO','LÍNEAS CON DIF.']].concat(
+        ph.map(function(x){ var d=(x.preparadas||0)-(x.pedidas||0); return [x.fecha,x.hora,x.destino,x.nro,x.preparador,x.arts,x.pedidas,x.preparadas,d,x.pedidas?d/x.pedidas:'',x.lineasDif]; })));
+      for(var j=1;j<=ph.length;j++){ var cc=wsPrep[XLSX.utils.encode_cell({r:j,c:9})]; if(cc && typeof cc.v==='number') cc.z='0.0%'; }
+      wsPrep['!cols']=[{wch:11},{wch:7},{wch:30},{wch:8},{wch:16},{wch:6},{wch:9},{wch:11},{wch:7},{wch:11},{wch:13}];
+      XLSX.utils.book_append_sheet(wb, wsPrep, 'Preparación vs pedidas');
+    }catch(e){}
     XLSX.writeFile(wb, 'Diferencias_vs_ficha_'+new Date().toLocaleDateString('es-AR').replace(/\//g,'-')+'.xlsx');
     return;
   }
 
-  // Versión imprimible
+  // Versión imprimible — todo justificado a la izquierda
   var esc = function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); };
   var tabla = function(titulo, color, lista, total){
     if(!lista.length) return '';
-    var h = '<h3 style="color:'+color+'">'+titulo+' — '+lista.length+' arts · '+(total>0?'+':'')+total+' un.</h3>';
-    h += '<table><thead><tr><th style="width:14mm">Art</th><th style="width:32mm">Medida / diseño</th><th style="width:22mm">Prov</th><th style="width:40mm">Ubicación</th><th class="n">Ficha</th><th class="n">Dif.</th><th class="n">Real est.</th><th class="n">WMS</th><th>Movimientos</th><th style="width:16mm">Contado</th><th style="width:38mm">Acción / nota ✍</th></tr></thead><tbody>';
+    var ped = sum(lista,'ped');
+    var h = '<h3 style="color:'+color+'">'+titulo+' — '+lista.length+' arts · '+(total>0?'+':'')+total+' un.'+(ped?' · '+pctTxt(pct(total,ped))+' s/pedido':'')+'</h3>';
+    h += '<table><colgroup>'+[13,30,18,32,14,13,15,13,48,18,18,45].map(function(w){ return '<col style="width:'+w+'mm">'; }).join('')+'</colgroup>';
+    h += '<thead><tr><th>Art</th><th>Medida / diseño</th><th>Prov</th><th>Ubicación</th><th>Ficha de pila</th><th>Pedidas</th><th>Dif. a buscar</th><th>% s/pedido</th><th>Movimientos</th><th>Control 1 ✍</th><th>Control 2 ✍</th><th>Acción ✍</th></tr></thead><tbody>';
     lista.forEach(function(r){
       h += '<tr><td><b>'+esc(r.art)+'</b></td><td>'+esc(r.med)+' <span class="g">'+esc(r.diseno)+'</span></td><td>'+esc(r.prov)+'</td><td class="s">'+esc(r.ubic)+'</td>'+
-        '<td class="n">'+(r.ficha===null?'—':r.ficha)+'</td><td class="n" style="color:'+color+';font-weight:800">'+(r.net>0?'+':'')+r.net+'</td>'+
-        '<td class="n"><b>'+(r.ficha===null?'—':r.ficha+r.net)+'</b></td><td class="n">'+(r.wms===null?'—':r.wms)+'</td>'+
-        '<td class="s">'+r.movs.map(function(m){ return esc(movTxt(m)); }).join('<br>')+'</td><td class="box"></td><td class="box"></td></tr>';
+        '<td>'+(r.ficha===null?'—':r.ficha)+'</td><td>'+(r.ped||'—')+'</td>'+
+        '<td style="color:'+color+';font-weight:800;font-size:12px">'+(r.net>0?'+':'')+r.net+'</td>'+
+        '<td style="color:'+color+';font-weight:700">'+pctTxt(pct(r.net,r.ped))+'</td>'+
+        '<td class="s">'+r.movs.map(function(m){ return esc(movTxt(m)); }).join('<br>')+'</td><td class="box"></td><td class="box"></td><td class="box"></td></tr>';
     });
     return h+'</tbody></table>';
   };
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Diferencias vs ficha</title><style>'+
-    '@page{size:A4 landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:10px;color:#1d1d1f;margin:0}'+
+    '@page{size:A4 landscape;margin:8mm}body{font-family:Arial,sans-serif;font-size:10px;color:#1d1d1f;margin:0;text-align:left}'+
     'h2{font-size:15px;margin:0 0 2px}h3{font-size:12px;margin:12px 0 4px}.meta{color:#666;margin-bottom:8px}'+
     '.res{display:flex;gap:8px;margin-bottom:6px}.res div{flex:1;border:1px solid #ccc;border-radius:6px;padding:6px 8px}.res b{display:block;font-size:16px}'+
     'table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#1d1d1f;color:#fff;text-align:left;padding:3px 4px;font-size:9px}'+
-    'td{border-bottom:1px solid #ddd;padding:3px 4px;vertical-align:top;word-wrap:break-word}.n{text-align:right;width:13mm}.g{color:#888}.s{font-size:8.5px;color:#444}'+
-    'td.box{border:1.5px solid #999}tr{page-break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
+    'td{border-bottom:1px solid #ddd;padding:4px;vertical-align:top;word-wrap:break-word;text-align:left}.g{color:#888}.s{font-size:8.5px;color:#444}'+
+    'td.box{border:1.5px solid #999;height:18px}tr{page-break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
     '<h2>📊 Informe de diferencias contra la ficha de pila</h2>'+
-    '<div class="meta">Ficha cargada: <b>'+fFicha+'</b> · Generado: '+hoy+' · Real est. = ficha + diferencia. Diferencias pendientes hasta marcarlas resueltas (cargar una ficha nueva no las borra). Objetivo: neto 0.</div>'+
+    '<div class="meta">Ficha cargada: <b>'+fFicha+'</b> · Generado: '+hoy+' · Diferencias pendientes hasta marcarlas resueltas (cargar una ficha nueva no las borra). Dos conteos: Control 1 y Control 2. Objetivo: neto 0.</div>'+
     '<div class="res"><div>📉 En contra (faltantes)<b style="color:#d70015">'+tC+'</b>'+D.enContra.length+' artículos</div>'+
     '<div>📈 A favor (sobrantes)<b style="color:#1c7c2c">'+(tF>0?'+':'')+tF+'</b>'+D.aFavor.length+' artículos</div>'+
-    '<div>Neto<b>'+((tC+tF)>0?'+':'')+(tC+tF)+'</b>'+D.compensados.length+' arts. compensados (neto 0)</div></div>'+
+    '<div>Neto<b>'+((tC+tF)>0?'+':'')+(tC+tF)+'</b>'+D.compensados.length+' arts. compensados (neto 0)</div>'+
+    '<div>% diferencia contra pedido<b>'+pctTxt(pct(tC+tF,tPed))+'</b>sobre '+tPed+' un. pedidas</div></div>'+
     tabla('📉 EN CONTRA — faltantes (buscar en depósito)', '#d70015', D.enContra, tC)+
     tabla('📈 A FAVOR — sobrantes (verificar / ajustar)', '#1c7c2c', D.aFavor, tF)+
     tabla('↔️ COMPENSADOS — faltante y sobrante en el mismo artículo (revisar cruces)', '#a8710a', D.compensados, 0)+
@@ -7043,6 +7068,69 @@ function informeDiferencias(modo){
   if(!w){ showToast('❌ El navegador bloqueó la ventana — permití ventanas emergentes'); return; }
   w.document.write(html); w.document.close();
 }
+// ═══ PREPARACIÓN vs PEDIDAS (acumulado, se guarda cada despacho) ═══════════
+// Cada despacho confirmado deja un registro con el total pedido y el total
+// preparado (despachado), con o sin diferencias, para ir acumulando el % de
+// cumplimiento en el tiempo. Independiente de las diferencias "resueltas".
+function prepGetHist(){ try{ return JSON.parse(localStorage.getItem('wms_prep_hist')||'[]'); }catch(e){ return []; } }
+function prepRegistrar(reg){
+  var h = prepGetHist();
+  if(reg.trId && h.some(function(x){ return x.trId===reg.trId; })) return;
+  h.unshift(reg);
+  localStorage.setItem('wms_prep_hist', JSON.stringify(h.slice(0,3000)));
+}
+function prepRegistrarDesdeTransito(tr){
+  var its = tr.items||[];
+  var real = function(r){ return r.cantReal!=null ? r.cantReal : r.cant; };
+  prepRegistrar({trId:tr.id, ts:Date.now(), fecha:tr.fechaConfirmacion||new Date().toLocaleDateString('es-AR'), hora:tr.horaConfirmacion||'',
+    destino:tr.destino||'', nro:tr.nroContenedor||'', preparador:tr.preparador||'', arts:its.length,
+    pedidas:its.reduce(function(t,r){ return t+(r.cant||0); },0), preparadas:its.reduce(function(t,r){ return t+(real(r)||0); },0),
+    lineasDif:its.filter(function(r){ return real(r)!==r.cant; }).length});
+}
+// Primera vez: arma el historial con los despachos ya confirmados que siguen en tránsito
+function prepBackfill(){
+  if(localStorage.getItem('wms_prep_backfill')) return;
+  try{
+    transitoGetAll().filter(function(t){ return t.flujo==='salida' && t.estado==='confirmado'; }).forEach(function(tr){
+      var b = Object.assign({}, tr); prepRegistrarDesdeTransito(b);
+      var h = prepGetHist(); var x = h.find(function(z){ return z.trId===tr.id; });
+      if(x){ x.ts = difTsDe({fecha:tr.fechaConfirmacion, hora:tr.horaConfirmacion}) || x.ts; localStorage.setItem('wms_prep_hist', JSON.stringify(h)); }
+    });
+    localStorage.setItem('wms_prep_backfill','1');
+  }catch(e){ console.warn('prepBackfill', e); }
+}
+function prepFiltrados(){
+  prepBackfill();
+  var q = String(window._difQ||'').trim().toLowerCase();
+  var h = prepGetHist().slice().sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+  if(q) h = h.filter(function(x){ return [x.destino,x.nro,x.preparador,x.fecha].join(' ').toLowerCase().indexOf(q)>=0; });
+  return h;
+}
+function renderPreparacion(lista){
+  var h = prepFiltrados();
+  var P = h.reduce(function(t,x){ return t+(x.pedidas||0); },0), R = h.reduce(function(t,x){ return t+(x.preparadas||0); },0);
+  var pctTot = P ? Math.round((R-P)/P*1000)/10 : 0;
+  var pctTxt = function(v){ return (v>0?'+':'')+String(v).replace('.',',')+'%'; };
+  var card = function(t,v,c,sub){ return '<div style="flex:1;min-width:120px;background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#86868b;text-transform:uppercase">'+t+'</div><div style="font-size:22px;font-weight:800;color:'+c+'">'+v+'</div>'+(sub?'<div style="font-size:10px;color:#86868b">'+sub+'</div>':'')+'</div>'; };
+  // por mes
+  var meses = {};
+  h.forEach(function(x){ var d=new Date(x.ts||0); var k=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); if(!meses[k]) meses[k]={P:0,R:0,n:0}; meses[k].P+=x.pedidas||0; meses[k].R+=x.preparadas||0; meses[k].n++; });
+  var html = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+    card('Despachos', h.length, '#1d1d1f', 'registrados')+
+    card('Pedidas', P.toLocaleString('es-AR'), '#1d1d1f', 'unidades')+
+    card('Preparadas', R.toLocaleString('es-AR'), '#0071e3', 'unidades despachadas')+
+    card('Diferencia', ((R-P)>0?'+':'')+(R-P).toLocaleString('es-AR'), (R-P)<0?'#d70015':(R-P)>0?'#1c7c2c':'#86868b', pctTxt(pctTot)+' contra lo pedido')+'</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+Object.keys(meses).sort().reverse().map(function(k){ var m=meses[k], v=m.P?Math.round((m.R-m.P)/m.P*1000)/10:0;
+    return '<div style="background:#fff;border:1px solid #e5e5ea;border-radius:10px;padding:6px 10px;font-size:11px"><b>'+k.split('-').reverse().join('/')+'</b> · '+m.n+' desp. · '+m.R+'/'+m.P+' · <b style="color:'+(v<0?'#d70015':v>0?'#1c7c2c':'#34c759')+'">'+pctTxt(v)+'</b></div>'; }).join('')+'</div>';
+  if(!h.length){ lista.innerHTML = html+'<div class="diff-empty">Todavía no hay despachos registrados</div>'; return; }
+  html += '<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left">'+
+    '<tr style="background:#1d1d1f;color:#fff">'+['Fecha','Cliente / destino','Nro','Preparó','Arts','Pedidas','Preparadas','Dif.','% s/pedido','Líneas con dif.'].map(function(t){ return '<th style="padding:7px 8px;text-align:left;white-space:nowrap">'+t+'</th>'; }).join('')+'</tr>'+
+    h.map(function(x,i){ var d=(x.preparadas||0)-(x.pedidas||0), v=x.pedidas?Math.round(d/x.pedidas*1000)/10:0;
+      return '<tr style="background:'+(i%2?'#fafafa':'#fff')+'"><td style="padding:5px 8px;white-space:nowrap">'+(x.fecha||'')+' '+(x.hora||'')+'</td><td style="padding:5px 8px">'+String(x.destino||'').replace(/</g,'&lt;')+'</td><td style="padding:5px 8px">'+(x.nro||'')+'</td><td style="padding:5px 8px">'+String(x.preparador||'').replace(/</g,'&lt;')+'</td><td style="padding:5px 8px">'+(x.arts||0)+'</td><td style="padding:5px 8px">'+(x.pedidas||0)+'</td><td style="padding:5px 8px">'+(x.preparadas||0)+'</td><td style="padding:5px 8px;font-weight:800;color:'+(d<0?'#d70015':d>0?'#1c7c2c':'#34c759')+'">'+(d>0?'+':'')+d+'</td><td style="padding:5px 8px;font-weight:700;color:'+(d<0?'#d70015':d>0?'#1c7c2c':'#34c759')+'">'+pctTxt(v)+'</td><td style="padding:5px 8px">'+(x.lineasDif||0)+'</td></tr>'; }).join('')+
+    '</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Se guarda solo al confirmar cada despacho. El buscador filtra por cliente, nro, preparador o fecha.</div>';
+  lista.innerHTML = html;
+}
+
 function difAcumulado(art){ return difDesdeFicha(art).reduce(function(s,d){ return s+(d.diff||0); },0); }
 
 let _diffEditing = null; // "batchIdx-itemIdx" en edición
@@ -7091,7 +7179,9 @@ function renderDiferencias(){
   });
   filas.sort((a,b)=>b.ts-a.ts);
 
-  if(!filas.length){
+  if(fVista==='prep'){
+    renderPreparacion(lista);
+  } else if(!filas.length){
     lista.innerHTML='<div class="diff-empty">Sin diferencias para ese filtro</div>';
   } else if(fVista==='art'){
     // ── Acumulado por artículo
