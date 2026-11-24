@@ -1086,7 +1086,7 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
       <input id="diff-busca" type="search" placeholder="🔍 Artículo, medida, diseño, cliente, nro…" oninput="window._difQ=this.value;window._difFocus=true;renderDiferencias()"
         style="flex:1;min-width:200px;padding:9px 12px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:13px">
       <select id="diff-f-estado" onchange="renderDiferencias()" style="padding:8px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:12px;background:#fff">
-        <option value="ficha">Desde la última ficha</option><option value="pend">Pendientes (todas)</option><option value="res">Resueltas</option><option value="todas">Todas</option>
+        <option value="ficha">Pendientes (a buscar)</option><option value="pend">Pendientes (incluye formato viejo)</option><option value="res">Resueltas</option><option value="todas">Todas</option>
       </select>
       <select id="diff-f-tipo" onchange="renderDiferencias()" style="padding:8px;border:1.5px solid #d2d2d7;border-radius:10px;font-size:12px;background:#fff">
         <option value="">Faltantes y sobrantes</option><option value="F">📉 Solo faltantes</option><option value="S">📈 Solo sobrantes</option>
@@ -6731,7 +6731,7 @@ function cydPlanillaPicking(id){
       '<div class="sec sec-sin">SIN UBICACIÓN ('+sinUbic.length+' arts)</div>'+
       '<table>'+_pkCols+'<thead><tr><th>Art</th><th>Medida</th><th>Diseño</th><th>Prov</th><th>Ubicación</th><th style="text-align:center">Rango</th><th style="text-align:right">Cant</th><th style="text-align:right">Stock</th><th style="text-align:right">Dif. ficha</th><th>Visto ✍</th><th>Control oficina ✍</th></tr></thead>'+
       '<tbody>'+rowsSin+'</tbody></table>':'')+
-    '<div class="pie">Amarillo / ⚠️ en Cant = el pedido pide más que el stock: revisar · Dif. ficha = faltantes(−)/sobrantes(+) pendientes de ese artículo desde la última ficha (módulo Diferencias) · Violeta = puntera · Azul = rack · Naranja = bloque · '+
+    '<div class="pie">Amarillo / ⚠️ en Cant = el pedido pide más que el stock: revisar · Dif. ficha = faltantes(−)/sobrantes(+) pendientes de ese artículo (módulo Diferencias) · Violeta = puntera · Azul = rack · Naranja = bloque · '+
     'Generado '+new Date().toLocaleString('es-AR')+' — WMS Halpern Depósito</div>'+
     '<script>window.onload=function(){window.print();}<\/script>'+
     '</body></html>'
@@ -6904,10 +6904,10 @@ function confirmarDespacho(){
 }
 
 // ═══ DIFERENCIAS ↔ FICHA DE PILA ═══════════════════════════════════════
-// Cada diferencia (despacho, ingreso o conteo) queda registrada contra la
-// ÚLTIMA ficha de pila cargada. Las no resueltas desde esa ficha se acumulan:
-//   stock real estimado = stock de la ficha + Σ diferencias (− faltantes, + sobrantes)
-// Una ficha nueva "pone en cero" el acumulado (cuenta desde su fecha).
+// Cada diferencia (despacho, ingreso o conteo) queda registrada y PENDIENTE
+// hasta que se marca resuelta (se encontró o se ajustó en el sistema):
+//   stock real estimado = stock de la última ficha + Σ pendientes (− faltantes, + sobrantes)
+// Cargar una ficha nueva no las borra.
 // v:2 = diferencia contra lo pedido/esperado. Registros viejos (sin v) se
 // calcularon contra el stock del sistema: se muestran pero NO suman.
 function fichaSnapGet(){ try{ return JSON.parse(localStorage.getItem('wms_ficha_snap')||'null'); }catch(e){ return null; } }
@@ -6945,11 +6945,13 @@ function difTodas(){
   });
   return out;
 }
-// Diferencias que cuentan contra la ficha actual (v2, no resueltas, desde la ficha)
+// Diferencias pendientes (v2, no resueltas)
+// Diferencias PENDIENTES: todas las v2 no resueltas, sin importar la fecha de la ficha.
+// Cargar una ficha nueva NO las borra: una goma que falta sigue faltando hasta que
+// se encuentra o se ajusta, y eso se indica marcándola "resuelta".
 function difDesdeFicha(art){
-  var snap = fichaSnapGet(), desde = snap && snap.ts || 0;
   return difTodas().filter(function(d){
-    return d.v2 && d.estado!=='resuelto' && d.ts>=desde && (art==null || String(d.art)===String(art));
+    return d.v2 && d.estado!=='resuelto' && (art==null || String(d.art)===String(art));
   });
 }
 // ── Informe de diferencias contra la última ficha (a favor / en contra), por artículo
@@ -7028,7 +7030,7 @@ function informeDiferencias(modo){
     'td{border-bottom:1px solid #ddd;padding:3px 4px;vertical-align:top;word-wrap:break-word}.n{text-align:right;width:13mm}.g{color:#888}.s{font-size:8.5px;color:#444}'+
     'td.box{border:1.5px solid #999}tr{page-break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
     '<h2>📊 Informe de diferencias contra la ficha de pila</h2>'+
-    '<div class="meta">Ficha cargada: <b>'+fFicha+'</b> · Generado: '+hoy+' · Real est. = ficha + diferencia. Objetivo: neto 0 (buscar, ajustar o actualizar ficha).</div>'+
+    '<div class="meta">Ficha cargada: <b>'+fFicha+'</b> · Generado: '+hoy+' · Real est. = ficha + diferencia. Diferencias pendientes hasta marcarlas resueltas (cargar una ficha nueva no las borra). Objetivo: neto 0.</div>'+
     '<div class="res"><div>📉 En contra (faltantes)<b style="color:#d70015">'+tC+'</b>'+D.enContra.length+' artículos</div>'+
     '<div>📈 A favor (sobrantes)<b style="color:#1c7c2c">'+(tF>0?'+':'')+tF+'</b>'+D.aFavor.length+' artículos</div>'+
     '<div>Neto<b>'+((tC+tF)>0?'+':'')+(tC+tF)+'</b>'+D.compensados.length+' arts. compensados (neto 0)</div></div>'+
@@ -7067,15 +7069,15 @@ function renderDiferencias(){
     resumen.innerHTML = (fFecha?'':'<div style="background:#fff3cd;color:#856404;border-radius:10px;padding:8px 12px;font-size:12px;margin-bottom:8px">⚠️ No hay ficha de pila cargada: las diferencias se acumulan sin punto de partida.</div>')+
       `<div style="display:flex;gap:8px;flex-wrap:wrap">`+
       card('Stock según ficha', totFicha.toLocaleString('es-AR'), '#1d1d1f', fFecha?'cargada '+fFecha:'—')+
-      card('📉 Faltantes', falt.toLocaleString('es-AR'), falt?'#d70015':'#86868b', 'desde la ficha, sin resolver')+
-      card('📈 Sobrantes', (sobr?'+':'')+sobr.toLocaleString('es-AR'), sobr?'#1c7c2c':'#86868b', 'desde la ficha, sin resolver')+
+      card('📉 Faltantes', falt.toLocaleString('es-AR'), falt?'#d70015':'#86868b', 'pendientes de buscar')+
+      card('📈 Sobrantes', (sobr?'+':'')+sobr.toLocaleString('es-AR'), sobr?'#1c7c2c':'#86868b', 'pendientes de verificar')+
       card('Stock real estimado', (totFicha+falt+sobr).toLocaleString('es-AR'), (falt+sobr)?'#0071e3':'#1d1d1f', 'ficha '+((falt+sobr)>=0?'+ ':'− ')+Math.abs(falt+sobr)+' un.')+
       `</div>`;
   }
 
   // ── Filtros
   let filas = todas.filter(d=>{
-    if(fEst==='ficha' && !(d.v2 && d.estado!=='resuelto' && d.ts>=desde)) return false;
+    if(fEst==='ficha' && !(d.v2 && d.estado!=='resuelto')) return false;
     if(fEst==='pend' && d.estado==='resuelto') return false;
     if(fEst==='res' && d.estado!=='resuelto') return false;
     if(fTipo==='F' && !(d.diff<0)) return false;
@@ -13689,7 +13691,7 @@ function fpBuscar(){
     html += '<div style="flex:2;min-width:220px;border:1.5px solid #1d1d1f;border-radius:10px;padding:10px 14px;font-size:17px;font-weight:800;color:#0a2a8a;display:flex;align-items:center">'+esc(q)+' · '+esc(d0.med)+' '+esc(d0.diseno)+' · '+esc(d0.prov)+'</div>';
     var _snap = fichaSnapGet(), _fic = (_snap && _snap.stock && _snap.stock[q]!==undefined) ? +_snap.stock[q] : null, _dif = difAcumulado(q);
     [['Stock según ficha'+(_snap&&_snap.ts?' ('+new Date(_snap.ts).toLocaleDateString('es-AR')+')':''), _fic===null?'—':_fic, '#1d1d1f'],
-     ['Diferencias desde la ficha', (_dif>0?'+':'')+_dif, _dif<0?'#d70015':_dif>0?'#1c7c2c':'#86868b'],
+     ['Diferencias pendientes', (_dif>0?'+':'')+_dif, _dif<0?'#d70015':_dif>0?'#1c7c2c':'#86868b'],
      ['Stock real estimado', _fic===null?'—':(_fic+_dif), '#0071e3'],
      ['Saldo WMS (físico)', stockFisico(q), '#0a2a8a'],['Comprometido en pedidos', compr, compr?'#d70015':'#86868b'],['Ingresos en tránsito', enTr, enTr?'#ff9500':'#86868b']].forEach(function(k){
       html += '<div style="flex:1;min-width:120px;border:1px solid #d2d2d7;border-radius:10px;padding:8px 12px;background:#fff"><div style="font-size:10px;color:#86868b">'+k[0]+'</div><div style="font-size:20px;font-weight:800;color:'+k[2]+'">'+(typeof k[1]==='number'?k[1].toLocaleString('es-AR'):k[1])+'</div></div>';
@@ -13704,8 +13706,8 @@ function fpBuscar(){
     _act.forEach(function(d){ if(d.diff<0) _f+=d.diff; else _s+=d.diff; });
     html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
     [['Stock según ficha'+(_sn&&_sn.ts?' ('+new Date(_sn.ts).toLocaleDateString('es-AR')+')':''), _tot.toLocaleString('es-AR'), '#1d1d1f'],
-     ['📉 Faltantes desde la ficha', _f.toLocaleString('es-AR'), _f?'#d70015':'#86868b'],
-     ['📈 Sobrantes desde la ficha', (_s?'+':'')+_s.toLocaleString('es-AR'), _s?'#1c7c2c':'#86868b'],
+     ['📉 Faltantes pendientes', _f.toLocaleString('es-AR'), _f?'#d70015':'#86868b'],
+     ['📈 Sobrantes pendientes', (_s?'+':'')+_s.toLocaleString('es-AR'), _s?'#1c7c2c':'#86868b'],
      ['Stock real estimado', (_tot+_f+_s).toLocaleString('es-AR'), '#0071e3']].forEach(function(k){
       html += '<div style="flex:1;min-width:140px;border:1px solid #d2d2d7;border-radius:10px;padding:8px 12px;background:#fff"><div style="font-size:10px;color:#86868b">'+k[0]+'</div><div style="font-size:20px;font-weight:800;color:'+k[2]+'">'+k[1]+'</div></div>';
     });
