@@ -1975,6 +1975,23 @@ function saveAsign(){ localStorage.setItem('wms_asign2', JSON.stringify(ASIGN));
 // + los demás en .compartidos (mismo campo que ya usa el motor para compartir pallet,
 // así pedidos, picking y descuentos de rack ya los contemplan).
 var POS_MULTI_MAX = 3;
+// Todas las posiciones de rack donde está un artículo: como principal o como
+// compartido (2º/3º artículo de una posición). Devuelve [[pos, {art, unidades, comp}], ...]
+function rackPosDeArt(artId){
+  var out = [];
+  Object.keys(ASIGN).forEach(function(pos){
+    var v = ASIGN[pos]; if(!v) return;
+    if(v.art==artId) out.push([pos, {art:v.art, unidades:v.unidades||0, comp:false}]);
+    (v.compartidos||[]).forEach(function(c){ if(c && c.art==artId) out.push([pos, {art:c.art, unidades:c.unidades||0, comp:true}]); });
+  });
+  return out.sort(function(a,b){ return a[0].localeCompare(b[0]); });
+}
+// Set con todos los artículos que están en rack (principal o compartido)
+function artsEnRackSet(){
+  var s = new Set();
+  Object.values(ASIGN).forEach(function(v){ if(!v) return; if(v.art!=null) s.add(String(v.art)); (v.compartidos||[]).forEach(function(c){ if(c&&c.art!=null) s.add(String(c.art)); }); });
+  return s;
+}
 function posMultiArt(pid){ return /^6[SN]-N1-P\d+$/.test(String(pid||'')); }
 
 // --- TABS ---
@@ -2244,9 +2261,7 @@ function showToast(msg){
 
 
 function getUbicaciones(artId){
-  const posRacks = Object.entries(ASIGN)
-    .filter(([pos,v])=>v&&v.art==artId)
-    .sort((a,b)=>a[0].localeCompare(b[0]));
+  const posRacks = rackPosDeArt(artId);
 
   const dataArt = DATA.find(r=>r.art==artId);
   const bloque = dataArt?dataArt.bloque:'';
@@ -2275,7 +2290,7 @@ function getUbicaciones(artId){
     html3 += `<div style="display:flex;align-items:center;justify-content:space-between;background:${bg};border-radius:8px;padding:7px 10px">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:11px;font-weight:700;color:#fff;background:${color};padding:2px 8px;border-radius:6px">${nivel}</span>
-        <span style="font-size:13px;font-weight:700;color:#1d1d1f">${pos}</span>
+        <span style="font-size:13px;font-weight:700;color:#1d1d1f">${pos}</span>${v.comp?'<span style="font-size:10px;color:#86868b">compartida</span>':''}
       </div>
       <span style="font-size:14px;font-weight:700;color:${color}">${v.unidades||0} <span style="font-size:10px;font-weight:400;color:#86868b">un.</span></span>
     </div>`;
@@ -2285,13 +2300,20 @@ function getUbicaciones(artId){
   // puntera. Si ya tiene una de esas dos posiciones asignadas, ese es el
   // único lugar físico real; mostrar también "BLQ" daba la impresión de
   // que había stock duplicado en dos (o tres) lugares a la vez.
-  if(bloque && !posRacks.length && !enPuntera.total){
+  // Si el rack tiene menos que el stock, el resto sigue en el bloque: mostrarlo
+  // con las unidades que quedan ahí (ej: 1 en 6S-N1-P01 compartida + 275 en bloque)
+  const _enRackU = posRacks.reduce((t,[p,v])=>t+(v.unidades||0),0);
+  const _restoBlq = Math.max(0,(dataArt?dataArt.stock||0:0) - _enRackU - (enPuntera.total||0));
+  if(bloque && ((!posRacks.length && !enPuntera.total) || _restoBlq>0)){
+    const _soloBlq = !posRacks.length && !enPuntera.total;
     html3 += `<div style="display:flex;align-items:center;justify-content:space-between;background:#fff3cd;border-radius:8px;padding:7px 10px">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:11px;font-weight:700;color:#856404;background:#f5c842;padding:2px 8px;border-radius:6px">BLQ</span>
         <span style="font-size:13px;font-weight:700;color:#1d1d1f">${bloque}</span>
       </div>
-      <span style="font-size:14px;font-weight:700;color:#856404">${dataArt.pall||0} <span style="font-size:10px;font-weight:400;color:#86868b">pall.</span></span>
+      ${_soloBlq
+        ? `<span style="font-size:14px;font-weight:700;color:#856404">${dataArt.pall||0} <span style="font-size:10px;font-weight:400;color:#86868b">pall.</span></span>`
+        : `<span style="font-size:14px;font-weight:700;color:#856404">${_restoBlq} <span style="font-size:10px;font-weight:400;color:#86868b">un.</span></span>`}
     </div>`;
   }
 
@@ -4636,7 +4658,7 @@ function renderCandidatosEnNave(){
   const PALL_MAX = 12;
 
   // Artículos ya en rack
-  const enRack = new Set(Object.values(ASIGN).filter(v=>v&&v.art).map(v=>String(v.art)));
+  const enRack = artsEnRackSet();
 
   // Candidatos en nave (no en rack)
   const candidatosEnNave = DATA.filter(function(r){
@@ -6613,7 +6635,7 @@ function cydPlanillaPicking(id){
         // Sugerencia de rack — NUNCA automática, solo informativa. Se
         // confirma a mano en Mapa Racks. Solo tiene sentido si el artículo
         // todavía no tiene ninguna posición de rack asignada.
-        var yaEnRack = (typeof ASIGN!=='undefined') && Object.values(ASIGN).some(function(v){return v && v.art==r.art;});
+        var yaEnRack = (typeof ASIGN!=='undefined') && rackPosDeArt(r.art).length>0;
         if(!yaEnRack){
           var artSimulado = Object.assign({}, artFull, {stock: restante, pall: Math.floor(restante/maxPosArt)});
           var motivoSimulado = rackMotivoNoCalifica(artSimulado);
@@ -7384,7 +7406,7 @@ function seleccionarDiseno(diseno){
   if(_invDisenoActivo){
     // Preparar items
     _invItemsActivos = DATA.filter(r=>r.diseno===diseno&&r.stock>0).map(r=>{
-      const posRack = Object.entries(ASIGN).find(([pos,v])=>v&&v.art==r.art);
+      const posRack = rackPosDeArt(r.art)[0];
       const tieneRack = !!posRack;
       const tieneNave = !!r.bloque;
       let ubic;
@@ -7543,6 +7565,8 @@ function exportarNivelActivo(){
       const pctOcup = art.max_pos>0?Math.round((v.unidades/art.max_pos)*100):0;
       const estado = v.unidades===0?'VACÍO':pctOcup<30?'BAJO':pctOcup<70?'MEDIO':'LLENO';
       items.push({pos, art, unidades:v.unidades||0, min_u:v.min_u||0, pctOcup, estado});
+      (v.compartidos||[]).forEach(c=>{ const ca=DATA.find(r=>r.art==c.art); if(!ca) return;
+        items.push({pos, art:ca, unidades:c.unidades||0, min_u:0, pctOcup:0, estado:'COMPARTIDA'}); });
     });
     items.sort((a,b)=>a.pos.localeCompare(b.pos));
 
@@ -7633,9 +7657,9 @@ function imprimirMapa(){
   XLSX.utils.book_append_sheet(wb, ws, 'Mapa Racks');
 
   // Hoja: STOCK TOTAL — todo el stock, indicando si está en rack y por qué no si no lo está
-  const enRackFull = new Set(Object.values(ASIGN).filter(v=>v&&v.art).map(v=>String(v.art)));
+  const enRackFull = artsEnRackSet();
   const posPorArt = {};
-  Object.entries(ASIGN).forEach(([pos,v])=>{ if(v&&v.art) posPorArt[String(v.art)] = pos; });
+  Object.entries(ASIGN).forEach(([pos,v])=>{ if(v&&v.art) posPorArt[String(v.art)] = pos; (v&&v.compartidos||[]).forEach(c=>{ if(c&&c.art&&!posPorArt[String(c.art)]) posPorArt[String(c.art)] = pos; }); });
   const resFull = window._motorResumen || {};
   const sinLugarFullSet = new Set((resFull.sinUbicacionArts||[]).map(a=>String(a.art)));
   const BLOQUES_RACK_FULL = ['1N','1S','2N','2S'];
@@ -8059,6 +8083,7 @@ function getItemsNivel(nivel){
     const art = DATA.find(r=>r.art==v.art);
     if(!art) return;
     items.push({pos, art, unidades: v.unidades||0, min_u: v.min_u||0});
+    (v.compartidos||[]).forEach(c=>{ const ca=DATA.find(r=>r.art==c.art); if(ca) items.push({pos, art:ca, unidades:c.unidades||0, min_u:0, comp:true}); });
   });
   return items.sort((a,b)=>b.art.rot-a.art.rot);
 }
@@ -8741,7 +8766,7 @@ function generarInforme(){
   <!-- COMEX section -->
   ${(()=>{
     // Artículos bajo stock con alta rotación sin reserva en rack ni bloques
-    const artsEnRack = new Set(Object.values(ASIGN).filter(v=>v).map(v=>v.art));
+    const artsEnRack = new Set(); Object.values(ASIGN).forEach(v=>{ if(!v) return; artsEnRack.add(v.art); (v.compartidos||[]).forEach(c=>{ if(c&&c.art!=null) artsEnRack.add(c.art); }); });
     const comex = DATA.filter(r=>
       r.cond==='bajo stock' &&
       r.rot > 100 &&
@@ -10423,7 +10448,7 @@ function exportarPlanillaDOT(){
   ];
 
   artsValidos.forEach(r=>{
-    const posRack = Object.entries(ASIGN).find(([pos,v])=>v&&v.art==r.art);
+    const posRack = rackPosDeArt(r.art)[0];
     const ubic = posRack ? posRack[0] : (r.bloque||'—');
     const artDots = dots[r.art]||[];
     const años = [2020,2021,2022,2023,2024,2025,2026];
@@ -10453,7 +10478,7 @@ function exportarAlertasDOT(){
 
   getArtsFiltered().forEach(r=>{
     const artDots = dots[r.art]||[];
-    const posRack = Object.entries(ASIGN).find(([pos,v])=>v&&v.art==r.art);
+    const posRack = rackPosDeArt(r.art)[0];
     const ubic = posRack ? posRack[0] : (r.bloque||'—');
     artDots.forEach(d=>{
       const estado = getDotEstado(d.anio);
@@ -15046,7 +15071,7 @@ function candidatosParaPuntera(){
   const EXCLUIR_USO  = ['TT','TL','TLSB','TT ','TL '];
   const BLOQUES_RACK = ['1N','1S','2N','2S'];
   const ROT_MAX_PUNTERA = 5.5; // mismo umbral que usa el motor de rack
-  const enRack = new Set(Object.values(ASIGN).filter(v=>v&&v.art).map(v=>String(v.art)));
+  const enRack = artsEnRackSet();
   const punterasActuales = getPunteras();
   const enPunteraSet = articulosAsignadosSet(punterasActuales, null);
   return DATA.filter(function(r){
