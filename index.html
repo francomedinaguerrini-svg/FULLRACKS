@@ -3062,7 +3062,7 @@ function render(){
     if(fc&&r.cond!==fc)return false;
     if(fw&&r.wms!==fw)return false;
     if(fd&&r.diseno!==fd)return false;
-    if(q){const s=(r.art+' '+r.prov+' '+r.med+' '+r.diseno+' '+r.tipo+' '+r.uso).toLowerCase();if(!s.includes(q))return false;}
+    if(q){const s=(r.art+' '+r.prov+' '+r.med+' '+r.diseno+' '+r.tipo+' '+r.uso+' '+(RANGOS[String(r.art)]||'')).toLowerCase();if(!s.includes(q))return false;}
     return true;
   });
   rows.sort((a,b)=>{
@@ -3083,7 +3083,7 @@ function render(){
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
         <div>
           <div style="font-size:20px;font-weight:700;color:#1d1d1f;line-height:1.1">${r.med}</div>
-          <div style="font-size:14px;font-weight:600;color:#3a3a3c">${r.diseno}${r.uso?' · '+r.uso:''}</div>
+          <div style="font-size:14px;font-weight:600;color:#3a3a3c">${r.diseno}${r.uso?' · '+r.uso:''}${RANGOS[String(r.art)]?` <span title="Índice de carga / velocidad" style="font-size:12px;font-weight:700;color:#0071e3;background:#e8f1fd;border-radius:6px;padding:1px 7px;margin-left:4px">${RANGOS[String(r.art)]}</span>`:''}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:11px;color:#86868b">#${r.art}</div>
