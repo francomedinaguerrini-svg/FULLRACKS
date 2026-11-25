@@ -7245,7 +7245,7 @@ function renderDiferencias(){
           <td style="padding:6px 10px;text-align:right">${f!==undefined?f:'—'}</td>
           <td style="padding:6px 10px;text-align:right;font-weight:800;color:${r.net<0?'#d70015':r.net>0?'#1c7c2c':'#86868b'}">${r.net>0?'+':''}${r.net}</td>
           <td style="padding:6px 10px;text-align:right;font-weight:700;color:#0071e3">${f!==undefined?(+f+r.net):'—'}</td>
-          <td style="padding:6px 10px;text-align:right;color:#86868b">${da?((da.stock||0)+(_salPend(r.art)?` <span style="color:#ff9500" title="en pedidos sin despachar">(+${_salPend(r.art)})</span>`:'')):'—'}</td>
+          <td style="padding:6px 10px;text-align:right;color:#86868b">${da?(da.stock||0):'—'}</td>
           <td style="padding:6px 10px;text-align:right;color:#86868b">${r.n}</td></tr>`;
       }).join('')+`</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Tocá un artículo para ver sus movimientos. Real est. = ficha + diferencias.</div>`;
   } else {
@@ -7304,7 +7304,6 @@ function renderDiffLinea(r,bi,ii,fechaPedido){
   // Mismo número que la tarjeta de Stock (WMS ya descontados los pedidos en tránsito);
   // aparte, cuántas siguen en el depósito comprometidas en pedidos sin despachar.
   const real = artStock ? (artStock.stock||0) : stockActual;
-  const enPedPend = (artStock && typeof _salPend==='function') ? _salPend(r.art) : 0;
   return `<div class="diff-row" style="${resuelto?'opacity:.55':''}">
     <div style="flex:1;min-width:0">
       <div style="font-size:12px;font-weight:700">${r.art} · ${r.med||''} ${r.diseno||''}${resuelto?' <span style="color:#248a3d;font-weight:700;font-size:10px">· ✔ Resuelto</span>':''}</div>
@@ -7316,7 +7315,6 @@ function renderDiffLinea(r,bi,ii,fechaPedido){
       <div style="display:flex;gap:16px;margin-top:6px;font-size:11px;color:#86868b">
         ${r.stockFicha!==undefined?`<div>Ficha<br><b style="font-size:15px;color:#1d1d1f">${r.stockFicha}</b></div>`:''}
         ${real!==null&&real!==undefined?`<div>Stock WMS hoy<br><b style="font-size:15px;color:#1d1d1f">${real}</b></div>`:''}
-        ${enPedPend?`<div>En pedidos sin despachar (no se suman)<br><b style="font-size:15px;color:#ff9500">${enPedPend}</b> <span style="font-size:10px">${(function(){ try{ return transitoGetAll().filter(t=>t.flujo==='salida'&&t.estado==='transito'&&t.descontado&&(t.items||[]).some(i=>String(i.art)===String(r.art))).map(t=>(t.destino||'—')+(t.nroContenedor?' #'+t.nroContenedor:'')+' ('+t.items.filter(i=>String(i.art)===String(r.art)).reduce((a,i)=>a+(i.cant||0),0)+')').join(', '); }catch(e){ return ''; } })()}</span></div>`:''}
       </div>
     </div>
     <div style="text-align:right;flex-shrink:0">
