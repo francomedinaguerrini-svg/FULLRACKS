@@ -6981,11 +6981,24 @@ function difInformeDatos(){
     g[k].movs.push(d);
   });
   var arr = Object.values(g);
+  // DIF. A BUSCAR contra la FICHA (no contra lo pedido):
+  //  · despacho con faltante → el preparador se llevó todo lo que encontró, queda 0 → buscar = 0 − ficha
+  //  · conteo / ajuste manual → se contó X → buscar = X − ficha
+  //  · resto (ingresos, sobrante en despacho) o sin ficha → la diferencia registrada
+  arr.forEach(function(r){
+    r.movs.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+    var u = r.movs[r.movs.length-1];
+    if(r.ficha===null) r.buscar = r.net;
+    else if(u.origen==='conteo') r.buscar = (u.cantReal||0) - r.ficha;
+    else if(u.origen!=='ingreso' && u.diff<0) r.buscar = 0 - r.ficha;
+    else r.buscar = r.net;
+    r.difPedido = r.movs.filter(function(m){ return m.origen!=='conteo'; }).reduce(function(t,m){ return t+(m.diff||0); },0);
+  });
   return {
     snap: snap,
-    enContra: arr.filter(function(r){ return r.net<0; }).sort(function(a,b){ return a.net-b.net; }),
-    aFavor:   arr.filter(function(r){ return r.net>0; }).sort(function(a,b){ return b.net-a.net; }),
-    compensados: arr.filter(function(r){ return r.net===0; })
+    enContra: arr.filter(function(r){ return r.buscar<0; }).sort(function(a,b){ return a.buscar-b.buscar; }),
+    aFavor:   arr.filter(function(r){ return r.buscar>0; }).sort(function(a,b){ return b.buscar-a.buscar; }),
+    compensados: arr.filter(function(r){ return r.buscar===0; })
   };
 }
 // Unidades pedidas en TOTAL en los despachos que generaron estas diferencias
@@ -7009,10 +7022,11 @@ function difPedidoTotalDespachos(movs){
 function informeDiferencias(modo){
   var D = difInformeDatos();
   var sum = function(l,f){ return l.reduce(function(t,r){ return t+(r[f]||0); },0); };
-  var tC = sum(D.enContra,'net'), tF = sum(D.aFavor,'net');
+  var tC = sum(D.enContra,'buscar'), tF = sum(D.aFavor,'buscar');
   var todos = D.enContra.concat(D.aFavor, D.compensados);
   var tPed = difPedidoTotalDespachos([].concat.apply([], todos.map(function(r){ return r.movs; })));
-  var errPct = tPed ? Math.round(Math.abs(tC+tF)/tPed*10000)/100 : null;
+  var difPedTot = sum(todos,'difPedido');
+  var errPct = tPed ? Math.round(Math.abs(difPedTot)/tPed*10000)/100 : null;
   // % de diferencia contra lo pedido (ej: pedido 100, preparado 90 → −10%); se va acumulando
   var pct = function(dif, ped){ return ped ? Math.round(dif/ped*1000)/10 : null; };
   var pctTxt = function(v){ return v===null ? '—' : (v>0?'+':'')+String(v).replace('.',',')+'%'; };
@@ -7024,16 +7038,16 @@ function informeDiferencias(modo){
 
   if(modo==='xlsx'){
     if(typeof XLSX==='undefined'){ showToast('❌ No está cargada la librería de Excel'); return; }
-    var head = ['ART','MEDIDA','DISEÑO','PROVEEDOR','UBICACIÓN','NUEVA UBICACIÓN','FICHA DE PILA','PEDIDAS','DIF. A BUSCAR','MOVIMIENTOS','CONTROL 1','CONTROL 2','ACCIÓN'];
-    var fila = function(r){ return [r.art, r.med, r.diseno, r.prov, r.ubic, '', r.ficha===null?'':r.ficha, r.ped||'', r.net, r.movs.map(movTxt).join(' | '), '', '', '']; };
+    var head = ['ART','MEDIDA','DISEÑO','PROVEEDOR','UBICACIÓN','NUEVA UBICACIÓN','FICHA DE PILA','PEDIDAS','DIF. CONTRA PEDIDO','DIF. A BUSCAR (vs ficha)','MOVIMIENTOS','CONTROL 1','CONTROL 2','ACCIÓN'];
+    var fila = function(r){ return [r.art, r.med, r.diseno, r.prov, r.ubic, '', r.ficha===null?'':r.ficha, r.ped||'', r.difPedido, r.buscar, r.movs.map(movTxt).join(' | '), '', '', '']; };
     var wb = XLSX.utils.book_new();
     var res = [['INFORME DE DIFERENCIAS CONTRA LA FICHA DE PILA'],['Ficha cargada', fFicha],['Generado', hoy],[],
-      ['En contra (faltantes)', tC, D.enContra.length+' arts'],['A favor (sobrantes)', tF, D.aFavor.length+' arts'],['Neto', tC+tF],
-      ['Pedidas (total de los despachos)', tPed],['% de error contra lo pedido', errPct===null?'':errPct/100],['% de preparación', errPct===null?'':(100-errPct)/100],['Compensados (neto 0)', D.compensados.length+' arts']];
+      ['En contra (a buscar vs ficha)', tC, D.enContra.length+' arts'],['A favor (sobrantes vs ficha)', tF, D.aFavor.length+' arts'],['Neto a buscar', tC+tF],['Dif. contra pedido (preparación)', difPedTot],
+      ['Pedidas (total de los despachos)', tPed],['% de error contra lo pedido', errPct===null?'':errPct/100],['% de preparación', errPct===null?'':(100-errPct)/100],['Coinciden con la ficha (nada que buscar)', D.compensados.length+' arts']];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), 'Resumen');
-    [['En contra', D.enContra],['A favor', D.aFavor],['Compensados', D.compensados]].forEach(function(h){
+    [['En contra', D.enContra],['A favor', D.aFavor],['Coinciden con ficha', D.compensados]].forEach(function(h){
       var ws = XLSX.utils.aoa_to_sheet([head].concat(h[1].map(fila)));
-      ws['!cols'] = [{wch:8},{wch:14},{wch:10},{wch:12},{wch:24},{wch:18},{wch:12},{wch:9},{wch:12},{wch:60},{wch:10},{wch:10},{wch:28}];
+      ws['!cols'] = [{wch:8},{wch:14},{wch:10},{wch:12},{wch:24},{wch:18},{wch:12},{wch:9},{wch:12},{wch:14},{wch:60},{wch:10},{wch:10},{wch:28}];
       XLSX.utils.book_append_sheet(wb, ws, h[0]);
     });
     try{
@@ -7059,7 +7073,7 @@ function informeDiferencias(modo){
     lista.forEach(function(r){
       h += '<tr><td><b>'+esc(r.art)+'</b></td><td>'+esc(r.med)+' <span class="g">'+esc(r.diseno)+'</span></td><td>'+esc(r.prov)+'</td><td class="s">'+esc(r.ubic)+'</td><td class="box"></td>'+
         '<td>'+(r.ficha===null?'—':r.ficha)+'</td><td>'+(r.ped||'—')+'</td>'+
-        '<td style="color:'+color+';font-weight:800;font-size:12px">'+(r.net>0?'+':'')+r.net+'</td>'+
+        '<td style="color:'+color+';font-weight:800;font-size:12px">'+(r.buscar>0?'+':'')+r.buscar+'</td>'+
         '<td class="s">'+r.movs.map(function(m){ return esc(movTxt(m)); }).join('<br>')+'</td><td class="box"></td><td class="box"></td><td class="box"></td></tr>';
     });
     return h+'</tbody></table>';
@@ -7072,14 +7086,14 @@ function informeDiferencias(modo){
     'td{border-bottom:1px solid #ddd;padding:4px;vertical-align:top;word-wrap:break-word;text-align:left}.g{color:#888}.s{font-size:8.5px;color:#444}'+
     'td.box{border:1.5px solid #999;height:18px}tr{page-break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
     '<h2>📊 Informe de diferencias contra la ficha de pila</h2>'+
-    '<div class="meta">Ficha cargada: <b>'+fFicha+'</b> · Generado: '+hoy+' · Diferencias pendientes hasta marcarlas resueltas (cargar una ficha nueva no las borra). Dos conteos: Control 1 y Control 2. Objetivo: neto 0.</div>'+
+    '<div class="meta">Ficha cargada: <b>'+fFicha+'</b> · Generado: '+hoy+' · Dif. a buscar = contra la ficha de pila (si el preparador no completó el pedido, se buscan todas las de la ficha). Dos conteos: Control 1 y Control 2. Objetivo: neto 0.</div>'+
     '<div class="res"><div>📉 En contra (faltantes)<b style="color:#d70015">'+tC+'</b>'+D.enContra.length+' artículos</div>'+
     '<div>📈 A favor (sobrantes)<b style="color:#1c7c2c">'+(tF>0?'+':'')+tF+'</b>'+D.aFavor.length+' artículos</div>'+
-    '<div>Neto<b>'+((tC+tF)>0?'+':'')+(tC+tF)+'</b>'+D.compensados.length+' arts. compensados (neto 0)</div>'+
-    '<div>Error contra lo pedido<b>'+(errPct===null?'—':String(errPct).replace('.',',')+'%')+'</b>'+(errPct===null?'':'preparación '+String(Math.round((100-errPct)*100)/100).replace('.',',')+'% · ')+Math.abs(tC+tF)+' de '+tPed+' un. pedidas</div></div>'+
+    '<div>Neto a buscar<b>'+((tC+tF)>0?'+':'')+(tC+tF)+'</b>'+D.compensados.length+' arts. ya coinciden con la ficha</div>'+
+    '<div>Error contra lo pedido<b>'+(errPct===null?'—':String(errPct).replace('.',',')+'%')+'</b>'+(errPct===null?'':'preparación '+String(Math.round((100-errPct)*100)/100).replace('.',',')+'% · ')+Math.abs(difPedTot)+' de '+tPed+' un. pedidas</div></div>'+
     tabla('📉 EN CONTRA — faltantes (buscar en depósito)', '#d70015', D.enContra, tC)+
     tabla('📈 A FAVOR — sobrantes (verificar / ajustar)', '#1c7c2c', D.aFavor, tF)+
-    tabla('↔️ COMPENSADOS — faltante y sobrante en el mismo artículo (revisar cruces)', '#a8710a', D.compensados, 0)+
+    tabla('✅ COINCIDEN CON LA FICHA — nada que buscar (marcar resueltas)', '#1c7c2c', D.compensados, 0)+
     '<div class="meta" style="margin-top:10px">Al resolver una diferencia, marcala en WMS › Diferencias › "Editar / resolver" para que deje de sumar.</div>'+
     '<script>window.onload=function(){window.print();}<\/script></body></html>';
   var w = window.open('', '_blank');
