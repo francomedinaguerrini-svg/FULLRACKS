@@ -6956,6 +6956,8 @@ function difTodas(){
 // se encuentra o se ajusta, y eso se indica marcándola "resuelta".
 function difDesdeFicha(art){
   return difTodas().filter(function(d){
+    // diferencia 0 sin control cargado = no hay nada que buscar (ej: línea corregida a mano)
+    if(!d.diff && d.encontradas==null) return false;
     return d.v2 && d.estado!=='resuelto' && (art==null || String(d.art)===String(art));
   });
 }
@@ -7172,24 +7174,30 @@ function ajustarStockManual(artId){
   var da = DATA.find(function(r){ return String(r.art)===String(artId); });
   if(!da){ showToast('Artículo no encontrado'); return; }
   var antes = da.stock||0;
-  var v = prompt('✎ Contar '+da.art+' · '+da.med+' '+da.diseno+'\n\nStock en el WMS: '+antes+'\n¿Cuántas hay realmente?', antes);
+  var sn = fichaSnapGet();
+  var fic = (sn && sn.stock && sn.stock[String(da.art)]!==undefined) ? +sn.stock[String(da.art)] : null;
+  var v = prompt('✎ Contar '+da.art+' · '+da.med+' '+da.diseno+'\n\nStock en el WMS: '+antes+(fic!==null?'\nFicha de pila: '+fic:'')+'\n¿Cuántas hay realmente?', antes);
   if(v===null) return;
   var cont = parseInt(String(v).replace(/\D/g,''),10);
   if(isNaN(cont) || cont<0){ showToast('❌ Cantidad inválida'); return; }
-  if(cont===antes){ showToast('Sin cambios — coincide con el WMS'); return; }
-  var diff = cont - antes;
-  var nota = prompt((diff<0?'📉 Faltante ':'📈 Sobrante ')+(diff>0?'+':'')+diff+' un.\nNota (opcional, ej: dónde se contó):', '') || '';
+  // La diferencia se mide contra la FICHA DE PILA (si hay); si no, contra el WMS
+  var base = (fic!==null) ? fic : antes;
+  if(cont===base && cont===antes){ showToast('Sin diferencia — coincide con la ficha'+(fic===null?' (no hay ficha, comparado con el WMS)':'')); return; }
+  var diff = cont - base;
+  var nota = diff===0 ? '' : (prompt((diff<0?'📉 Faltante ':'📈 Sobrante ')+(diff>0?'+':'')+diff+' un. contra la '+(fic!==null?'ficha':'stock WMS')+'\nNota (opcional, ej: dónde se contó):', '') || '');
   var ahora = new Date();
-  difRegistrar({fecha:ahora.toLocaleDateString('es-AR'), hora:ahora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
-    destino:'✎ Ajuste manual (Stock)', origen:'conteo',
-    items:[{art:da.art, med:da.med, diseno:da.diseno, prov:da.prov, posRack:'', bloque:da.bloque||'',
-      cantPedida:antes, cantReal:cont, diff:diff, stockWMS:antes, nota:nota}]});
+  if(diff!==0){
+    difRegistrar({fecha:ahora.toLocaleDateString('es-AR'), hora:ahora.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
+      destino:'✎ Ajuste manual (Stock)', origen:'conteo',
+      items:[{art:da.art, med:da.med, diseno:da.diseno, prov:da.prov, posRack:'', bloque:da.bloque||'',
+        cantPedida:base, cantReal:cont, diff:diff, stockWMS:antes, nota:nota}]});
+  }
   da.stock = cont;
   da.pall = Math.floor(Math.max(0,cont)/(da.max_pos||32));
   try{ recalcularCond(da); }catch(e){}
   saveDataStock();
   try{ render(); }catch(e){}
-  showToast((diff<0?'📉 Faltante ':'📈 Sobrante ')+(diff>0?'+':'')+diff+' registrado en Diferencias — stock '+antes+' → '+cont);
+  showToast(diff===0 ? '✔ Stock '+antes+' → '+cont+' (coincide con la ficha)' : (diff<0?'📉 Faltante ':'📈 Sobrante ')+(diff>0?'+':'')+diff+' contra la ficha, registrado en Diferencias — stock '+antes+' → '+cont);
 }
 
 // "A buscar" contra la ficha (mismo criterio que el informe) — por artículo o total
