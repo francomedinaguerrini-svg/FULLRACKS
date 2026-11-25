@@ -6988,7 +6988,9 @@ function difInformeDatos(){
   arr.forEach(function(r){
     r.movs.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
     var u = r.movs[r.movs.length-1];
-    if(r.ficha===null) r.buscar = r.net;
+    var conCtrl = r.movs.filter(function(m){ return m.encontradas!=null; }).sort(function(a,b){ return (a.tsControl||0)-(b.tsControl||0); });
+    if(r.ficha!==null && conCtrl.length) r.buscar = conCtrl[conCtrl.length-1].encontradas - r.ficha;
+    else if(r.ficha===null) r.buscar = r.net;
     else if(u.origen==='conteo') r.buscar = (u.cantReal||0) - r.ficha;
     else if(u.origen!=='ingreso' && u.diff<0) r.buscar = 0 - r.ficha;
     else r.buscar = r.net;
@@ -7190,7 +7192,12 @@ function ajustarStockManual(artId){
   showToast((diff<0?'📉 Faltante ':'📈 Sobrante ')+(diff>0?'+':'')+diff+' registrado en Diferencias — stock '+antes+' → '+cont);
 }
 
-function difAcumulado(art){ return difDesdeFicha(art).reduce(function(s,d){ return s+(d.diff||0); },0); }
+// "A buscar" contra la ficha (mismo criterio que el informe) — por artículo o total
+function difAcumulado(art){
+  var D = difInformeDatos(), todos = D.enContra.concat(D.aFavor, D.compensados);
+  if(art!=null){ var r = todos.find(function(x){ return String(x.art)===String(art); }); return r ? r.buscar : 0; }
+  return todos.reduce(function(t,x){ return t+x.buscar; },0);
+}
 
 let _diffEditing = null; // "batchIdx-itemIdx" en edición
 let _diffTipoTemp = {};
@@ -7206,9 +7213,11 @@ function renderDiferencias(){
   const todas = difTodas();
 
   // ── Resumen contra la ficha
-  const act = difDesdeFicha();
-  const falt = act.filter(d=>d.diff<0).reduce((s,d)=>s+d.diff,0);
-  const sobr = act.filter(d=>d.diff>0).reduce((s,d)=>s+d.diff,0);
+  // Totales "a buscar" contra la ficha (mismo criterio que el informe)
+  const _DI = difInformeDatos();
+  const _bMap = {}; _DI.enContra.concat(_DI.aFavor,_DI.compensados).forEach(r=>{ _bMap[String(r.art)] = r.buscar; });
+  const falt = _DI.enContra.reduce((s,r)=>s+r.buscar,0);
+  const sobr = _DI.aFavor.reduce((s,r)=>s+r.buscar,0);
   let totFicha = 0; if(snap && snap.stock) Object.keys(snap.stock).forEach(k=>{ totFicha += (+snap.stock[k]||0); });
   const fFecha = desde ? new Date(desde).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : null;
   const card = (t,v,c,sub) => `<div style="flex:1;min-width:120px;background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#86868b;text-transform:uppercase;letter-spacing:.3px">${t}</div><div style="font-size:22px;font-weight:800;color:${c}">${v}</div>${sub?`<div style="font-size:10px;color:#86868b">${sub}</div>`:''}</div>`;
@@ -7249,7 +7258,7 @@ function renderDiferencias(){
       if(d.v2) { g[k].net+=d.diff; g[k].cuenta++; } g[k].n++; g[k].ult=Math.max(g[k].ult,d.ts); });
     const arr = Object.values(g).sort((a,b)=>a.net-b.net);
     lista.innerHTML = `<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:12px">
-      <tr style="background:#1d1d1f;color:#fff"><th style="padding:7px 10px;text-align:left">Art</th><th style="padding:7px 10px;text-align:left">Medida / diseño</th><th style="padding:7px 10px;text-align:right">Ficha</th><th style="padding:7px 10px;text-align:right">Dif.</th><th style="padding:7px 10px;text-align:right">Real est.</th><th style="padding:7px 10px;text-align:right">Stock WMS</th><th style="padding:7px 10px;text-align:right">Mov.</th></tr>`+
+      <tr style="background:#1d1d1f;color:#fff"><th style="padding:7px 10px;text-align:left">Art</th><th style="padding:7px 10px;text-align:left">Medida / diseño</th><th style="padding:7px 10px;text-align:right">Ficha</th><th style="padding:7px 10px;text-align:right">A buscar</th><th style="padding:7px 10px;text-align:right">Real est.</th><th style="padding:7px 10px;text-align:right">Stock WMS</th><th style="padding:7px 10px;text-align:right">Mov.</th></tr>`+
       arr.map((r,i)=>{
         const f = snap && snap.stock ? snap.stock[String(r.art)] : undefined;
         const da = DATA.find(x=>String(x.art)===String(r.art));
@@ -7257,8 +7266,8 @@ function renderDiferencias(){
           <td style="padding:6px 10px;font-weight:700">${r.art}</td>
           <td style="padding:6px 10px">${r.med||''} <span style="color:#86868b">${r.diseno||''} · ${r.prov||''}</span></td>
           <td style="padding:6px 10px;text-align:right">${f!==undefined?f:'—'}</td>
-          <td style="padding:6px 10px;text-align:right;font-weight:800;color:${r.net<0?'#d70015':r.net>0?'#1c7c2c':'#86868b'}">${r.net>0?'+':''}${r.net}</td>
-          <td style="padding:6px 10px;text-align:right;font-weight:700;color:#0071e3">${f!==undefined?(+f+r.net):'—'}</td>
+          ${(()=>{ const b = (_bMap[String(r.art)]!==undefined) ? _bMap[String(r.art)] : r.net; return `<td style="padding:6px 10px;text-align:right;font-weight:800;color:${b<0?'#d70015':b>0?'#1c7c2c':'#86868b'}">${b>0?'+':''}${b}</td>
+          <td style="padding:6px 10px;text-align:right;font-weight:700;color:#0071e3">${f!==undefined?(+f+b):'—'}</td>`; })()}
           <td style="padding:6px 10px;text-align:right;color:#86868b">${da?(da.stock||0):'—'}</td>
           <td style="padding:6px 10px;text-align:right;color:#86868b">${r.n}</td></tr>`;
       }).join('')+`</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Tocá un artículo para ver sus movimientos. Real est. = ficha + diferencias.</div>`;
@@ -7292,9 +7301,14 @@ function renderDiffLinea(r,bi,ii,fechaPedido){
           <div style="font-size:14px;font-weight:600">${r.cantPedida}</div>
         </div>
         <div>
-          <div style="font-size:10px;color:#86868b">Preparadas (editable)</div>
-          <input type="number" id="diffedit-real-${key}" value="${r.cantReal}" style="width:80px;padding:6px 8px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px">
+          <div style="font-size:10px;color:#86868b">${(r.origen==='conteo')?'Contadas':(r.origen==='ingreso'?'Recibidas':'Preparadas')}</div>
+          <div style="font-size:14px;font-weight:600">${r.cantReal}</div>
         </div>
+        ${(function(){ var sn=fichaSnapGet(); var f=(sn&&sn.stock&&sn.stock[String(r.art)]!==undefined)?+sn.stock[String(r.art)]:null;
+          return `<div><div style="font-size:10px;color:#86868b">Ficha de pila</div><div style="font-size:14px;font-weight:600">${f===null?'—':f}</div></div>
+          <div><div style="font-size:10px;color:#0071e3;font-weight:700">Encontradas en el control</div>
+            <input type="number" min="0" id="diffedit-enc-${key}" value="${r.encontradas!=null?r.encontradas:''}" placeholder="cant." oninput="_diffEncPreview('${key}',${f===null?'null':f})" style="width:90px;padding:6px 8px;border:2px solid #0071e3;border-radius:8px;font-size:14px;font-weight:700"></div>
+          <div id="diffedit-encprev-${key}" style="font-size:12px;font-weight:700;padding-bottom:6px">${r.encontradas!=null&&f!==null?_diffEncTxt(r.encontradas,f):''}</div>`; })()}
       </div>
       <div class="inv-tipo-row" id="diffedit-tipo-${key}" style="justify-content:flex-start">
         <button class="inv-tipo-chip ${r.tipo==='Cruce'?'active':''}" data-tipo="Cruce" onclick="_diffSetTipo('${key}','Cruce')">🔀 Cruce</button>
@@ -7356,18 +7370,47 @@ function _diffSetTipo(key, tipo){
   if(row) row.querySelectorAll('.inv-tipo-chip').forEach(b=>b.classList.toggle('active', b.dataset.tipo===tipo));
 }
 
+function _diffEncTxt(enc, ficha){
+  var d = enc - ficha;
+  return d===0 ? '<span style="color:#1c7c2c">✔ Coincide con la ficha — se marca resuelta</span>'
+       : d<0 ? '<span style="color:#d70015">Siguen faltando '+(-d)+' contra la ficha</span>'
+             : '<span style="color:#1c7c2c">Sobran '+d+' contra la ficha</span>';
+}
+function _diffEncPreview(key, ficha){
+  var el = document.getElementById('diffedit-encprev-'+key), v = parseInt((document.getElementById('diffedit-enc-'+key)||{}).value);
+  if(!el) return; el.innerHTML = (isNaN(v)||ficha===null) ? '' : _diffEncTxt(v, ficha);
+  var cb = document.getElementById('diffedit-resuelto-'+key); if(cb && !isNaN(v) && ficha!==null) cb.checked = (v===ficha);
+}
 function guardarEdicionDiff(bi, ii){
   const key = bi+'-'+ii;
   const histDif = JSON.parse(localStorage.getItem('wms_dif')||'[]');
   const item = histDif[bi] && histDif[bi].items[ii];
   if(!item) return;
-  const nuevoReal = parseInt(document.getElementById('diffedit-real-'+key).value);
+  const encRaw = (document.getElementById('diffedit-enc-'+key)||{}).value;
+  const enc = (encRaw===''||encRaw==null) ? null : parseInt(encRaw);
   const nota = (document.getElementById('diffedit-nota-'+key).value||'').trim();
-  const resuelto = document.getElementById('diffedit-resuelto-'+key).checked;
+  let resuelto = document.getElementById('diffedit-resuelto-'+key).checked;
   const tipo = _diffTipoTemp[key] || item.tipo;
 
-  item.cantReal = isNaN(nuevoReal)?item.cantReal:nuevoReal;
-  item.diff = item.cantReal - item.cantPedida;
+  // Lo preparado / despachado NO se toca (es lo que salió y cuenta para el % de preparación).
+  // El control carga cuántas ENCONTRÓ y se compara contra la ficha de pila.
+  let msg = '✅ Diferencia actualizada';
+  if(enc!==null && !isNaN(enc) && enc>=0){
+    const sn = fichaSnapGet();
+    const f = (sn&&sn.stock&&sn.stock[String(item.art)]!==undefined) ? +sn.stock[String(item.art)] : null;
+    item.encontradas = enc;
+    item.fichaControl = f;
+    item.tsControl = Date.now();
+    if(f!==null && enc===f){ resuelto = true; msg = '✔ Encontradas '+enc+' = ficha — diferencia resuelta'; }
+    else if(f!==null){ msg = (enc<f?'📉 Siguen faltando '+(f-enc):'📈 Sobran '+(enc-f))+' contra la ficha'; }
+    // El stock del WMS pasa a ser lo encontrado (igual que ✎ Contar)
+    const da = DATA.find(function(d){ return String(d.art)===String(item.art); });
+    if(da && (da.stock||0)!==enc){
+      da.stock = enc; da.pall = Math.floor(Math.max(0,enc)/(da.max_pos||32));
+      try{ recalcularCond(da); }catch(e){}
+      saveDataStock();
+    }
+  }
   item.tipo = tipo;
   item.nota = nota;
   item.estado = resuelto?'resuelto':'pendiente';
@@ -7376,7 +7419,7 @@ function guardarEdicionDiff(bi, ii){
   delete _diffTipoTemp[key];
   _diffEditing = null;
   renderDiferencias();
-  showToast('✅ Diferencia actualizada');
+  showToast(msg);
 }
 
 function eliminarLineaDiff(bi, ii){
@@ -13842,7 +13885,7 @@ function fpBuscar(){
     html += '<div style="flex:2;min-width:220px;border:1.5px solid #1d1d1f;border-radius:10px;padding:10px 14px;font-size:17px;font-weight:800;color:#0a2a8a;display:flex;align-items:center">'+esc(q)+' · '+esc(d0.med)+' '+esc(d0.diseno)+' · '+esc(d0.prov)+'</div>';
     var _snap = fichaSnapGet(), _fic = (_snap && _snap.stock && _snap.stock[q]!==undefined) ? +_snap.stock[q] : null, _dif = difAcumulado(q);
     [['Stock según ficha'+(_snap&&_snap.ts?' ('+new Date(_snap.ts).toLocaleDateString('es-AR')+')':''), _fic===null?'—':_fic, '#1d1d1f'],
-     ['Diferencias pendientes', (_dif>0?'+':'')+_dif, _dif<0?'#d70015':_dif>0?'#1c7c2c':'#86868b'],
+     ['A buscar (vs ficha)', (_dif>0?'+':'')+_dif, _dif<0?'#d70015':_dif>0?'#1c7c2c':'#86868b'],
      ['Stock real estimado', _fic===null?'—':(_fic+_dif), '#0071e3'],
      ['Stock WMS', (d0.stock||0), '#0a2a8a'],['En pedidos sin despachar', compr, compr?'#d70015':'#86868b'],['Ingresos en tránsito', enTr, enTr?'#ff9500':'#86868b']].forEach(function(k){
       html += '<div style="flex:1;min-width:120px;border:1px solid #d2d2d7;border-radius:10px;padding:8px 12px;background:#fff"><div style="font-size:10px;color:#86868b">'+k[0]+'</div><div style="font-size:20px;font-weight:800;color:'+k[2]+'">'+(typeof k[1]==='number'?k[1].toLocaleString('es-AR'):k[1])+'</div></div>';
@@ -13853,8 +13896,8 @@ function fpBuscar(){
   if(!exacto){
     var _sn = fichaSnapGet(), _tot = 0;
     if(_sn && _sn.stock) Object.keys(_sn.stock).forEach(function(k){ _tot += (+_sn.stock[k]||0); });
-    var _act = difDesdeFicha(), _f = 0, _s = 0;
-    _act.forEach(function(d){ if(d.diff<0) _f+=d.diff; else _s+=d.diff; });
+    var _DIf = difInformeDatos(), _f = 0, _s = 0;
+    _DIf.enContra.forEach(function(r){ _f+=r.buscar; }); _DIf.aFavor.forEach(function(r){ _s+=r.buscar; });
     html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
     [['Stock según ficha'+(_sn&&_sn.ts?' ('+new Date(_sn.ts).toLocaleDateString('es-AR')+')':''), _tot.toLocaleString('es-AR'), '#1d1d1f'],
      ['📉 Faltantes pendientes', _f.toLocaleString('es-AR'), _f?'#d70015':'#86868b'],
