@@ -1,6 +1,243 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script>
+/* ═══ SINCRONIZACIÓN ENTRE MÁQUINAS (servidor local Halpern) ═══════════════
+   Solo se activa si el WMS se abre desde el servidor local (http://IP:8080).
+   Abierto desde GitHub Pages o como archivo: no hace NADA (funciona como siempre).
+   · Al abrir: trae del servidor el estado completo ANTES de que arranque el WMS.
+   · Cada guardado (localStorage) se manda al servidor.
+   · Si otra máquina cambió lo mismo, se FUSIONA (por pedido / artículo / posición)
+     en vez de pisarse.
+   · Cuando otra máquina cambia algo, se recarga sola en cuanto no estás usando la
+     pantalla (o tocás el aviso "Actualizar").
+   ═══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  var LS = window.localStorage;
+  var rawSet = Storage.prototype.setItem, rawRemove = Storage.prototype.removeItem;
+  // Claves que son de cada equipo (no se comparten)
+  var LOCALES = { wms_search_hist:1, wms_plano_vista:1, wms_base:1, wms_scan_modo:1, wms_scan_ubic:1 };
+  function sincroniza(k){ return (k.indexOf('wms_')===0 || k.indexOf('grupos_')===0) && !LOCALES[k] && k.indexOf('wms_sync_')!==0; }
+
+  // ¿Estamos en el servidor local? (pedido sincrónico, antes de que arranque el WMS)
+  if(!/^https?:$/.test(location.protocol) || /github\.io$/i.test(location.hostname)) return;
+  var dev = LS.getItem('wms_sync_dev');
+  if(!dev){ dev = 'equipo-'+Math.random().toString(36).slice(2,7); rawSet.call(LS,'wms_sync_dev',dev); }
+  function xhrSync(method, url, body){
+    var x = new XMLHttpRequest();
+    x.open(method, url, false);
+    x.setRequestHeader('X-WMS-Dev', dev);
+    if(body) x.setRequestHeader('Content-Type','application/json');
+    x.send(body ? JSON.stringify(body) : null);
+    return x;
+  }
+  var st;
+  try{
+    var x0 = xhrSync('GET', '/api/state?since=0&dev='+encodeURIComponent(dev));
+    if(x0.status!==200) return;               // no hay servidor: modo normal
+    st = JSON.parse(x0.responseText);
+  }catch(e){ return; }
+
+  var meta = {};   // clave -> {ver, base}  (base = último valor acordado con el servidor)
+  var gver = st.gver||0;
+  var outbox = {}; try{ outbox = JSON.parse(LS.getItem('wms_sync_outbox')||'{}'); }catch(e){ outbox = {}; }
+  function saveOutbox(){ try{ rawSet.call(LS,'wms_sync_outbox', JSON.stringify(outbox)); }catch(e){} }
+  var unido = LS.getItem('wms_sync_unido')==='1';
+  var claves = Object.keys(st.keys||{});
+
+  if(!claves.length){
+    // Servidor vacío: este equipo es el primero → sube todo lo que tiene
+    for(var i=0;i<LS.length;i++){ var k=LS.key(i); if(sincroniza(k)) outbox[k]=1; }
+    saveOutbox();
+  } else {
+    if(!unido){
+      // Primera vez que este equipo se une: copia de seguridad de lo que tenía
+      var copia = {};
+      for(var j=0;j<LS.length;j++){ var kk=LS.key(j); if(sincroniza(kk)) copia[kk]=LS.getItem(kk); }
+      if(Object.keys(copia).length){ try{ xhrSync('POST','/api/backup-equipo?dev='+encodeURIComponent(dev), copia); }catch(e){} }
+      outbox = {}; saveOutbox();
+      // Lo local que el servidor no tiene se descarta (queda en la copia)
+      var borrar = [];
+      for(var m=0;m<LS.length;m++){ var km=LS.key(m); if(sincroniza(km) && !st.keys[km]) borrar.push(km); }
+      borrar.forEach(function(k){ rawRemove.call(LS,k); });
+    }
+    claves.forEach(function(k){
+      var e = st.keys[k];
+      meta[k] = {ver:e.ver, base:e.del?null:e.v};
+      if(outbox[k]) return;                    // cambio local pendiente: se fusiona al subir
+      if(e.del){ rawRemove.call(LS,k); }
+      else if(LS.getItem(k)!==e.v){ try{ rawSet.call(LS,k,e.v); }catch(err){ console.warn('sync: no entra',k); } }
+    });
+  }
+  rawSet.call(LS,'wms_sync_unido','1');
+
+  // ── Fusión de tres vías (base, local, remoto) ─────────────────────────
+  function idDe(x){ return (x && typeof x==='object') ? (x.id!=null ? 'id:'+x.id : (x.trId!=null ? 'tr:'+x.trId : 'j:'+JSON.stringify(x))) : 'j:'+JSON.stringify(x); }
+  function J(x){ return JSON.stringify(x); }
+  function fusionar(baseStr, locStr, remStr){
+    var B,L,R;
+    try{ L = JSON.parse(locStr); R = JSON.parse(remStr); B = baseStr!=null ? JSON.parse(baseStr) : null; }catch(e){ return locStr; }
+    if(Array.isArray(L) && Array.isArray(R)){
+      var Bm={}, Lm={}, Rm={}; (Array.isArray(B)?B:[]).forEach(function(x){ Bm[idDe(x)]=J(x); });
+      L.forEach(function(x){ Lm[idDe(x)]=x; }); R.forEach(function(x){ Rm[idDe(x)]=x; });
+      var out=[], usados={};
+      L.forEach(function(x){
+        var id=idDe(x); if(usados[id]) return; usados[id]=1;
+        var enR = Object.prototype.hasOwnProperty.call(Rm,id), enB = Object.prototype.hasOwnProperty.call(Bm,id);
+        if(enR){ out.push(J(x)===Bm[id] ? Rm[id] : x); }          // cambió acá → local; si no → remoto
+        else if(!(enB && J(x)===Bm[id])) out.push(x);               // borrado allá y sin tocar acá → se va
+      });
+      // Nuevos de la otra máquina: adelante si en el remoto están antes que lo compartido (historiales)
+      var primerComun = -1; R.some(function(x,i){ if(Lm[idDe(x)]!==undefined){ primerComun=i; return true; } return false; });
+      var adelante=[], atras=[];
+      R.forEach(function(x,i){
+        var id=idDe(x); if(usados[id]) return;
+        var enB = Object.prototype.hasOwnProperty.call(Bm,id);
+        if(enB && J(x)===Bm[id]) return;                            // lo borré acá
+        usados[id]=1; (primerComun<0 || i<primerComun ? adelante : atras).push(x);
+      });
+      return J(adelante.concat(out, atras));
+    }
+    if(L && R && typeof L==='object' && typeof R==='object' && !Array.isArray(L) && !Array.isArray(R)){
+      var b = (B && typeof B==='object' && !Array.isArray(B)) ? B : {};
+      var o = {};
+      Object.keys(R).forEach(function(p){ o[p]=R[p]; });
+      Object.keys(L).forEach(function(p){ if(J(L[p])!==J(b[p])) o[p]=L[p]; });          // lo que cambié acá gana
+      Object.keys(b).forEach(function(p){ if(!(p in L) && J(R[p])===J(b[p])) delete o[p]; }); // lo que borré acá
+      return J(o);
+    }
+    return locStr;                                                   // texto/número: gana lo local
+  }
+
+  // ── Subida (con reintento y fusión si hubo conflicto) ──────────────────
+  var timers = {}, online = true, lastErr = 0;
+  function subir(k){
+    clearTimeout(timers[k]);
+    timers[k] = setTimeout(function(){ enviar(k, 0); }, 350);
+  }
+  function enviar(k, intento){
+    var v = LS.getItem(k), del = (v===null);
+    var mk = meta[k] || {ver:0, base:null};
+    fetch('/api/set?dev='+encodeURIComponent(dev), {method:'POST', headers:{'Content-Type':'application/json','X-WMS-Dev':dev},
+      body: JSON.stringify({k:k, v:v, del:del, baseVer:mk.ver})})
+    .then(function(r){ return r.json().then(function(j){ return {s:r.status, j:j}; }); })
+    .then(function(res){
+      online = true; estado();
+      if(res.s===200){
+        meta[k] = {ver:res.j.ver, base:del?null:v};   // gver no se toca: los cambios ajenos intermedios llegan con traer()
+        delete outbox[k]; saveOutbox();
+        return;
+      }
+      if(res.s===409 && intento<5){
+        // Otra máquina lo cambió: fusionar y volver a intentar
+        var rem = res.j.deleted ? null : res.j.v, loc = LS.getItem(k), nuevo;
+        if(loc===null) nuevo = null;
+        else if(rem===null) nuevo = loc;
+        else nuevo = fusionar(mk.base, loc, rem);
+        meta[k] = {ver:res.j.ver, base:rem};
+        if(nuevo===null) rawRemove.call(LS,k); else if(nuevo!==loc){ try{ rawSet.call(LS,k,nuevo); }catch(e){} hayCambiosRemotos(); }
+        enviar(k, intento+1);
+      }
+    })
+    .catch(function(){ online = false; lastErr = Date.now(); estado(); setTimeout(function(){ if(outbox[k]) enviar(k, intento); }, 5000); });
+  }
+  Storage.prototype.setItem = function(k, v){
+    var r = rawSet.call(this, k, v);
+    if(this===LS && sincroniza(k)){ outbox[k]=1; saveOutbox(); subir(k); }
+    return r;
+  };
+  Storage.prototype.removeItem = function(k){
+    var r = rawRemove.call(this, k);
+    if(this===LS && sincroniza(k)){ outbox[k]=1; saveOutbox(); subir(k); }
+    return r;
+  };
+  // Lo que quedó pendiente (o el alta inicial) se sube ya
+  Object.keys(outbox).forEach(function(k){ subir(k); });
+
+  // ── Traer cambios de las otras máquinas ───────────────────────────────
+  var recargar = false, ultimoUso = Date.now(), equipos = st.equipos||1;
+  ['keydown','mousedown','touchstart','input','wheel'].forEach(function(ev){ window.addEventListener(ev, function(){ ultimoUso = Date.now(); }, true); });
+  function traer(){
+    fetch('/api/state?since='+gver+'&dev='+encodeURIComponent(dev), {headers:{'X-WMS-Dev':dev}, cache:'no-store'})
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      online = true; equipos = j.equipos||equipos;
+      var cambio = false;
+      Object.keys(j.keys||{}).forEach(function(k){
+        var e = j.keys[k];
+        if(meta[k] && meta[k].ver>=e.ver) return;                  // es mío / ya lo tengo
+        var loc = LS.getItem(k);
+        if(outbox[k]){                                             // tengo un cambio sin subir: fusionar
+          var f = (e.del||loc===null) ? loc : fusionar(meta[k]?meta[k].base:null, loc, e.v);
+          meta[k] = {ver:e.ver, base:e.del?null:e.v};
+          if(f!==loc && f!==null){ try{ rawSet.call(LS,k,f); }catch(er){} cambio = true; }
+          subir(k);
+          return;
+        }
+        meta[k] = {ver:e.ver, base:e.del?null:e.v};
+        if(e.del){ if(loc!==null){ rawRemove.call(LS,k); cambio = true; } }
+        else if(loc!==e.v){ try{ rawSet.call(LS,k,e.v); cambio = true; }catch(er){ console.warn('sync: no entra',k); } }
+      });
+      gver = Math.max(gver, j.gver||0);
+      if(cambio) hayCambiosRemotos();
+      estado();
+    })
+    .catch(function(){ online = false; estado(); });
+  }
+  setInterval(traer, 3000);
+
+  // ── Recarga cuando otra máquina cambió algo ───────────────────────────
+  function hayCambiosRemotos(){ recargar = true; estado(); }
+  function hayModalAbierto(){
+    var a = document.activeElement;
+    if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+    var sel = '.modal-overlay.open,.modal.open,#mig-punt,.overlay.open,[id$="-modal"].open,[id$="-overlay"].open';
+    try{ if(document.querySelector(sel)) return true; }catch(e){}
+    return false;
+  }
+  function recargarAhora(){
+    try{
+      var v = document.querySelector('.view.active');
+      if(v) sessionStorage.setItem('wms_sync_vista', v.id.replace(/^view-/,''));
+      sessionStorage.setItem('wms_sync_scroll', String(window.scrollY||0));
+    }catch(e){}
+    location.reload();
+  }
+  setInterval(function(){
+    if(recargar && Date.now()-ultimoUso > 20000 && !hayModalAbierto() && !Object.keys(outbox).length) recargarAhora();
+  }, 2000);
+  window.addEventListener('load', function(){
+    try{
+      var vista = sessionStorage.getItem('wms_sync_vista'), sc = +sessionStorage.getItem('wms_sync_scroll')||0;
+      sessionStorage.removeItem('wms_sync_vista'); sessionStorage.removeItem('wms_sync_scroll');
+      if(vista && typeof switchTab==='function'){
+        var btn = document.querySelector('[onclick*="switchTab(\''+vista+'\'"]');
+        if(btn) switchTab(vista, btn);
+        setTimeout(function(){ window.scrollTo(0, sc); }, 300);
+      }
+    }catch(e){}
+    estado();
+  });
+
+  // ── Indicador en pantalla ─────────────────────────────────────────────
+  function estado(){
+    if(!document.body) return;
+    var el = document.getElementById('wms-sync-pill');
+    if(!el){
+      el = document.createElement('div'); el.id = 'wms-sync-pill';
+      el.style.cssText = 'position:fixed;left:8px;bottom:64px;z-index:99998;font:600 11px -apple-system,Arial;padding:5px 10px;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.15);cursor:pointer';
+      el.onclick = function(){ if(recargar) recargarAhora(); else traer(); };
+      document.body.appendChild(el);
+    }
+    var pend = Object.keys(outbox).length;
+    if(!online){ el.style.background='#ffd6d9'; el.style.color='#d70015'; el.textContent='🔴 Sin conexión con el servidor'+(pend?' · '+pend+' cambio(s) sin subir':''); }
+    else if(recargar){ el.style.background='#0071e3'; el.style.color='#fff'; el.textContent='🔄 Otra máquina hizo cambios — tocá para actualizar'; }
+    else { el.style.background='#e8f8ee'; el.style.color='#1c7c2c'; el.textContent='🟢 Sincronizado · '+equipos+' equipo'+(equipos>1?'s':'')+(pend?' · subiendo '+pend:''); }
+  }
+  window.wmsSync = { estado:function(){ return {dev:dev, gver:gver, online:online, pendientes:Object.keys(outbox), equipos:equipos}; }, traer:traer, fusionar:fusionar };
+})();
+
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1698,6 +1935,79 @@ function wmsBaseExportar(){
   a.download = 'WMS_base_'+f.getFullYear()+'-'+String(f.getMonth()+1).padStart(2,'0')+'-'+String(f.getDate()).padStart(2,'0')+'.json';
   document.body.appendChild(a); a.click(); a.remove();
 }
+// ── Mudanza: exportar / importar TODOS los datos del WMS de este navegador ──
+// (para pasar del WMS de GitHub al servidor local, o entre equipos)
+function wmsExportarTodo(){
+  var keys = {};
+  for(var i=0;i<localStorage.length;i++){
+    var k = localStorage.key(i);
+    if((k.indexOf('wms_')===0 || k.indexOf('grupos_')===0) && k.indexOf('wms_sync_')!==0) keys[k] = localStorage.getItem(k);
+  }
+  var f = new Date(), pad = function(n){ return String(n).padStart(2,'0'); };
+  var blob = new Blob([JSON.stringify({formato:'WMS_TODO', fecha:f.toLocaleString('es-AR'), origen:location.host, keys:keys})], {type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'WMS_TODO_'+f.getFullYear()+'-'+pad(f.getMonth()+1)+'-'+pad(f.getDate())+'_'+pad(f.getHours())+pad(f.getMinutes())+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  showToast && showToast('📦 Exportado: '+Object.keys(keys).length+' grupos de datos');
+}
+// Grupos de datos (para importar solo una parte: ej. el de RRHH importa solo RRHH)
+var WMS_GRUPOS_DATOS = [
+  ['base',   '💾 Archivo base (artículos)',                       function(k){ return k==='wms_base_z'; }],
+  ['stock',  '📦 Stock, ficha de pila y rotación',                function(k){ return /^wms_(movimientos|ficha_|pall_ajustes|bloque_overrides|rot_|last_update|data_stock)/.test(k); }],
+  ['pedidos','🚚 Pedidos, tránsitos, cargas y descargas',          function(k){ return /^wms_(transito|cola_pedidos|ped_prep_|hist_|prep_|sugerencias_ubicacion|vol_hist)/.test(k); }],
+  ['racks',  '🗄️ Mapa de racks, ubicaciones y plano',              function(k){ return /^wms_(asign2|rack_stock|mov_hist|ubic_nave|punteras)/.test(k); }],
+  ['dif',    '📊 Diferencias, inventario y escáner',              function(k){ return /^wms_(dif|inv_|scan_|ean_map)/.test(k); }],
+  ['repo',   '🔄 Reposición',                                      function(k){ return /^wms_repo_/.test(k); }],
+  ['rrhh',   '👥 RRHH: grupos, personal, DOTs, viajes de chasis', function(k){ return /^grupos_/.test(k) || /^wms_(personal_base|dots|viajes_chasis|checklist_)/.test(k); }],
+  ['otros',  '🧩 Otros (pensamiento, ajustes varios)',            function(){ return true; }]
+];
+function wmsGrupoDe(k){ for(var i=0;i<WMS_GRUPOS_DATOS.length;i++){ if(WMS_GRUPOS_DATOS[i][2](k)) return WMS_GRUPOS_DATOS[i][0]; } return 'otros'; }
+function wmsImportarTodo(file){
+  if(!file) return;
+  var rd = new FileReader();
+  rd.onload = function(e){
+    var o = null; try{ o = JSON.parse(String(e.target.result||'')); }catch(err){}
+    if(!o || o.formato!=='WMS_TODO' || !o.keys){ alert('Ese archivo no es una exportación completa del WMS (WMS_TODO_….json).'); return; }
+    var porGrupo = {};
+    Object.keys(o.keys).forEach(function(k){ var g = wmsGrupoDe(k); (porGrupo[g] = porGrupo[g]||[]).push(k); });
+    var sinBase = typeof __BASE==='undefined' || !__BASE;
+    var bg = document.createElement('div');
+    bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:-apple-system,Segoe UI,Arial,sans-serif';
+    bg.innerHTML = '<div style="background:#fff;border-radius:16px;padding:20px;max-width:460px;width:100%;max-height:90vh;overflow:auto">'+
+      '<div style="font-weight:800;font-size:17px">📥 Importar datos</div>'+
+      '<div style="font-size:12px;color:#6e6e73;margin:4px 0 12px">Archivo del '+(o.fecha||'—')+'. Elegí qué partes traer: lo que marques <b>reemplaza</b> esa parte'+(window.wmsSync?' en el servidor (todas las máquinas)':'')+'; lo que no marques queda como está.</div>'+
+      WMS_GRUPOS_DATOS.filter(function(g){ return porGrupo[g[0]]; }).map(function(g){
+        var on = sinBase || g[0]!=='base';
+        return '<label style="display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #e5e5ea;border-radius:10px;margin-bottom:6px;cursor:pointer;font-size:14px">'+
+          '<input type="checkbox" class="imp-grp" value="'+g[0]+'" '+(on?'checked':'')+' style="width:18px;height:18px">'+
+          '<span style="flex:1">'+g[1]+'</span><span style="font-size:11px;color:#86868b">'+porGrupo[g[0]].length+'</span></label>';
+      }).join('')+
+      '<div style="display:flex;gap:8px;margin-top:12px">'+
+      '<button id="imp-ok" style="flex:1;padding:12px;border:none;border-radius:10px;background:#0071e3;color:#fff;font-weight:700;font-size:14px;cursor:pointer">Importar lo marcado</button>'+
+      '<button id="imp-no" style="padding:12px 16px;border:none;border-radius:10px;background:#f5f5f7;font-size:14px;cursor:pointer">Cancelar</button></div></div>';
+    document.body.appendChild(bg);
+    bg.querySelector('#imp-no').onclick = function(){ bg.remove(); };
+    bg.querySelector('#imp-ok').onclick = function(){
+      var grupos = Array.prototype.map.call(bg.querySelectorAll('.imp-grp:checked'), function(c){ return c.value; });
+      if(!grupos.length){ alert('No marcaste nada.'); return; }
+      if(sinBase && grupos.indexOf('base')<0 && !porGrupo.base){ /* sin base y el archivo no la trae */ }
+      var claves = [].concat.apply([], grupos.map(function(g){ return porGrupo[g]||[]; }));
+      bg.remove();
+      var set = Storage.prototype._wmsSet || Storage.prototype.setItem;
+      var err = 0;
+      claves.forEach(function(k){ try{ set.call(localStorage, k, o.keys[k]); }catch(x){ err++; } });
+      var t0 = Date.now();
+      (function esperar(){
+        var pend = window.wmsSync ? window.wmsSync.estado().pendientes.length : 0;
+        if(pend && Date.now()-t0 < 30000){ setTimeout(esperar, 500); return; }
+        alert('✅ Importado: '+grupos.length+' parte(s), '+(claves.length-err)+' de '+claves.length+' grupos de datos'+(err?' — '+err+' no entraron por espacio':'')+(pend?'\n⚠️ Quedaron '+pend+' sin subir al servidor; se suben solos al reconectar.':'')+'\nSe va a recargar.');
+        location.reload();
+      })();
+    };
+  };
+  rd.readAsText(file);
+}
 function wmsBaseModal(){
   var u = wmsUsoStorage(), pct = Math.min(100, Math.round(u.total*100/5200000));
   var bg = document.createElement('div');
@@ -1708,6 +2018,11 @@ function wmsBaseModal(){
     '<button id="wb-exp" style="width:100%;padding:12px;border:none;border-radius:10px;background:#34c759;color:#fff;font-weight:700;font-size:15px;cursor:pointer">📤 Exportar base</button>'+
     '<button id="wb-imp" style="width:100%;margin-top:8px;padding:12px;border:1px solid #d2d2d7;border-radius:10px;background:#fff;font-size:14px;cursor:pointer">📥 Cargar otra base</button>'+
     '<input type="file" id="wb-file" accept=".json,application/json" style="display:none">'+
+    '<div style="margin-top:14px;font-weight:700;font-size:14px">📦 Mudanza (todos los datos)</div>'+
+    '<div style="font-size:12px;color:#6e6e73;margin:4px 0 8px">Para pasar todo (tránsitos, racks, diferencias, etc.) de un lugar a otro, por ejemplo del WMS de GitHub al servidor local.</div>'+
+    '<button id="wb-todo-exp" style="width:100%;padding:11px;border:none;border-radius:10px;background:#0071e3;color:#fff;font-weight:700;font-size:14px;cursor:pointer">📦 Exportar TODO</button>'+
+    '<button id="wb-todo-imp" style="width:100%;margin-top:8px;padding:11px;border:1px solid #d2d2d7;border-radius:10px;background:#fff;font-size:14px;cursor:pointer">📥 Importar TODO</button>'+
+    '<input type="file" id="wb-todo-file" accept=".json,application/json" style="display:none">'+
     '<div style="margin-top:16px;font-weight:700;font-size:14px">🧠 Memoria del navegador: '+wmsKB(u.total)+' de ~5 M ('+pct+'%)</div>'+
     '<div style="height:8px;background:#e5e5ea;border-radius:4px;margin-top:6px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(pct>85?'#ff3b30':(pct>65?'#ff9500':'#34c759'))+'"></div></div>'+
     '<div style="font-size:12px;color:#3a3a3c;margin-top:8px;font-family:monospace">'+u.items.slice(0,10).map(function(x){ return x.k+' — '+wmsKB(x.n); }).join('<br>')+'</div>'+
@@ -1716,6 +2031,9 @@ function wmsBaseModal(){
   bg.querySelector('#wb-exp').onclick = wmsBaseExportar;
   bg.querySelector('#wb-imp').onclick = function(){ bg.querySelector('#wb-file').click(); };
   bg.querySelector('#wb-file').onchange = function(){ wmsBaseLeerArchivo(this.files[0]); };
+  bg.querySelector('#wb-todo-exp').onclick = wmsExportarTodo;
+  bg.querySelector('#wb-todo-imp').onclick = function(){ bg.querySelector('#wb-todo-file').click(); };
+  bg.querySelector('#wb-todo-file').onchange = function(){ wmsImportarTodo(this.files[0]); };
   bg.querySelector('#wb-cerrar').onclick = function(){ bg.remove(); };
   bg.addEventListener('click', function(e){ if(e.target===bg) bg.remove(); });
 }
@@ -1733,7 +2051,9 @@ if(!__BASE){
       '<div style="font-weight:800;font-size:19px;margin-top:6px">Cargá el archivo base</div>'+
       '<div style="font-size:13px;color:#6e6e73;margin:8px 0 16px">Este dispositivo todavía no tiene los datos del depósito. Elegí el archivo <b>WMS_base_….json</b> que te pasó el encargado. Se hace una sola vez.</div>'+
       '<button onclick="document.getElementById(\'wb-file0\').click()" style="width:100%;padding:14px;border:none;border-radius:12px;background:#0071e3;color:#fff;font-weight:700;font-size:16px;cursor:pointer">Elegir archivo base</button>'+
-      '<input type="file" id="wb-file0" accept=".json,application/json" style="display:none" onchange="wmsBaseLeerArchivo(this.files[0])"></div>';
+      '<input type="file" id="wb-file0" accept=".json,application/json" style="display:none" onchange="wmsBaseLeerArchivo(this.files[0])">'+
+      '<button onclick="document.getElementById(\'wb-todo0\').click()" style="width:100%;margin-top:10px;padding:12px;border:1px solid #d2d2d7;border-radius:12px;background:#fff;font-weight:600;font-size:14px;cursor:pointer">📦 Importar TODO (mudanza)</button>'+
+      '<input type="file" id="wb-todo0" accept=".json,application/json" style="display:none" onchange="wmsImportarTodo(this.files[0])"></div>';
     document.body.appendChild(ov);
   });
 } else {
@@ -12673,28 +12993,86 @@ function parsearPosicionesInput(str){
 // unidades sin dónde entrar (posiciones puestas a mano no alcanzan),
 // devuelve el sobrante para avisar al operador — no se pierde, solo no
 // queda reflejado en el mapa hasta que se corrija.
+// Para ingresos YA recibidos cuyas posiciones de rack no quedaron en el mapa:
+// las aplica ahora (mismo criterio que al recibir).
+function cydAplicarPosicionesIngreso(id){
+  var lista = transitoGetAll(), tr = lista.find(function(t){ return t.id===id; });
+  if(!tr) return;
+  var items = (tr.items||[]).filter(function(r){ var t=(r.sugerencia||{}).tipo; return t==='rack'||t==='rack_lleno'; });
+  var plan = items.map(function(r){
+    var sug = r.sugerencia||{};
+    var pe = r.posConfirmada!==undefined ? r.posConfirmada : String(sug.pos||'').replace(/[★🆕]/g,'').trim();
+    return {r:r, pos:parsearPosicionesInput(pe), cant:(r.cantReal!=null?r.cantReal:r.cant)};
+  }).filter(function(x){ return x.pos.length; });
+  if(!plan.length){ showToast('No hay posiciones de rack para aplicar'); return; }
+  var ya = tr.posMapaAplicado || items.some(function(r){ return r.posAplicadas && r.posAplicadas.length; });
+  var txt = plan.map(function(x){ return '• '+x.r.art+' ('+x.cant+' un.) → '+x.pos.join(', '); }).join('\n');
+  if(!confirm((ya?'⚠️ Este ingreso YA figura aplicado al mapa: si lo volvés a aplicar se SUMAN otra vez las unidades.\n\n':'')+'Cargar en el Mapa de Racks:\n\n'+txt+'\n\n¿Aplicar?')) return;
+  var avisos = [];
+  plan.forEach(function(x){
+    var res = aplicarPosicionesEntrada(x.r.art, x.pos, x.cant);
+    x.r.posAplicadas = (res.aplicadas||[]).concat(res.excedido?[res.excedido.pos]:[]);
+    if(res.excedido) avisos.push(x.r.art+': '+res.excedido.un+' por encima del pallet en '+res.excedido.pos);
+    if(res.sobrante>0) avisos.push(x.r.art+': '+res.sobrante+' un. sin lugar (posiciones ocupadas por otro artículo)');
+  });
+  tr.posMapaAplicado = Date.now();
+  transitoSave(lista);
+  if(typeof renderMapa==='function') renderMapa();
+  cydRenderTransito();
+  if(avisos.length) alert('Aplicado con avisos:\n\n'+avisos.join('\n'));
+  else showToast('📍 Posiciones cargadas en el Mapa de Racks');
+}
 function aplicarPosicionesEntrada(artId, posiciones, cantEntra){
   var da = DATA.find(function(d){ return d.art===artId; });
   var mp = (da && da.max_pos) || 32;
   var rackSt = loadRackStock();
-  var restante = cantEntra;
+  var restante = cantEntra, aplicadas = [], excedido = null;
+  function ocupadaReal(v){ return v && ((v.unidades||0)>0 || (v.compartidos||[]).some(function(c){ return (c.unidades||0)>0; })); }
   posiciones.forEach(function(pos){
     if(restante<=0) return;
-    var esMismoArt = ASIGN[pos] && String(ASIGN[pos].art)===String(artId);
-    var existente = esMismoArt ? (ASIGN[pos].unidades||0) : 0;
-    var capacidad = ASIGN[pos] && !esMismoArt ? 0 : Math.max(0, mp - existente); // posición ocupada por otro art: no pisar
-    var toma = Math.min(restante, capacidad);
+    var v = ASIGN[pos];
+    var esMismoArt = v && String(v.art)===String(artId);
+    // Posición "vacía" (★): figura a nombre de otro artículo pero con 0 unidades → se usa
+    if(v && !esMismoArt && !ocupadaReal(v)){ v = null; }
+    // Posición multi-artículo (pasillo 6 N1) ocupada por otro: entra como compartido si hay lugar
+    if(v && !esMismoArt && posMultiArt(pos)){
+      var cs = v.compartidos = v.compartidos||[];
+      var ci = cs.findIndex(function(c){ return String(c.art)===String(artId); });
+      if(ci<0 && 1+cs.length >= POS_MULTI_MAX) return;
+      var exC = ci>=0 ? (cs[ci].unidades||0) : 0, tomaC = Math.min(restante, Math.max(0, mp-exC));
+      if(tomaC<=0) return;
+      if(ci>=0) cs[ci].unidades = exC+tomaC; else cs.push({art:artId, unidades:tomaC});
+      if(rackSt[pos]) rackSt[pos].compartidos = cs;
+      restante -= tomaC; aplicadas.push(pos);
+      registrarMovimiento(pos, artId, 'ajustar', exC+tomaC);
+      return;
+    }
+    if(v && !esMismoArt) return;                                  // ocupada por otro artículo: no se pisa
+    var existente = esMismoArt ? (v.unidades||0) : 0;
+    var toma = Math.min(restante, Math.max(0, mp - existente));
     if(toma<=0) return;
     var nuevasUnidades = existente + toma;
-    var prevCompartidos = esMismoArt ? (ASIGN[pos].compartidos||[]) : [];
+    var prevCompartidos = esMismoArt ? (v.compartidos||[]) : [];
     ASIGN[pos] = {art:artId, unidades:nuevasUnidades, compartidos:prevCompartidos, confirmadoAvance:true};
     rackSt[pos] = {art:artId, stock:nuevasUnidades, min_u:(rackSt[pos]&&rackSt[pos].min_u)||1, compartidos:prevCompartidos};
-    restante -= toma;
+    restante -= toma; aplicadas.push(pos);
     registrarMovimiento(pos, artId, 'ajustar', nuevasUnidades);
   });
+  // Lo que no entró por capacidad: se suma a la primera posición del mismo artículo
+  // (queda por encima del pallet, pero reflejado en el mapa en vez de perderse)
+  if(restante>0){
+    var dest = posiciones.find(function(p){ return ASIGN[p] && String(ASIGN[p].art)===String(artId); });
+    if(dest){
+      ASIGN[dest].unidades = (ASIGN[dest].unidades||0) + restante;
+      ASIGN[dest].confirmadoAvance = true;
+      rackSt[dest] = {art:artId, stock:ASIGN[dest].unidades, min_u:(rackSt[dest]&&rackSt[dest].min_u)||1, compartidos:ASIGN[dest].compartidos||[]};
+      registrarMovimiento(dest, artId, 'ajustar', ASIGN[dest].unidades);
+      excedido = {pos:dest, un:restante}; restante = 0;
+    }
+  }
   saveAsign();
   saveRackStock(rackSt);
-  return {sobrante: Math.max(0, restante)};
+  return {sobrante: Math.max(0, restante), aplicadas:aplicadas, excedido:excedido};
 }
 
 // Aplica al Mapa de Racks lo que efectivamente salió en una SALIDA/despacho:
@@ -13247,6 +13625,8 @@ function cydConfirmarDesdeTransito(id, grupo, inicio, fin, durMin, fechaReal){
       if(posArr.length){
         huboRack = true;
         var resPos = aplicarPosicionesEntrada(r.art, posArr, cantRec);
+        r.posAplicadas = (resPos.aplicadas||[]).concat(resPos.excedido?[resPos.excedido.pos]:[]);
+        if(resPos.excedido) showToast('📦 Art '+r.art+': '+resPos.excedido.un+' un. sumadas en '+resPos.excedido.pos+' por encima del pallet — reacomodar');
         if(resPos.sobrante>0){
           huboSobrante = true;
           showToast('⚠️ Art '+r.art+': '+resPos.sobrante+' un. no entraron en '+posEfectiva+' — revisar Mapa Racks');
@@ -13624,6 +14004,10 @@ function cydRenderTransito(){
         html += '<button onclick="abrirArmadoPrevio(&quot;'+tr.id+'&quot;)" style="padding:6px 10px;background:'+(_conArm?'#e8f0fe':'#af52de')+';color:'+(_conArm?'#0071e3':'#fff')+';border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📍 '+(_conArm?'Armado ✓':'Armar y ubicar')+'</button>';
       }
       html += '<button onclick="cydExportarPlanilla(&quot;'+tr.id+'&quot;)" style="padding:6px 10px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">🖨️ Guardado</button>';
+      if(!esPend && (tr.items||[]).some(function(r){ var t=(r.sugerencia||{}).tipo; return t==='rack'||t==='rack_lleno'; })){
+        var _yaAp = tr.posMapaAplicado || (tr.items||[]).some(function(r){ return r.posAplicadas && r.posAplicadas.length; });
+        html += '<button onclick="cydAplicarPosicionesIngreso(&quot;'+tr.id+'&quot;)" title="Cargar en el Mapa de Racks las posiciones de rack de este ingreso" style="padding:6px 10px;background:'+(_yaAp?'#e8f0fe':'#0071e3')+';color:'+(_yaAp?'#0071e3':'#fff')+';border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">📍 '+(_yaAp?'Posiciones en mapa ✓':'Aplicar al Mapa Racks')+'</button>';
+      }
       if(esPend){
         html += '<button onclick="abrirModalTiempoRecepcion(&quot;'+tr.id+'&quot;)" style="padding:6px 10px;background:#34c759;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer">✅ Recibir</button>';
       }
