@@ -10653,6 +10653,21 @@ function kpiRender(){
     '</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Unidades movidas = descargas + cargas'+(T.desp.n?' + despachos':'')+' (los pedidos son la preparación de lo que se carga: se muestran pero no se suman). HH = operarios × jornada. Nivel = un./HH del día contra '+kpiRefTxt(D)+': en nivel 100% o más · algo bajo 85 a 99% · bajo menos de 85%.</div>';
   body.innerHTML = h;
 }
+// gráfico de barras para el informe impreso (HTML puro, imprime bien)
+function kpiGrafImp(D, campo, titulo, ref, refTxt, dec){
+  var vals = D.dias.map(function(d){ return d[campo]||0; });
+  var max = Math.max.apply(null, vals.concat([ref||0, 1]))*1.08;
+  var col = {verde:'#a9c9b3',amarillo:'#e3d6b0',rojo:'#e2b3ae',gris:'#e5e5ea'};
+  var nf = function(v){ return Number(v).toLocaleString('es-AR',{maximumFractionDigits:dec,minimumFractionDigits:0}); };
+  var barras = D.dias.map(function(d){
+    var v = d[campo]||0, c = campo==='unHH' ? col[d.sem] : (d.movs>=ref ? '#a9c9b3' : '#e2b3ae');
+    return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%"><div style="font-size:8px;color:#555">'+(v?nf(v):'')+'</div><div style="width:78%;height:'+Math.max(1,v/max*100)+'%;background:'+c+';border-radius:2px 2px 0 0"></div></div>';
+  }).join('');
+  return '<div class="g"><h4>'+titulo+' <span style="font-weight:400;color:#777">· línea = '+refTxt+'</span></h4>'+
+    '<div style="position:relative;display:flex;align-items:flex-end;gap:2px;height:110px;border-bottom:1px solid #bbb">'+
+    (ref?'<div style="position:absolute;left:0;right:0;bottom:'+(ref/max*100)+'%;border-top:1px dashed #777"></div>':'')+barras+'</div>'+
+    '<div style="display:flex;gap:2px">'+D.dias.map(function(d){ return '<div style="flex:1;text-align:center;font-size:8px;color:#777">'+d.fecha.slice(0,5)+'</div>'; }).join('')+'</div></div>';
+}
 function kpiInforme(modo){
   if(!_kpiMes) return;
   var D = kpiDatosMes(_kpiMes), T = D.tot, p=_kpiMes.split('-'), nom = new Date(+p[0],+p[1]-1,1).toLocaleDateString('es-AR',{month:'long',year:'numeric'});
@@ -10668,14 +10683,15 @@ function kpiInforme(modo){
       ['Unidades movidas (desc.+cargas'+(hayDesp?'+desp.':'')+')',D.unTotal],['Operarios por día (fijo)',kpiCfg().operarios],['Horas hombre',r1(T.hh)],['Horas registradas en tareas',r1(T.hReg)],
       ['Horas hombre por movimiento',r1(D.movsTotal?T.hh/D.movsTotal:null)],['Unidades por HH',r1(D.prom)],['Referencia (un./HH)',r1(D.std),kpiRefTxt(D)],
       ['Nivel del mes',D.stdOrigen==='mes'?'sin meta':D.nivelMes+'%'],['Días en nivel (100% o más)',cnt.verde],['Días algo bajos (85 a 99%)',cnt.amarillo],['Días bajos (menos de 85%)',cnt.rojo]]);
-    var cab = ['FECHA','DESCARGAS','UN. DESC.','CARGAS','UN. CARGAS'].concat(hayDesp?['DESPACHOS','UN. DESP.']:[]).concat(['PEDIDOS','UN. PEDIDOS','MOVIMIENTOS','UN. MOVIDAS','OPERARIOS','JORNADA (h)','HH','HH POR MOV.','UN./HH','NIVEL']);
+    var cab = ['FECHA','DESCARGAS','UN. DESC.','CARGAS','UN. CARGAS'].concat(hayDesp?['DESPACHOS','UN. DESP.']:[]).concat(['PEDIDOS','UN. PEDIDOS','MOVIMIENTOS','UN. MOVIDAS','OPERARIOS','JORNADA (h)','HH','HH POR MOV.','UN./HH','NIVEL','RITMO (UN./HH)']);
+    var maxR = Math.max.apply(null, D.dias.map(function(d){ return d.unHH||0; }).concat([1]));
     var det = [cab].concat(D.dias.map(function(d){
-      return [d.fecha,d.desc.n,d.desc.un,d.carga.n,d.carga.un].concat(hayDesp?[d.desp.n,d.desp.un]:[]).concat([d.ped.n,d.ped.un,d.movs,d.un,d.personas,d.jornada,d.hh,r1(d.movHH),r1(d.unHH),nivTxt(d)]); }));
+      return [d.fecha,d.desc.n,d.desc.un,d.carga.n,d.carga.un].concat(hayDesp?[d.desp.n,d.desp.un]:[]).concat([d.ped.n,d.ped.un,d.movs,d.un,d.personas,d.jornada,d.hh,r1(d.movHH),r1(d.unHH),nivTxt(d),d.unHH==null?'':'█'.repeat(Math.max(0,Math.round(d.unHH/(maxR||1)*30)))]); }));
     det.push(['TOTAL MES',T.desc.n,T.desc.un,T.carga.n,T.carga.un].concat(hayDesp?[T.desp.n,T.desp.un]:[]).concat([T.ped.n,T.ped.un,D.movsTotal,D.unTotal,'','',r1(T.hh),r1(D.movsTotal?T.hh/D.movsTotal:null),r1(D.prom),D.stdOrigen==='mes'?'':D.nivelMes+'%']));
     var wb = XLSX.utils.book_new();
     var w1 = XLSX.utils.aoa_to_sheet(res); w1['!cols']=[{wch:42},{wch:12},{wch:12}];
     XLSX.utils.book_append_sheet(wb, w1, 'Resumen');
-    var ws = XLSX.utils.aoa_to_sheet(det); ws['!cols']=cab.map(function(){ return {wch:12}; });
+    var ws = XLSX.utils.aoa_to_sheet(det); ws['!cols']=cab.map(function(c){ return {wch:c==='RITMO (UN./HH)'?34:12}; });
     XLSX.utils.book_append_sheet(wb, ws, 'Por día');
     XLSX.writeFile(wb, 'KPI_HH_'+_kpiMes+'.xlsx');
     return;
@@ -10684,13 +10700,15 @@ function kpiInforme(modo){
   var c = function(x){ return x.n ? x.n+' ('+nf(x.un)+')' : '—'; };
   var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>KPI HH '+nom+'</title><style>@page{size:A4 landscape;margin:9mm}body{font-family:Arial,sans-serif;font-size:10px;color:#1d1d1f}'+
     'h2{margin:0 0 4px}.res{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.res div{flex:1;min-width:100px;border:1px solid #ccc;border-radius:6px;padding:5px 8px}.res b{display:block;font-size:14px}'+
-    'table{width:100%;border-collapse:collapse}th{background:#1d1d1f;color:#fff;text-align:left;padding:4px;font-size:9px}td{border-bottom:1px solid #ddd;padding:3px 4px;text-align:left}tr.t td{background:#1d1d1f;color:#fff;font-weight:700}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
+    'table{width:100%;border-collapse:collapse}th{background:#1d1d1f;color:#fff;text-align:left;padding:4px;font-size:9px}td{border-bottom:1px solid #ddd;padding:3px 4px;text-align:left}tr.t td{background:#1d1d1f;color:#fff;font-weight:700}.g{border:1px solid #ddd;border-radius:6px;padding:6px 8px 4px;margin:0 0 8px;page-break-inside:avoid}.g h4{margin:0 0 4px;font-size:10.5px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
     '<h2>📈 KPI horas hombre — '+nom+'</h2><div style="color:#666">Generado '+new Date().toLocaleString('es-AR')+' · HH = operarios × jornada ('+kpiCfg().operarios+' fijos salvo cambios) · Unidades movidas = descargas + cargas'+(hayDesp?' + despachos':'')+'; los pedidos se informan pero no se suman · Nivel = un./HH contra '+kpiRefTxt(D)+' (verde 100% o más, amarillo 85-99%, rojo menos de 85%)</div>'+
     '<div class="res"><div>Descargas<b>'+nf(T.desc.n)+'</b>'+nf(T.desc.un)+' un.</div><div>Cargas<b>'+nf(T.carga.n)+'</b>'+nf(T.carga.un)+' un.</div>'+(hayDesp?'<div>Despachos<b>'+nf(T.desp.n)+'</b>'+nf(T.desp.un)+' un.</div>':'')+
     '<div>Pedidos (prep.)<b>'+nf(T.ped.n)+'</b>'+nf(T.ped.un)+' un.</div></div>'+
     '<div class="res"><div>Días<b>'+D.dias.length+'</b></div><div>Movimientos<b>'+nf(D.movsTotal)+'</b>('+T.desc.n+' desc. + '+T.carga.n+' cargas'+(hayDesp?' + '+T.desp.n+' desp.':'')+')</div><div>Mov. por día (promedio)<b>'+nf(D.movsTotal/nd,2)+'</b>'+nf(D.movsTotal)+' / '+D.dias.length+' días</div><div>Unidades movidas<b>'+nf(D.unTotal)+'</b></div><div>Horas hombre<b>'+nf(T.hh,1)+'</b></div>'+
     '<div>HH por movimiento<b>'+nf(D.movsTotal?T.hh/D.movsTotal:null,1)+'</b></div><div>Un./HH<b>'+nf(D.prom,1)+'</b></div>'+
     '<div>Nivel del mes<b style="color:'+KPI_SEM[kpiSemDe(D.stdOrigen==='mes'?null:D.nivelMes)].c+'">'+(D.stdOrigen==='mes'?'—':D.nivelMes+'%')+'</b>'+cnt.verde+' en nivel · '+cnt.amarillo+' algo bajos · '+cnt.rojo+' bajos</div></div>'+
+    kpiGrafImp(D,'unHH','Unidades por hora hombre — ritmo diario',D.std,(D.stdOrigen==='meta'?'meta ':D.stdOrigen==='hist'?'prom. meses ant. ':'promedio ')+nf(D.std,1),1)+
+    kpiGrafImp(D,'movs','Movimientos por día (descargas + cargas'+(hayDesp?' + despachos':'')+')',D.movsTotal/nd,'promedio '+nf(D.movsTotal/nd,2),0)+
     '<table><tr><th>Fecha</th><th>Descargas</th><th>Cargas</th>'+(hayDesp?'<th>Despachos</th>':'')+'<th>Pedidos (prep.)</th><th>Mov.</th><th>Un. movidas</th><th>Operarios</th><th>HH</th><th>HH por mov.</th><th>Un./HH</th><th>Nivel</th></tr>'+
     D.dias.map(function(d){ return '<tr><td>'+d.fecha+'</td><td>'+c(d.desc)+'</td><td>'+c(d.carga)+'</td>'+(hayDesp?'<td>'+c(d.desp)+'</td>':'')+'<td>'+c(d.ped)+'</td><td>'+d.movs+'</td><td><b>'+nf(d.un)+'</b></td><td>'+d.personas+(d.personasOrigen==='manual'?'*':'')+'</td><td>'+nf(d.hh,1)+'</td><td>'+nf(d.movHH,1)+'</td><td><b>'+nf(d.unHH,1)+'</b></td><td style="font-weight:700;color:'+KPI_SEM[d.sem].c+'">'+nivTxt(d)+'</td></tr>'; }).join('')+
     '<tr class="t"><td>TOTAL MES</td><td>'+c(T.desc)+'</td><td>'+c(T.carga)+'</td>'+(hayDesp?'<td>'+c(T.desp)+'</td>':'')+'<td>'+c(T.ped)+'</td><td>'+D.movsTotal+'</td><td>'+nf(D.unTotal)+'</td><td></td><td>'+nf(T.hh,1)+'</td><td>'+nf(D.movsTotal?T.hh/D.movsTotal:null,1)+'</td><td>'+nf(D.prom,1)+'</td><td>'+(D.stdOrigen==='mes'?'':D.nivelMes+'%')+'</td></tr>'+
