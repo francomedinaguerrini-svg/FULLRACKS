@@ -10431,7 +10431,7 @@ function kpiDatosMes(mes, opt){
   var nivelMes = (prom!=null && std) ? Math.round(prom/std*100) : null;
   return {dias:arr, prom:prom, std:std, stdEsMeta:esMeta, stdOrigen:stdOrigen, nivelMes:nivelMes, tot:tot, sinPersonas:0, unTotal:tot.un, movsTotal:tot.movs};
 }
-var KPI_SEM = {verde:{c:'#1c7c2c',bg:'#d1f5d9',t:'🟢 En nivel'}, amarillo:{c:'#b25000',bg:'#fff1d6',t:'🟡 Algo bajo'}, rojo:{c:'#d70015',bg:'#ffd6d9',t:'🔴 Bajo'}, gris:{c:'#86868b',bg:'#f2f2f7',t:'⚪ Sin movimientos'}};
+var KPI_SEM = {verde:{c:'#3f7d55',bg:'#f1f6f2',t:'● En nivel'}, amarillo:{c:'#8f7430',bg:'#f8f5ec',t:'● Algo bajo'}, rojo:{c:'#a95450',bg:'#f8f0ef',t:'● Bajo'}, gris:{c:'#a1a1a6',bg:'#f5f5f7',t:'○ Sin movimientos'}};
 function kpiSemDe(n){ return n==null?'gris':n>=100?'verde':n>=85?'amarillo':'rojo'; }
 function kpiRefTxt(D){ return D.stdOrigen==='meta' ? 'la meta ('+Math.round(D.std*10)/10+' un./HH)' : D.stdOrigen==='hist' ? 'el promedio de los meses anteriores ('+Math.round(D.std*10)/10+' un./HH)' : 'el promedio de este mes ('+Math.round(D.std*10)/10+' un./HH)'; }
 
@@ -10476,7 +10476,7 @@ function kpiPorQue(D, S, d){
   var dif = d.movs - S.movDia;
   var verd = Math.abs(dif) < 0.5 ? 'en el promedio' : (dif>0 ? f1(dif)+' más que el promedio' : f1(-dif)+' menos que el promedio');
   var titulo = '<b>'+d.movs+' movimientos</b> — '+verd+' ('+f1(S.movDia)+'/día).';
-  var up = '<span style="color:#1c7c2c;font-weight:700">▲</span> ', dn = '<span style="color:#d70015;font-weight:700">▼</span> ', eq = '<span style="color:#86868b">•</span> ';
+  var up = '<span style="color:'+KPI_SEM.verde.c+'">▲</span> ', dn = '<span style="color:'+KPI_SEM.rojo.c+'">▼</span> ', eq = '<span style="color:#86868b">•</span> ';
   // 1) tipo de trabajo
   var dd = d.desc.n, cc = d.carga.n + d.desp.n;
   if(dd - S.descDia >= 1) out.push(up+'Más descargas: '+dd+' (promedio '+f1(S.descDia)+').');
@@ -10515,10 +10515,10 @@ function kpiPorQue(D, S, d){
   if(!out.length) out.push(eq+'Sin una causa clara en los datos: mismo tipo de trabajo, tamaño de camión y grupos que siempre.');
   var lista = movsDia.slice().sort(function(a,b){ return String(a.inicio||a.hora).localeCompare(String(b.inicio||b.hora)); }).map(function(m){
     var t = kpiTipo(m.tipo);
-    return '<tr style="color:'+(t==='ped'?'#af52de':'#1d1d1f')+'"><td style="padding:2px 6px">'+(m.inicio||'')+(m.fin?'–'+m.fin:'')+'</td><td style="padding:2px 6px">'+m.tipo+'</td><td style="padding:2px 6px">'+(m.grupo||'')+'</td><td style="padding:2px 6px">'+(m.destino||'')+'</td><td style="padding:2px 6px;text-align:right">'+m.un.toLocaleString('es-AR')+'</td><td style="padding:2px 6px;text-align:right">'+(m.min?m.min+' min':'')+'</td></tr>'; }).join('');
-  return '<div style="padding:10px 14px;background:#f5f9ff;border-left:4px solid #0071e3;font-size:12px">'+
+    return '<tr style="color:'+(t==='ped'?'#86868b':'#1d1d1f')+'"><td style="padding:2px 6px">'+(m.inicio||'')+(m.fin?'–'+m.fin:'')+'</td><td style="padding:2px 6px">'+m.tipo+'</td><td style="padding:2px 6px">'+(m.grupo||'')+'</td><td style="padding:2px 6px">'+(m.destino||'')+'</td><td style="padding:2px 6px;text-align:right">'+m.un.toLocaleString('es-AR')+'</td><td style="padding:2px 6px;text-align:right">'+(m.min?m.min+' min':'')+'</td></tr>'; }).join('');
+  return '<div style="padding:10px 14px;background:#fafafa;border-left:3px solid #c7c7cc;font-size:12px">'+
     '<div style="margin-bottom:6px">'+titulo+'</div><div style="line-height:1.7">'+out.join('<br>')+'</div>'+
-    '<details style="margin-top:6px"><summary style="cursor:pointer;color:#0071e3">Ver los '+movsDia.length+' registros del día</summary>'+
+    '<details style="margin-top:6px"><summary style="cursor:pointer;color:#6e6e73">Ver los '+movsDia.length+' registros del día</summary>'+
     '<table style="border-collapse:collapse;font-size:11px;margin-top:4px"><tr style="color:#86868b"><td style="padding:2px 6px">Horario</td><td style="padding:2px 6px">Tipo</td><td style="padding:2px 6px">Grupo</td><td style="padding:2px 6px">Destino/origen</td><td style="padding:2px 6px;text-align:right">Un.</td><td style="padding:2px 6px;text-align:right">Duración</td></tr>'+lista+'</table></details></div>';
 }
 function kpiHtmlGrupos(D, S){
@@ -10531,14 +10531,14 @@ function kpiHtmlGrupos(D, S){
   var h = '<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left">'+
     '<tr style="background:#1d1d1f;color:#fff">'+['Grupo','Movimientos','Descargas','Cargas','Pedidos (prep.)','Unidades','% del total','Días activos','Mov. por día activo','Un. por mov.'].concat(hayMin?['Min. por mov.','Un. por hora de tarea']:[]).concat(hayPers?['Personas (prom.)','Un. por persona/día']:[]).map(function(t){ return '<th style="padding:7px 8px;white-space:nowrap">'+t+'</th>'; }).join('')+'</tr>';
   G.forEach(function(x,i){
-    var da = Object.keys(x.dias).length, col = (typeof GRUPOS_COLORES!=='undefined' && GRUPOS_COLORES[x.g]) || '#1d1d1f';
+    var da = Object.keys(x.dias).length, col = '#1d1d1f';
     var pers = x.nPers ? x.pers/x.nPers : null;
-    h += '<tr style="background:'+(i%2?'#fafafa':'#fff')+'"><td style="padding:6px 8px;font-weight:800;color:'+col+';white-space:nowrap">'+kpiGrupoNom(x.g)+'</td>'+
-      '<td style="padding:6px 8px;font-weight:700">'+x.movs+'</td><td style="padding:6px 8px">'+(x.desc||'—')+'</td><td style="padding:6px 8px">'+(x.carga||'—')+'</td><td style="padding:6px 8px;color:#af52de">'+(x.ped?x.ped+' ('+nf(x.unPed)+')':'—')+'</td>'+
-      '<td style="padding:6px 8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:8px;background:#f2f2f7;border-radius:4px"><div style="width:'+(x.un/maxUn*100)+'%;height:100%;background:'+col+';border-radius:4px"></div></div><b>'+nf(x.un)+'</b></div></td>'+
+    h += '<tr style="background:'+(i%2?'#fafafa':'#fff')+'"><td style="padding:6px 8px;font-weight:700;color:#1d1d1f;white-space:nowrap">'+kpiGrupoNom(x.g)+'</td>'+
+      '<td style="padding:6px 8px;font-weight:700">'+x.movs+'</td><td style="padding:6px 8px">'+(x.desc||'—')+'</td><td style="padding:6px 8px">'+(x.carga||'—')+'</td><td style="padding:6px 8px;color:#86868b">'+(x.ped?x.ped+' ('+nf(x.unPed)+')':'—')+'</td>'+
+      '<td style="padding:6px 8px"><div style="display:flex;align-items:center;gap:6px"><div style="width:70px;height:8px;background:#f2f2f7;border-radius:4px"><div style="width:'+(x.un/maxUn*100)+'%;height:100%;background:#b8c4d1;border-radius:4px"></div></div><b>'+nf(x.un)+'</b></div></td>'+
       '<td style="padding:6px 8px">'+nf(x.un/totUn*100,1)+'%</td><td style="padding:6px 8px">'+da+'</td><td style="padding:6px 8px;font-weight:700">'+nf(da?x.movs/da:null,1)+'</td><td style="padding:6px 8px">'+nf(x.movs?x.un/x.movs:null)+'</td>'+
-      (hayMin?'<td style="padding:6px 8px">'+nf(x.nMin?x.min/x.nMin:null)+'</td><td style="padding:6px 8px;font-weight:800;color:#0071e3">'+nf(x.min?(x.un+x.unPed)/(x.min/60):null)+'</td>':'')+
-      (hayPers?'<td style="padding:6px 8px">'+nf(pers,1)+'</td><td style="padding:6px 8px;font-weight:800;color:#0071e3">'+nf(pers&&da?x.un/(pers*da):null)+'</td>':'')+'</tr>';
+      (hayMin?'<td style="padding:6px 8px">'+nf(x.nMin?x.min/x.nMin:null)+'</td><td style="padding:6px 8px;font-weight:700">'+nf(x.min?(x.un+x.unPed)/(x.min/60):null)+'</td>':'')+
+      (hayPers?'<td style="padding:6px 8px">'+nf(pers,1)+'</td><td style="padding:6px 8px;font-weight:700">'+nf(pers&&da?x.un/(pers*da):null)+'</td>':'')+'</tr>';
   });
   h += '</table></div>';
   // lectura automática
@@ -10591,7 +10591,7 @@ function kpiRender(){
     '<label style="padding:7px 12px;background:#0071e3;color:#fff;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">📥 Cargar Excel de Productividad<input type="file" accept=".xlsx,.xls" style="display:none" onchange="kpiCargarExcel(this.files[0])"></label>'+
     (meses.length?'<select onchange="_kpiMes=this.value;kpiRender()" style="padding:7px;border:1px solid #d2d2d7;border-radius:8px;font-size:12px">'+meses.map(function(m){ return '<option value="'+m+'"'+(m===_kpiMes?' selected':'')+'>'+nomMes(m)+'</option>'; }).join('')+'</select>'+
       '<button onclick="kpiInforme(\'print\')" style="padding:7px 12px;background:#1d1d1f;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">🖨️ Informe</button>'+
-      '<button onclick="kpiInforme(\'xlsx\')" style="padding:7px 12px;background:#34c759;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">📥 Excel</button>':'')+
+      '<button onclick="kpiInforme(\'xlsx\')" style="padding:7px 12px;background:#fff;color:#1d1d1f;border:1px solid #d2d2d7;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">📥 Excel</button>':'')+
     '<button onclick="document.getElementById(\'kpi-ov\').remove()" style="padding:7px 12px;background:#fff;border:1px solid #d2d2d7;border-radius:8px;font-size:12px;cursor:pointer">Cerrar</button></div></div>';
   // configuración
   h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:12px">'+
@@ -10600,32 +10600,32 @@ function kpiRender(){
     '<span>Meta (un./HH) <input type="number" step="1" value="'+(cfg.meta||'')+'" placeholder="promedio" onchange="var c=kpiCfg();c.meta=this.value?+this.value:null;kpiSaveCfg(c);kpiRender()" style="width:80px;padding:4px;border:1px solid #d2d2d7;border-radius:6px"></span>'+
     '<span>Operarios por día <input type="number" min="1" value="'+cfg.operarios+'" onchange="var c=kpiCfg();c.operarios=+this.value||23;kpiSaveCfg(c);kpiRender()" style="width:56px;padding:4px;border:1px solid #d2d2d7;border-radius:6px"></span>'+
     '<span style="color:#86868b">Si un día fueron otros, cambialo en la tabla (queda en azul).</span>'+
-    (meses.length?'<button onclick="kpiVaciarMes()" style="margin-left:auto;padding:5px 10px;background:#ffd6d9;color:#d70015;border:none;border-radius:8px;font-size:11px;cursor:pointer">🗑️ Vaciar mes</button>':'')+'</div>';
+    (meses.length?'<button onclick="kpiVaciarMes()" style="margin-left:auto;padding:5px 10px;background:#fff;color:#a95450;border:1px solid #e5e5ea;border-radius:8px;font-size:11px;cursor:pointer">🗑️ Vaciar mes</button>':'')+'</div>';
   if(!_kpiMes){ body.innerHTML = h+'<div style="text-align:center;padding:40px;color:#86868b">Cargá el Excel que baja <b>📄 Informe</b> de Productividad para empezar. Cada carga se acumula sin duplicar.</div>'; return; }
   var D = kpiDatosMes(_kpiMes);
-  var card = function(t,v,c,sub){ return '<div style="flex:1;min-width:130px;background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#86868b;text-transform:uppercase">'+t+'</div><div style="font-size:22px;font-weight:800;color:'+(c||'#1d1d1f')+'">'+v+'</div>'+(sub?'<div style="font-size:10px;color:#86868b">'+sub+'</div>':'')+'</div>'; };
+  var card = function(t,v,c,sub){ return '<div style="flex:1;min-width:130px;background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:10px 12px"><div style="font-size:10px;color:#86868b;text-transform:uppercase">'+t+'</div><div style="font-size:21px;font-weight:600;color:'+(c||'#1d1d1f')+'">'+v+'</div>'+(sub?'<div style="font-size:10px;color:#86868b">'+sub+'</div>':'')+'</div>'; };
   var T = D.tot;
   var cnt = {verde:0,amarillo:0,rojo:0}; D.dias.forEach(function(d){ if(cnt[d.sem]!=null) cnt[d.sem]++; });
   var semMes = KPI_SEM[kpiSemDe(D.stdOrigen==='mes'?null:D.nivelMes)];
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
-    card('📥 Descargas', nf(T.desc.n), '#ff9500', nf(T.desc.un)+' un.')+
-    card('🚚 Cargas', nf(T.carga.n), '#0071e3', nf(T.carga.un)+' un.')+
-    (T.desp.n?card('📤 Despachos', nf(T.desp.n), '#0071e3', nf(T.desp.un)+' un.'):'')+
-    card('📋 Pedidos (preparación)', nf(T.ped.n), '#af52de', nf(T.ped.un)+' un. — no se suman')+'</div>';
+    card('Descargas', nf(T.desc.n), null, nf(T.desc.un)+' un.')+
+    card('Cargas', nf(T.carga.n), null, nf(T.carga.un)+' un.')+
+    (T.desp.n?card('Despachos', nf(T.desp.n), null, nf(T.desp.un)+' un.'):'')+
+    card('Pedidos (preparación)', nf(T.ped.n), null, nf(T.ped.un)+' un. — no se suman')+'</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
     card('Días trabajados', D.dias.length, null, '')+
-    card('Mov. por día (promedio)', nf(D.dias.length?D.movsTotal/D.dias.length:0,2), '#0071e3', '('+nf(T.desc.n)+' desc. + '+nf(T.carga.n)+' cargas'+(T.desp.n?' + '+nf(T.desp.n)+' desp.':'')+') / '+D.dias.length+' días')+
+    card('Mov. por día (promedio)', nf(D.dias.length?D.movsTotal/D.dias.length:0,2), null, '('+nf(T.desc.n)+' desc. + '+nf(T.carga.n)+' cargas'+(T.desp.n?' + '+nf(T.desp.n)+' desp.':'')+') / '+D.dias.length+' días')+
     card('Unidades movidas', nf(D.unTotal), null, nf(D.movsTotal)+' movimientos · '+nf(D.dias.length?D.unTotal/D.dias.length:0)+' un./día')+
     card('Horas hombre', nf(D.tot.hh,1), null, T.hReg>0?'registradas en tareas: '+nf(T.hReg,1)+' h':'')+
-    card('Unidades / HH', nf(D.prom,1), '#0071e3', 'promedio del mes')+
+    card('Unidades / HH', nf(D.prom,1), null, 'promedio del mes')+
     card('Nivel del mes', D.stdOrigen==='mes'?'—':D.nivelMes+'%', semMes.c, D.stdOrigen==='mes'?'cargá una meta para medir el mes':'contra '+kpiRefTxt(D))+
-    card('Días', '<span style="color:#1c7c2c">'+cnt.verde+'</span> · <span style="color:#b25000">'+cnt.amarillo+'</span> · <span style="color:#d70015">'+cnt.rojo+'</span>', null, '🟢 en nivel · 🟡 algo bajo · 🔴 bajo')+'</div>';
+    card('Días', cnt.verde+' · '+cnt.amarillo+' · '+cnt.rojo, null, '<span style="color:'+KPI_SEM.verde.c+'">●</span> en nivel · <span style="color:'+KPI_SEM.amarillo.c+'">●</span> algo bajo · <span style="color:'+KPI_SEM.rojo.c+'">●</span> bajo')+'</div>';
   // gráfico simple de barras un/HH
   var maxV = Math.max.apply(null, D.dias.map(function(d){ return d.unHH||0; }).concat([D.std||0,1]));
   h += '<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:12px;margin-bottom:10px"><div style="font-size:12px;font-weight:700;margin-bottom:8px">Unidades por hora hombre, día por día <span style="font-weight:400;color:#86868b">(línea = '+(D.stdOrigen==='meta'?'meta':D.stdOrigen==='hist'?'promedio meses anteriores':'promedio')+')</span></div>'+
     '<div style="position:relative;display:flex;align-items:flex-end;gap:4px;height:140px;border-bottom:1px solid #e5e5ea">'+
-    (D.std?'<div style="position:absolute;left:0;right:0;bottom:'+(D.std/maxV*100)+'%;border-top:2px dashed #86868b"></div>':'')+
-    D.dias.map(function(d){ var v=d.unHH||0, c = {verde:'#34c759',amarillo:'#ffcc00',rojo:'#ff3b30',gris:'#e5e5ea'}[d.sem];
+    (D.std?'<div style="position:absolute;left:0;right:0;bottom:'+(D.std/maxV*100)+'%;border-top:1px dashed #a1a1a6"></div>':'')+
+    D.dias.map(function(d){ var v=d.unHH||0, c = {verde:'#a9c9b3',amarillo:'#e3d6b0',rojo:'#e2b3ae',gris:'#e5e5ea'}[d.sem];
       return '<div title="'+d.fecha+': '+nf(d.unHH,1)+' un./HH" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%"><div style="font-size:9px;color:#86868b">'+(d.unHH!=null?nf(d.unHH,0):'')+'</div><div style="width:100%;max-width:34px;height:'+Math.max(2,v/maxV*100)+'%;background:'+c+';border-radius:4px 4px 0 0"></div></div>'; }).join('')+
     '</div><div style="display:flex;gap:4px">'+D.dias.map(function(d){ return '<div style="flex:1;text-align:center;font-size:9px;color:#86868b">'+d.fecha.slice(0,5)+'</div>'; }).join('')+'</div></div>';
   var S = kpiStatsMes(_kpiMes, D);
@@ -10640,17 +10640,17 @@ function kpiRender(){
       var sm = KPI_SEM[d.sem];
       var cel = function(x){ return x.n ? x.n+' <span style="color:#86868b">('+nf(x.un)+')</span>' : '<span style="color:#c7c7cc">—</span>'; };
       var ab = _kpiDiaAbierto===d.iso, dm = d.movs - S.movDia;
-      var flecha = Math.abs(dm)<0.5 ? '' : (dm>0?' <span style="color:#1c7c2c;font-size:10px">▲</span>':' <span style="color:#d70015;font-size:10px">▼</span>');
-      return '<tr onclick="if(event.target.tagName!==\'INPUT\'){_kpiDiaAbierto=(_kpiDiaAbierto===\''+d.iso+'\'?null:\''+d.iso+'\');kpiRender();}" style="cursor:pointer;background:'+(ab?'#e8f1ff':(i%2?'#fafafa':'#fff'))+'"><td style="padding:5px 8px;white-space:nowrap">'+(ab?'▾ ':'▸ ')+d.fecha+'</td>'+
+      var flecha = Math.abs(dm)<0.5 ? '' : (dm>0?' <span style="color:'+KPI_SEM.verde.c+';font-size:9px">▲</span>':' <span style="color:'+KPI_SEM.rojo.c+';font-size:9px">▼</span>');
+      return '<tr onclick="if(event.target.tagName!==\'INPUT\'){_kpiDiaAbierto=(_kpiDiaAbierto===\''+d.iso+'\'?null:\''+d.iso+'\');kpiRender();}" style="cursor:pointer;background:'+(ab?'#f2f4f7':(i%2?'#fafafa':'#fff'))+'"><td style="padding:5px 8px;white-space:nowrap">'+(ab?'▾ ':'▸ ')+d.fecha+'</td>'+
         '<td style="padding:5px 8px">'+cel(d.desc)+'</td><td style="padding:5px 8px">'+cel(d.carga)+'</td>'+(T.desp.n?'<td style="padding:5px 8px">'+cel(d.desp)+'</td>':'')+
-        '<td style="padding:5px 8px;color:#af52de">'+cel(d.ped)+'</td><td style="padding:5px 8px;font-weight:700;white-space:nowrap">'+d.movs+flecha+'</td><td style="padding:5px 8px;font-weight:700">'+nf(d.un)+'</td>'+
+        '<td style="padding:5px 8px;color:#86868b">'+cel(d.ped)+'</td><td style="padding:5px 8px;font-weight:700;white-space:nowrap">'+d.movs+flecha+'</td><td style="padding:5px 8px;font-weight:700">'+nf(d.un)+'</td>'+
         '<td style="padding:5px 8px"><input type="number" min="0" value="'+d.personas+'" title="'+(d.personasOrigen==='manual'?'Cambiado a mano (borralo para volver al fijo)':'Fijo')+'" onchange="var c=kpiCfg();c.personas[\''+d.iso+'\']=(this.value===\'\'||+this.value===c.operarios)?null:+this.value;kpiSaveCfg(c);kpiRender()" style="width:50px;padding:3px;border:'+(d.personasOrigen==='manual'?'2px solid #0071e3':'1px solid #d2d2d7')+';border-radius:6px"></td>'+
-        '<td style="padding:5px 8px">'+nf(d.hh,1)+'</td><td style="padding:5px 8px;font-weight:700">'+nf(d.movHH,1)+'</td><td style="padding:5px 8px;font-weight:800;color:#0071e3">'+nf(d.unHH,1)+'</td>'+
-        '<td style="padding:5px 8px"><span style="background:'+sm.bg+';color:'+sm.c+';font-weight:800;padding:2px 8px;border-radius:10px;white-space:nowrap">'+(d.nivel==null?sm.t:sm.t.split(' ')[0]+' '+d.nivel+'%')+'</span></td></tr>'+
+        '<td style="padding:5px 8px">'+nf(d.hh,1)+'</td><td style="padding:5px 8px;font-weight:700">'+nf(d.movHH,1)+'</td><td style="padding:5px 8px;font-weight:700">'+nf(d.unHH,1)+'</td>'+
+        '<td style="padding:5px 8px"><span style="background:'+sm.bg+';color:'+sm.c+';font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap">'+(d.nivel==null?sm.t:sm.t.split(' ')[0]+' '+d.nivel+'%')+'</span></td></tr>'+
         (ab?'<tr><td colspan="20" style="padding:0">'+kpiPorQue(D,S,d)+'</td></tr>':''); }).join('')+
     '<tr style="background:#1d1d1f;color:#fff;font-weight:700"><td style="padding:7px 8px">TOTAL MES</td><td style="padding:7px 8px">'+T.desc.n+' ('+nf(T.desc.un)+')</td><td style="padding:7px 8px">'+T.carga.n+' ('+nf(T.carga.un)+')</td>'+(T.desp.n?'<td style="padding:7px 8px">'+T.desp.n+' ('+nf(T.desp.un)+')</td>':'')+
     '<td style="padding:7px 8px">'+T.ped.n+' ('+nf(T.ped.un)+')</td><td style="padding:7px 8px">'+D.movsTotal+'</td><td style="padding:7px 8px">'+nf(D.unTotal)+'</td><td></td><td style="padding:7px 8px">'+nf(T.hh,1)+'</td><td style="padding:7px 8px">'+nf(D.movsTotal?T.hh/D.movsTotal:null,1)+'</td><td style="padding:7px 8px">'+nf(D.prom,1)+'</td><td style="padding:7px 8px">'+(D.stdOrigen==='mes'?'':D.nivelMes+'%')+'</td></tr>'+
-    '</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Unidades movidas = descargas + cargas'+(T.desp.n?' + despachos':'')+' (los pedidos son la preparación de lo que se carga: se muestran pero no se suman). HH = operarios × jornada. Nivel = un./HH del día contra '+kpiRefTxt(D)+': 🟢 100% o más · 🟡 85 a 99% · 🔴 menos de 85%.</div>';
+    '</table></div><div style="font-size:10px;color:#86868b;margin-top:6px">Unidades movidas = descargas + cargas'+(T.desp.n?' + despachos':'')+' (los pedidos son la preparación de lo que se carga: se muestran pero no se suman). HH = operarios × jornada. Nivel = un./HH del día contra '+kpiRefTxt(D)+': en nivel 100% o más · algo bajo 85 a 99% · bajo menos de 85%.</div>';
   body.innerHTML = h;
 }
 function kpiInforme(modo){
@@ -10686,8 +10686,8 @@ function kpiInforme(modo){
     'h2{margin:0 0 4px}.res{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.res div{flex:1;min-width:100px;border:1px solid #ccc;border-radius:6px;padding:5px 8px}.res b{display:block;font-size:14px}'+
     'table{width:100%;border-collapse:collapse}th{background:#1d1d1f;color:#fff;text-align:left;padding:4px;font-size:9px}td{border-bottom:1px solid #ddd;padding:3px 4px;text-align:left}tr.t td{background:#1d1d1f;color:#fff;font-weight:700}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
     '<h2>📈 KPI horas hombre — '+nom+'</h2><div style="color:#666">Generado '+new Date().toLocaleString('es-AR')+' · HH = operarios × jornada ('+kpiCfg().operarios+' fijos salvo cambios) · Unidades movidas = descargas + cargas'+(hayDesp?' + despachos':'')+'; los pedidos se informan pero no se suman · Nivel = un./HH contra '+kpiRefTxt(D)+' (verde 100% o más, amarillo 85-99%, rojo menos de 85%)</div>'+
-    '<div class="res"><div>📥 Descargas<b>'+nf(T.desc.n)+'</b>'+nf(T.desc.un)+' un.</div><div>🚚 Cargas<b>'+nf(T.carga.n)+'</b>'+nf(T.carga.un)+' un.</div>'+(hayDesp?'<div>📤 Despachos<b>'+nf(T.desp.n)+'</b>'+nf(T.desp.un)+' un.</div>':'')+
-    '<div>📋 Pedidos (prep.)<b>'+nf(T.ped.n)+'</b>'+nf(T.ped.un)+' un.</div></div>'+
+    '<div class="res"><div>Descargas<b>'+nf(T.desc.n)+'</b>'+nf(T.desc.un)+' un.</div><div>Cargas<b>'+nf(T.carga.n)+'</b>'+nf(T.carga.un)+' un.</div>'+(hayDesp?'<div>Despachos<b>'+nf(T.desp.n)+'</b>'+nf(T.desp.un)+' un.</div>':'')+
+    '<div>Pedidos (prep.)<b>'+nf(T.ped.n)+'</b>'+nf(T.ped.un)+' un.</div></div>'+
     '<div class="res"><div>Días<b>'+D.dias.length+'</b></div><div>Movimientos<b>'+nf(D.movsTotal)+'</b>('+T.desc.n+' desc. + '+T.carga.n+' cargas'+(hayDesp?' + '+T.desp.n+' desp.':'')+')</div><div>Mov. por día (promedio)<b>'+nf(D.movsTotal/nd,2)+'</b>'+nf(D.movsTotal)+' / '+D.dias.length+' días</div><div>Unidades movidas<b>'+nf(D.unTotal)+'</b></div><div>Horas hombre<b>'+nf(T.hh,1)+'</b></div>'+
     '<div>HH por movimiento<b>'+nf(D.movsTotal?T.hh/D.movsTotal:null,1)+'</b></div><div>Un./HH<b>'+nf(D.prom,1)+'</b></div>'+
     '<div>Nivel del mes<b style="color:'+KPI_SEM[kpiSemDe(D.stdOrigen==='mes'?null:D.nivelMes)].c+'">'+(D.stdOrigen==='mes'?'—':D.nivelMes+'%')+'</b>'+cnt.verde+' en nivel · '+cnt.amarillo+' algo bajos · '+cnt.rojo+' bajos</div></div>'+
