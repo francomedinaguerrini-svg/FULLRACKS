@@ -10396,7 +10396,7 @@ function kpiDatosMes(mes, opt){
   kpiMovs().filter(function(m){ return m.iso.slice(0,7)===mes; }).forEach(function(m){
     var d = dias[m.iso] || (dias[m.iso] = {iso:m.iso, fecha:m.fecha, desc:{n:0,un:0}, carga:{n:0,un:0}, desp:{n:0,un:0}, ped:{n:0,un:0}, otro:{n:0,un:0}, min:0});
     var t = kpiTipo(m.tipo);
-    if(m.un>0 || t!=='otro'){ d[t].n++; d[t].un += m.un; } else d.otro.n++;
+    if(m.un>0 || t!=='otro'){ d[t].n++; d[t].un += m.un; if(m.min>0){ d[t].min=(d[t].min||0)+m.min; d[t].nMin=(d[t].nMin||0)+1; } } else d.otro.n++;
     d.min += m.min||0;
   });
   var arr = Object.values(dias).sort(function(a,b){ return a.iso.localeCompare(b.iso); });
@@ -10413,9 +10413,10 @@ function kpiDatosMes(mes, opt){
     d.movHH = d.movs ? d.hh/d.movs : null;   // horas hombre por movimiento
     d.hReg = Math.round(d.min/6)/10;                          // horas registradas en las tareas
   });
-  var tot = {un:0, hh:0, movs:0, hReg:0, desc:{n:0,un:0}, carga:{n:0,un:0}, desp:{n:0,un:0}, ped:{n:0,un:0}};
+  var tot = {un:0, hh:0, movs:0, hReg:0, desc:{n:0,un:0,min:0,nMin:0}, carga:{n:0,un:0,min:0,nMin:0}, desp:{n:0,un:0,min:0,nMin:0}, ped:{n:0,un:0,min:0,nMin:0}};
   arr.forEach(function(d){ tot.un+=d.un; tot.hh+=d.hh; tot.movs+=d.movs; tot.hReg+=d.hReg;
-    ['desc','carga','desp','ped'].forEach(function(t){ tot[t].n+=d[t].n; tot[t].un+=d[t].un; }); });
+    ['desc','carga','desp','ped'].forEach(function(t){ tot[t].n+=d[t].n; tot[t].un+=d[t].un; tot[t].min+=d[t].min||0; tot[t].nMin+=d[t].nMin||0; }); });
+  ['desc','carga','desp','ped'].forEach(function(t){ var x=tot[t]; x.prom = x.nMin ? x.min/x.nMin : null; });
   var prom = tot.hh ? tot.un/tot.hh : null;
   var esMeta = (cfg.meta!=null && cfg.meta!=='' && +cfg.meta>0), std, stdOrigen;
   if(esMeta){ std = +cfg.meta; stdOrigen = 'meta'; }
@@ -10582,6 +10583,8 @@ function kpiHtmlGrupos(D, S){
   notas.push('Un. trabajadas = descargas + cargas + pedidos que preparó cada grupo. Así el que prepara (pedidos) no queda abajo del que carga.');
   return h + '<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:10px 14px;margin-top:8px;font-size:12px;line-height:1.7">'+notas.join('<br>')+'</div>';
 }
+function kpiDurTxt(x){ if(!x || x.prom==null) return 'sin duración cargada'; var m=Math.round(x.prom); return (m>=60 ? Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min' : m+' min')+' promedio'; }
+function kpiDurCorto(x){ if(!x || x.prom==null) return '—'; var m=Math.round(x.prom); return m>=60 ? Math.floor(m/60)+' h '+String(m%60).padStart(2,'0') : m+' min'; }
 function kpiVaciarMes(){
   if(!_kpiMes) return;
   if(!confirm('¿Borrar los movimientos cargados de este mes? (después volvés a cargar el Excel limpio)')) return;
@@ -10628,10 +10631,10 @@ function kpiRender(){
   var cnt = {verde:0,amarillo:0,rojo:0}; D.dias.forEach(function(d){ if(cnt[d.sem]!=null) cnt[d.sem]++; });
   var semMes = KPI_SEM[kpiSemDe(D.stdOrigen==='mes'?null:D.nivelMes)];
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
-    card('Descargas', nf(T.desc.n), null, nf(T.desc.un)+' un.')+
-    card('Cargas', nf(T.carga.n), null, nf(T.carga.un)+' un.')+
-    (T.desp.n?card('Despachos', nf(T.desp.n), null, nf(T.desp.un)+' un.'):'')+
-    card('Pedidos (preparación)', nf(T.ped.n), null, nf(T.ped.un)+' un. — no se suman')+'</div>';
+    card('Descargas', nf(T.desc.n), null, nf(T.desc.un)+' un. · ⏱ '+kpiDurTxt(T.desc))+
+    card('Cargas', nf(T.carga.n), null, nf(T.carga.un)+' un. · ⏱ '+kpiDurTxt(T.carga))+
+    (T.desp.n?card('Despachos', nf(T.desp.n), null, nf(T.desp.un)+' un. · ⏱ '+kpiDurTxt(T.desp)):'')+
+    card('Pedidos (preparación)', nf(T.ped.n), null, nf(T.ped.un)+' un. (no se suman) · ⏱ '+kpiDurTxt(T.ped))+'</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
     card('Días trabajados', D.dias.length, null, '')+
     card('Mov. por día (promedio)', nf(D.dias.length?D.movsTotal/D.dias.length:0,2), null, '('+nf(T.desc.n)+' desc. + '+nf(T.carga.n)+' cargas'+(T.desp.n?' + '+nf(T.desp.n)+' desp.':'')+') / '+D.dias.length+' días')+
@@ -10696,9 +10699,9 @@ function kpiInforme(modo){
   var r1 = function(v){ return v==null?'':Math.round(v*10)/10; }, r2 = function(v){ return v==null?'':Math.round(v*100)/100; };
   var hayDesp = T.desp.n>0, nd = D.dias.length||1;
   if(modo==='xlsx'){
-    var res = [['KPI HORAS HOMBRE — '+nom.toUpperCase()],[],['','Cantidad','Unidades'],
-      ['Descargas',T.desc.n,T.desc.un],['Cargas',T.carga.n,T.carga.un]].concat(hayDesp?[['Despachos',T.desp.n,T.desp.un]]:[]).concat([
-      ['Pedidos (preparación, no se suman)',T.ped.n,T.ped.un],[],
+    var res = [['KPI HORAS HOMBRE — '+nom.toUpperCase()],[],['','Cantidad','Unidades','Tiempo promedio (min)','Registros con duración'],
+      ['Descargas',T.desc.n,T.desc.un,r1(T.desc.prom),T.desc.nMin],['Cargas',T.carga.n,T.carga.un,r1(T.carga.prom),T.carga.nMin]].concat(hayDesp?[['Despachos',T.desp.n,T.desp.un,r1(T.desp.prom),T.desp.nMin]]:[]).concat([
+      ['Pedidos (preparación, no se suman)',T.ped.n,T.ped.un,r1(T.ped.prom),T.ped.nMin],[],
       ['Días trabajados',D.dias.length],['Movimientos (sin pedidos)',D.movsTotal],['Movimientos por día (promedio)',r2(D.movsTotal/nd)],
       ['Unidades movidas (desc.+cargas'+(hayDesp?'+desp.':'')+')',D.unTotal],['Operarios por día (fijo)',kpiCfg().operarios],['Horas hombre',r1(T.hh)],['Horas registradas en tareas',r1(T.hReg)],
       ['Horas hombre por movimiento',r1(D.movsTotal?T.hh/D.movsTotal:null)],['Unidades por HH',r1(D.prom)],['Referencia (un./HH)',r1(D.std),kpiRefTxt(D)],
@@ -10709,7 +10712,7 @@ function kpiInforme(modo){
       return [d.fecha,d.desc.n,d.desc.un,d.carga.n,d.carga.un].concat(hayDesp?[d.desp.n,d.desp.un]:[]).concat([d.ped.n,d.ped.un,d.movs,d.un,d.personas,d.jornada,d.hh,r1(d.movHH),r1(d.unHH),nivTxt(d),d.unHH==null?'':'█'.repeat(Math.max(0,Math.round(d.unHH/(maxR||1)*30)))]); }));
     det.push(['TOTAL MES',T.desc.n,T.desc.un,T.carga.n,T.carga.un].concat(hayDesp?[T.desp.n,T.desp.un]:[]).concat([T.ped.n,T.ped.un,D.movsTotal,D.unTotal,'','',r1(T.hh),r1(D.movsTotal?T.hh/D.movsTotal:null),r1(D.prom),D.stdOrigen==='mes'?'':D.nivelMes+'%']));
     var wb = XLSX.utils.book_new();
-    var w1 = XLSX.utils.aoa_to_sheet(res); w1['!cols']=[{wch:42},{wch:12},{wch:12}];
+    var w1 = XLSX.utils.aoa_to_sheet(res); w1['!cols']=[{wch:42},{wch:12},{wch:12},{wch:20},{wch:22}];
     XLSX.utils.book_append_sheet(wb, w1, 'Resumen');
     var ws = XLSX.utils.aoa_to_sheet(det); ws['!cols']=cab.map(function(c){ return {wch:c==='RITMO (UN./HH)'?34:12}; });
     XLSX.utils.book_append_sheet(wb, ws, 'Por día');
@@ -10722,8 +10725,8 @@ function kpiInforme(modo){
     'h2{margin:0 0 4px}.res{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.res div{flex:1;min-width:100px;border:1px solid #ccc;border-radius:6px;padding:5px 8px}.res b{display:block;font-size:14px}'+
     'table{width:100%;border-collapse:collapse}th{background:#1d1d1f;color:#fff;text-align:left;padding:4px;font-size:9px}td{border-bottom:1px solid #ddd;padding:3px 4px;text-align:left}tr.t td{background:#1d1d1f;color:#fff;font-weight:700}.g{border:1px solid #ddd;border-radius:6px;padding:6px 8px 4px;margin:0 0 8px;page-break-inside:avoid}.g h4{margin:0 0 4px;font-size:10.5px}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+
     '<h2>📈 KPI horas hombre — '+nom+'</h2><div style="color:#666">Generado '+new Date().toLocaleString('es-AR')+' · HH = operarios × jornada ('+kpiCfg().operarios+' fijos salvo cambios) · Unidades movidas = descargas + cargas'+(hayDesp?' + despachos':'')+'; los pedidos se informan pero no se suman · Nivel = un./HH contra '+kpiRefTxt(D)+' (verde 100% o más, amarillo 85-99%, rojo menos de 85%)</div>'+
-    '<div class="res"><div>Descargas<b>'+nf(T.desc.n)+'</b>'+nf(T.desc.un)+' un.</div><div>Cargas<b>'+nf(T.carga.n)+'</b>'+nf(T.carga.un)+' un.</div>'+(hayDesp?'<div>Despachos<b>'+nf(T.desp.n)+'</b>'+nf(T.desp.un)+' un.</div>':'')+
-    '<div>Pedidos (prep.)<b>'+nf(T.ped.n)+'</b>'+nf(T.ped.un)+' un.</div></div>'+
+    '<div class="res"><div>Descargas<b>'+nf(T.desc.n)+'</b>'+nf(T.desc.un)+' un. · ⏱ '+kpiDurTxt(T.desc)+'</div><div>Cargas<b>'+nf(T.carga.n)+'</b>'+nf(T.carga.un)+' un. · ⏱ '+kpiDurTxt(T.carga)+'</div>'+(hayDesp?'<div>Despachos<b>'+nf(T.desp.n)+'</b>'+nf(T.desp.un)+' un. · ⏱ '+kpiDurTxt(T.desp)+'</div>':'')+
+    '<div>Pedidos (prep.)<b>'+nf(T.ped.n)+'</b>'+nf(T.ped.un)+' un. · ⏱ '+kpiDurTxt(T.ped)+'</div></div>'+
     '<div class="res"><div>Días<b>'+D.dias.length+'</b></div><div>Movimientos<b>'+nf(D.movsTotal)+'</b>('+T.desc.n+' desc. + '+T.carga.n+' cargas'+(hayDesp?' + '+T.desp.n+' desp.':'')+')</div><div>Mov. por día (promedio)<b>'+nf(D.movsTotal/nd,2)+'</b>'+nf(D.movsTotal)+' / '+D.dias.length+' días</div><div>Unidades movidas<b>'+nf(D.unTotal)+'</b></div><div>Horas hombre<b>'+nf(T.hh,1)+'</b></div>'+
     '<div>HH por movimiento<b>'+nf(D.movsTotal?T.hh/D.movsTotal:null,1)+'</b></div><div>Un./HH<b>'+nf(D.prom,1)+'</b></div>'+
     '<div>Nivel del mes<b style="color:'+KPI_SEM[kpiSemDe(D.stdOrigen==='mes'?null:D.nivelMes)].c+'">'+(D.stdOrigen==='mes'?'—':D.nivelMes+'%')+'</b>'+cnt.verde+' en nivel · '+cnt.amarillo+' algo bajos · '+cnt.rojo+' bajos</div></div>'+
