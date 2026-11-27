@@ -19581,6 +19581,17 @@ details.adv[open]>summary{margin-bottom:12px}
 
 .cell.pos{background:#eadcc6} .cell.rk,.cell.rkx{background:#d5e2ee;opacity:1} .grid .cell.occ{background:#a8743f} .grid .cell.occ.ocr{background:#2f6596} .grid .cell.occ.mine{outline:2px solid #111;outline-offset:-1px}
 .pct.ok,.pct.mid,.pct.hi{color:var(--fg)}
+.kstrip{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.82rem;align-items:baseline}.kstrip span{white-space:nowrap}.kstrip b{font-family:var(--mono);font-size:1rem;font-weight:600}.kstrip .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.kmore{margin-top:6px;font-size:.75rem}.kmore summary{cursor:pointer;color:var(--muted)}.kmore .kpis{margin-top:8px}
+header.top{gap:8px 24px} header.top h1{font-size:1.5rem}
+#relev .rv-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+#relev .rv-tabs button{font-size:1rem;padding:8px 22px}
+#relev .rv-sum{font-size:.82rem;color:var(--muted)} #relev .rv-sum b{color:var(--fg);font-family:var(--mono)}
+#relev table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:8px} #relev th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--line);padding:6px 6px}
+#relev td{border-bottom:1px solid var(--line);padding:6px 6px;vertical-align:middle} #relev tr.ok td{background:color-mix(in srgb,var(--c1) 6%,transparent)}
+#relev input.rvpos{width:100%;min-width:180px;font-family:var(--mono);padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)} #relev input.rvpos:focus{outline:2px solid var(--c1);border-color:var(--c1)}
+#relev .tag{display:inline-block;font-size:.68rem;padding:1px 6px;border-radius:8px;background:var(--floor);white-space:nowrap}
+details.adv.panel>summary{font-size:1rem}
 .cell.sel{background:#7f97ae}
 .rotov.rot-ok,.rotov.rot-mid,.rotov.rot-hi{background:rgb(70 80 95 / var(--a))}
 .ficha-grid .cell.pos{background:#eadcc6} .ficha-grid .cell.rk{background:#d5e2ee}
@@ -19607,7 +19618,7 @@ details.adv[open]>summary{margin-bottom:12px}
     <div>
       <div class="lbl">Halpern Neumáticos · Depósito Mendoza</div>
       <h1>Plano de nave</h1>
-      <div class="sub">Cada bloque tiene 3 lados (Norte, calle, Sur) armados en líneas de pallets o de racks a su medida real. Pallets de a 2 con pasada humana de 0,5 m (Sur 18 líneas, Norte 14). Racks a lo ancho: Sur 11, Norte 9; a lo largo en filas de a 2 espalda con espalda con calle transversal de 3,5 m entre pares (8 filas por bloque). Cada cuadrado es un lugar: un pallet o una pila de racks. Tocá un bloque para ver su ficha, su stock y armar su distribución.</div>
+      <div class="sub" hidden>Cada bloque tiene 3 lados (Norte, calle, Sur) armados en líneas de pallets o de racks a su medida real. Pallets de a 2 con pasada humana de 0,5 m (Sur 18 líneas, Norte 14). Racks a lo ancho: Sur 11, Norte 9; a lo largo en filas de a 2 espalda con espalda con calle transversal de 3,5 m entre pares (8 filas por bloque). Cada cuadrado es un lugar: un pallet o una pila de racks. Tocá un bloque para ver su ficha, su stock y armar su distribución.</div>
     </div>
     <div class="kpis" id="kpis"></div>
     <button type="button" class="btn pri" id="infBtn" hidden>📄 Informe PDF</button>
@@ -19636,6 +19647,8 @@ details.adv[open]>summary{margin-bottom:12px}
     <span class="legend" id="ocuLegend"><span><i class="sw" style="border:3px solid #8e44c9"></i>Coincide con la búsqueda / pedido</span><span class="note">Ocupado = lo que relevaste y cargaste en el plano</span></span>
   </div>
   <section class="plan" aria-label="Plano de la nave"><div class="nave" id="nave"></div></section>
+  <section class="panel" id="relev"></section>
+  <details class="adv panel" id="armadoDet"><summary>⚙️ Armado del bloque y ajustes de la nave</summary>
   <div class="grid2">
     <section class="panel" id="ficha"></section>
     <section class="panel"><details class="adv"><summary>⚙️ Ajustes avanzados</summary><div style="display:flex;flex-direction:column;gap:14px">
@@ -19649,7 +19662,8 @@ details.adv[open]>summary{margin-bottom:12px}
       </div>
     </div></details></section>
   </div>
-  <section class="panel" id="opsPanel" hidden>
+  </details>
+  <section class="panel" id="opsPanel" hidden><details class="adv"><summary>🧰 Más herramientas · pendientes, buscar, mover, rotación, pedidos</summary>
     <div class="ph"><h2>Operaciones</h2><span class="note" id="opsInfo"></span></div>
     <div class="cod" id="codCard"></div>
     <div class="op" id="rotCard" style="margin-bottom:12px"></div>
@@ -19674,7 +19688,7 @@ details.adv[open]>summary{margin-bottom:12px}
     </div>
     <div id="opsOut"></div>
     <div id="reubOut"></div>
-  </section>
+  </details></section>
   <datalist id="codigos"></datalist>
 
 </div>
@@ -19759,7 +19773,7 @@ function bandas(H){const t=ZS.reduce((a,z)=>a+S.lados[z].ancho,0),h=z=>H*S.lados
 
 // ===== Conexión con el WMS =====
 const API=(()=>{try{return window.parent!==window&&parent.WMS_API?parent.WMS_API:null}catch(e){return null}})();
-let PENDF='';
+let PENDF='', RZ='sur';
 let hl=new Set(), vista='cfg', OCC=null, pendRep=null, movArt=null, PED=null, UBSEL=null, ZAUTO='sur';
 const artDe=a=>API?API.data().find(r=>String(r.art)===String(a)):null;
 try{vista=localStorage.getItem('wms_plano_vista')||(API?'ocu':'cfg')}catch(e){}
@@ -20185,7 +20199,17 @@ function renderKpis(){
     if(OCC.sinDato)items.push(['Sin max_pos',OCC.sinDato,OCC.sinDatoArts+' arts auto/camioneta sin cubiertas por pallet']);
     if(OCC.neg)items.push(['Negativos',OCC.neg,OCC.negArts+' arts en negativo en la ficha']);
     if(OCC.dif)items.push(['Registrado de más',OCC.dif,OCC.difArts+' arts con más en rack/puntera que en la ficha']);}
-  document.getElementById('kpis').innerHTML=items.map(([l,v,s])=>`<div class="kpi"><div class="lbl">${l}</div><div class="v">${typeof v==='number'?fmt(v):v}</div><div class="s">${s}</div></div>`).join('');
+  const full=items.map(([l,v,s])=>`<div class="kpi"><div class="lbl">${l}</div><div class="v">${typeof v==='number'?fmt(v):v}</div><div class="s">${s}</div></div>`).join('');
+  if(!OCC){document.getElementById('kpis').innerHTML=full;return}
+  let oP=0,oR=0;ubIndex();Object.keys(IDX).forEach(key=>{const [bb,z,c]=key.split('|'),B=blk_(+bb);if(!B)return;if(colT(B,z,+c)==='R')oR++;else oP++});
+  const tot=OCC.cod.arts+OCC.pendList.length,u=oP+oR;
+  document.getElementById('kpis').innerHTML=`<div class="kstrip">
+    <span><i class="sw" style="background:#a8743f"></i>Pallets <b>${fmt(oP)}</b> ocup. · <b>${fmt(Math.max(0,pP-oP))}</b> libres <span class="note">de ${fmt(pP)}</span></span>
+    <span><i class="sw" style="background:#2f6596"></i>Racks <b>${fmt(oR)}</b> ocup. · <b>${fmt(Math.max(0,pR-oR))}</b> libres <span class="note">de ${fmt(pR)} pilas</span></span>
+    <span>Ocupación <b>${pos?Math.round(u/pos*100):0}%</b></span>
+    <span>Relevado <b>${fmt(OCC.cod.arts)}</b> de ${fmt(tot)} arts <b>${tot?Math.round(OCC.cod.arts/tot*100):0}%</b></span>
+    <span>Ficha <b>${fmt(OCC.total)}</b> un.</span><span>A reubicar <b>${fmt(OCC.fuera.stock)}</b></span><span>Sin ubicación <b>${fmt(OCC.sin.stock)}</b></span></div>
+    <details class="kmore"><summary>Ver todos los indicadores</summary><div class="kpis">${full}</div></details>`;
 }
 function fichaStockHTML(n){
   if(!OCC)return '';const o=OCC.b[n],b=S.blocks.find(x=>x.n===n),oc=ocBlock(n),k=cuenta(b);
@@ -20264,7 +20288,7 @@ function renderCfgs(){
 }
 function renderVista(){const bar=document.getElementById('vistaBar');bar.hidden=!API;document.getElementById('infBtn').hidden=!API;document.querySelectorAll('[data-vista]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.vista===vista));document.getElementById('ocuLegend').hidden=vista!=='ocu';{const rl=document.getElementById('rotLegend');if(rl){rl.hidden=vista!=='rot';if(vista==='rot'&&OCC)rl.querySelector('[data-rl]').textContent=`Rotación total ${fmt(RP.tot)} un./mes · en bloques ${pctR(rotPct(S.blocks.reduce((a,b)=>a+rotB(b.n),0)))} · Mapa Racks ${pctR(rotPct(RP.rack))} · punteras ${pctR(rotPct(RP.punt))}${RP.fuera?' · fuera del plano '+pctR(rotPct(RP.fuera)):''}`}}
   document.getElementById('opsPanel').hidden=!API;if(API){document.getElementById('codigos').innerHTML=codigosDestino().map(c=>`<option value="${esc(c)}">`).join('');document.getElementById('opsInfo').textContent=fmt(API.data().length)+' artículos en el WMS'}}
-function renderAll(){renderVista();renderCod();renderRot();renderReub();renderPedidos();renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
+function renderAll(){renderVista();renderRelev();renderCod();renderRot();renderReub();renderPedidos();renderKpis();renderNave();renderFicha();renderNaveDims();renderCfgs()}
 window.planoRefrescar=function(){calcOcc();renderAll()};
 // ----- Para la recepción de descargas del WMS -----
 window.planoBloques=function(){return S.blocks.map(b=>b.n)};
@@ -20330,6 +20354,57 @@ window.planoResumen=function(){
     rackPos:S.rackPos,rackOcc,pedidos:API?pedidosAbiertos().length:0};
 };
 
+
+// ===== Relevamiento: cargar lo anotado en la hoja, medio bloque por medio bloque =====
+const cortoDe=code=>code.replace(/^\d+[NCS]-/,'');
+function parsePos(txt,n,z){const out=[],bad=[];
+  String(txt||'').toUpperCase().split(/[\s,;]+/).filter(Boolean).forEach(t=>{
+    let m;
+    if(/^\d+[NCS]-\d{1,2}-\d{1,2}$/.test(t)){out.push(t.replace(/-(\d)(?=-|$)/g,'-0$1'));return}
+    if((m=t.match(/^(\d{1,2})[-\/.](\d{1,2})A(\d{1,2})$/))){const c=+m[1],a=+m[2],b=+m[3];for(let r=Math.min(a,b);r<=Math.max(a,b);r++)out.push(codigo(n,z,c,r));return}
+    if((m=t.match(/^(\d{1,2})[-\/.](\d{1,2})$/))){out.push(codigo(n,z,+m[1],+m[2]));return}
+    bad.push(t)});
+  return {codes:[...new Set(out)],bad}}
+function enLado(art,n,z){const U=UB[String(art)];return U?(U.u||[]).filter(u=>u.b===n&&u.z===z).map(u=>codigo(u.b,u.z,u.c,u.r)):[]}
+function renderRelev(){
+  const el=document.getElementById('relev');if(!el)return;
+  if(!API||!OCC){el.innerHTML='';el.hidden=true;return}el.hidden=false;
+  const b=blk_(sel)||S.blocks[0],n=b.n,k=cuenta(b);
+  const zs=['sur','norte'].concat(k.calle.pos?['calle']:[]);if(!zs.includes(RZ))RZ='sur';
+  const o=OCC.b[n][RZ],cap=k[RZ].pos,occ=o.codPos,libres=Math.max(0,cap-occ);
+  const seen=new Set(),arts=(o.arts||[]).filter(x=>{const a=String(x.r.art);if(seen.has(a))return false;seen.add(a);return true});
+  const filas=arts.map(x=>{const r=x.r,art=String(r.art),aqui=enLado(art,n,RZ),U=UB[art],tot=U?U.u.length:0,resto=OCC.resto[art]||x.u||0,al=U&&U.alm?U.alm:almDe(r),need=necesita(r,resto,al);
+    return {r,art,aqui,tot,otros:tot-aqui.length,resto,al,need,ok:need!=null?tot>=need:aqui.length>0}}).sort((a,b)=>(a.ok-b.ok)||(b.resto-a.resto));
+  const hechos=filas.filter(f=>f.ok).length;
+  el.innerHTML=`<div class="rv-head"><div><h2 style="margin:0">Relevar bloque ${n}</h2><div class="rv-sum">${resumenLado(b,RZ)} · <b>${fmt(cap)}</b> lugares · <b>${fmt(occ)}</b> ocupados · <b>${fmt(libres)}</b> libres · <b>${cap?Math.round(occ/cap*100):0}%</b> · ficha: <b>${hechos}</b> de <b>${filas.length}</b> artículos cargados</div></div>
+    <div class="seg rv-tabs" role="group">${zs.map(z=>`<button type="button" class="C1" data-rz="${z}" aria-pressed="${RZ===z}">${z==='calle'?'Calle':ZN[z]} (${n}${ZL[z]})</button>`).join('')}</div>
+    <div style="display:flex;gap:6px"><button type="button" class="btn" data-hoja="${n}|${RZ}">🖨️ Hoja ${n}${ZL[RZ]}</button><button type="button" class="btn" data-volver="1">▲ Plano</button></div></div>
+    <div class="note" style="margin-top:6px">Tipeá las posiciones como las anotaste en la hoja (columna-fila), separadas por espacio: <span class="tag">01-01 01-02 3-5</span> · varias filas seguidas de una columna: <span class="tag">3-1a6</span> = columna 3, filas 1 a 6. Para sacar una, borrala del casillero.</div>
+    <table><thead><tr><th>Artículo</th><th>Según ficha</th><th>Stock</th><th>Necesita</th><th style="width:38%">Posiciones en ${n}${ZL[RZ]}</th><th></th></tr></thead><tbody>
+    ${filas.map(f=>{const r=f.r;return `<tr class="${f.ok?'ok':''}"><td><b>${esc(f.art)}</b> ${esc(r.med||'')} ${esc(r.diseno||'')}<div class="meta" style="font-size:.72rem;color:var(--muted)">${esc(r.prov||'')}</div></td>
+      <td><span class="tag">📍 ${esc(r.bloque||'—')}</span></td><td class="num">${fmt(f.resto)}</td>
+      <td class="num">${f.need==null?'<span class="bad">sin max_pos</span>':fmt(f.need)+' '+(f.al==='PALLET'?'pallet'+(f.need===1?'':'s'):'pila'+(f.need===1?'':'s'))}</td>
+      <td><input class="rvpos" data-rv="${esc(f.art)}" value="${esc(f.aqui.map(cortoDe).join(' '))}" placeholder="ej: 01-01 01-02" autocomplete="off"></td>
+      <td style="white-space:nowrap">${f.ok?'✅':(f.need!=null&&f.tot?'faltan '+fmt(f.need-f.tot):'')}${f.otros?` <span class="tag" title="Tiene posiciones en otros lugares">+${f.otros} en otro lado</span>`:''}</td></tr>`}).join('')||`<tr><td colspan="6" class="note">La ficha de pila no tiene artículos en ${n}${ZL[RZ]}. Si encontraste algo, agregalo abajo.</td></tr>`}
+    <tr><td><input id="rvNuevoArt" list="artsList" placeholder="Otro artículo que encontré acá (código)" style="width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)"></td><td colspan="3" class="note">Se agrega a ${n}${ZL[RZ]} aunque la ficha diga otro lugar.</td>
+      <td><input class="rvpos" id="rvNuevoPos" placeholder="posiciones" autocomplete="off"></td><td></td></tr>
+    </tbody></table>
+    <div class="foot" style="justify-content:flex-end;margin-top:8px"><span class="note" id="rvMsg"></span><button type="button" class="btn pri" id="rvGuardar" style="font-size:1rem;padding:9px 26px">💾 Guardar ${n}${ZL[RZ]}</button></div>`;
+}
+function guardarRelev(){
+  const n=sel,z=RZ,errs=[];let add=0,del=0;
+  const tareas=[...document.querySelectorAll('#relev input[data-rv]')].map(i=>({art:i.dataset.rv,txt:i.value}));
+  const na=v('rvNuevoArt'),np=v('rvNuevoPos');
+  if(na){const r=artDe(na);if(!r)errs.push(na+': no existe ese artículo');else if(np)tareas.push({art:String(r.art),txt:(enLado(r.art,n,z).map(cortoDe).join(' ')+' '+np)});else errs.push(na+': faltan las posiciones')}
+  // primero se sacan las que ya no están (así se pueden intercambiar lugares entre artículos)
+  const plan=tareas.map(t=>{const p=parsePos(t.txt,n,z);p.bad.forEach(x=>errs.push(t.art+': "'+x+'" no se entiende'));const ya=enLado(t.art,n,z);return {art:t.art,want:p.codes,ya}});
+  plan.forEach(t=>t.ya.filter(c=>!t.want.includes(c)).forEach(c=>{sacarCodigo(t.art,c);del++}));
+  plan.forEach(t=>{const nuevos=t.want.filter(c=>!t.ya.includes(c));if(!nuevos.length)return;const r=asignar(t.art,nuevos);add+=r.ok.length;r.err.forEach(e=>errs.push(t.art+' · '+e))});
+  calcOcc();renderAll();
+  const txt=(add||del?`${n}${ZL[z]} guardado: ${add} posición(es) cargada(s)${del?', '+del+' sacada(s)':''}`:'No había cambios')+(errs.length?' · ⚠️ '+errs.join(' · '):'');
+  const m=document.getElementById('rvMsg');if(m){m.textContent=txt;m.style.color=errs.length?'#a95450':''}
+  API.toast(errs.length?'Guardado con avisos: revisá debajo de la tabla':txt);
+}
 // ===== Hojas para relevar a mano (medio bloque, bloque, nave) =====
 const HOJA_CSS='@page{size:A4 landscape;margin:8mm}body{font-family:Arial,sans-serif;color:#111;font-size:10px;margin:0}h1{font-size:16px;margin:0}h2{font-size:12px;margin:8px 0 4px}'+
   '.top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:4px;margin-bottom:6px}.firma{font-size:11px}'+
@@ -20486,6 +20561,8 @@ document.addEventListener('click',e=>{
     if(id==='infBtn')return API.imprimir(planoInformeHTML());
     if(id==='hojaNave')return API.imprimir(hojaNaveHTML());
     if(id==='vaciarPlano')return vaciarTodo();
+    if(id==='rvGuardar')return guardarRelev();
+    const rz=e.target.closest('[data-rz]'); if(rz){RZ=rz.dataset.rz;return renderRelev()}
     const hj=e.target.closest('[data-hoja]'); if(hj){const [n,z]=hj.dataset.hoja.split('|');return API.imprimir(hojaBloqueHTML(+n,z||null))}
     const pf=e.target.closest('[data-pendf]'); if(pf){PENDF=pf.dataset.pendf;return renderCod()}
     if(id==='pedClear'){PED=null;renderPedidos();return renderNave()}
@@ -20501,7 +20578,7 @@ document.addEventListener('click',e=>{
     const va=e.target.closest('[data-vaciar]'); if(va){const [n,sd]=va.dataset.vaciar.split('|');return vaciar(+n,sd||null)}
     const ir=e.target.closest('[data-ir]'); if(ir)return API.ir(ir.dataset.ir);
   }
-  const blk=e.target.closest('[data-blk]'); if(blk){sel=+blk.dataset.blk;movArt=null;renderNave();renderFicha();const fi=document.getElementById('ficha');if(fi)fi.scrollIntoView({behavior:'smooth',block:'start'});return}
+  const blk=e.target.closest('[data-blk]'); if(blk){sel=+blk.dataset.blk;movArt=null;renderNave();renderFicha();renderRelev();const fi=document.getElementById('relev');if(fi&&!fi.hidden)fi.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(e.target.closest('[data-volver]')){const pl=document.querySelector('.plan');if(pl)pl.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(id==='reset'){const r=e.target;if(r.dataset.armed){S=mkDEF();sel=2;save();calcOcc();renderAll();msg('Valores originales restablecidos');delete r.dataset.armed;r.textContent='Restablecer valores originales'}else{r.dataset.armed=1;r.textContent='Tocá de nuevo para confirmar';setTimeout(()=>{delete r.dataset.armed;r.textContent='Restablecer valores originales'},4000)}return}
   if(id==='copy'){
@@ -20539,7 +20616,8 @@ document.addEventListener('change',e=>{
   else return;
   save();calcOcc();renderAll();
 });
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&API){if(e.target.id==='q')buscar();if(e.target.id==='codArt')empezarCod(v('codArt'));if(e.target.id==='mvDes'&&movArt)moverArticulo(movArt,v('mvDes'))}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&API&&e.target.closest&&e.target.closest('#relev')&&e.target.tagName==='INPUT'){e.preventDefault();const L=[...document.querySelectorAll('#relev input')],i=L.indexOf(e.target);if(i>=0&&i<L.length-1)L[i+1].focus();else guardarRelev();return}
+  if(e.key==='Enter'&&API){if(e.target.id==='q')buscar();if(e.target.id==='codArt')empezarCod(v('codArt'));if(e.target.id==='mvDes'&&movArt)moverArticulo(movArt,v('mvDes'))}});
 document.addEventListener('input',e=>{if(e.target.id==='rotQ'){ROTQ=e.target.value;ROTN=25;renderRot();const i=document.getElementById('rotQ');i.focus();i.setSelectionRange(i.value.length,i.value.length);return}if(e.target.id==='obs'){S.blocks.find(x=>x.n===sel).obs=e.target.value;save()}});
 const tip=document.getElementById('tip');
 const EST={pos:'libre',pas:'pasillo',sel:'rack selectivo',off:'no disponible'};
