@@ -19636,6 +19636,19 @@ details.adv[open]>summary{margin-bottom:12px}
     <span class="legend" id="ocuLegend"><span><i class="sw" style="border:3px solid #8e44c9"></i>Coincide con la búsqueda / pedido</span><span class="note">Ocupado = lo que relevaste y cargaste en el plano</span></span>
   </div>
   <section class="plan" aria-label="Plano de la nave"><div class="nave" id="nave"></div></section>
+  <div class="grid2">
+    <section class="panel" id="ficha"></section>
+    <section class="panel"><details class="adv"><summary>⚙️ Ajustes avanzados</summary><div style="display:flex;flex-direction:column;gap:14px">
+      <div class="params" id="naveDims" hidden></div>
+      <div class="ph"><h2>Cómo se guarda</h2></div>
+      <div class="params" id="params"></div>
+      <div class="foot">
+        <button class="btn" id="copy" type="button">Copiar resumen para Excel</button>
+        <button class="btn" id="reset" type="button">Restablecer valores originales</button>
+        <span class="note" id="msg" role="status"></span>
+      </div>
+    </div></details></section>
+  </div>
   <section class="panel" id="opsPanel" hidden>
     <div class="ph"><h2>Operaciones</h2><span class="note" id="opsInfo"></span></div>
     <div class="cod" id="codCard"></div>
@@ -19664,19 +19677,6 @@ details.adv[open]>summary{margin-bottom:12px}
   </section>
   <datalist id="codigos"></datalist>
 
-  <div class="grid2">
-    <section class="panel" id="ficha"></section>
-    <section class="panel"><details class="adv"><summary>⚙️ Ajustes avanzados</summary><div style="display:flex;flex-direction:column;gap:14px">
-      <div class="params" id="naveDims" hidden></div>
-      <div class="ph"><h2>Cómo se guarda</h2></div>
-      <div class="params" id="params"></div>
-      <div class="foot">
-        <button class="btn" id="copy" type="button">Copiar resumen para Excel</button>
-        <button class="btn" id="reset" type="button">Restablecer valores originales</button>
-        <span class="note" id="msg" role="status"></span>
-      </div>
-    </div></details></section>
-  </div>
 </div>
 <div id="tip" hidden></div>
 <div id="cellMenu" hidden></div>
@@ -20215,7 +20215,7 @@ function renderFicha(){
     optM=z=>tipoL(b,z)==='MIXTO'?`<option value="MIXTO" selected>${resumenLado(b,z)}</option>`:'';
   const maxC=Math.max(...ZS.map(z=>k[z].cols)),maxR=Math.max(...ZS.map(z=>k[z].rows)),nums=(id,n,selv)=>`<select id="${id}" style="width:auto">${Array.from({length:n},(_,i)=>`<option ${i+1===selv?'selected':''}>${i+1}</option>`).join('')}</select>`;
   document.getElementById('ficha').innerHTML=`
-    <div class="ph"><h2>Bloque ${b.n}</h2><span class="note num">1 cuadrado = 1 lugar: un pallet Arlog o una pila de ${S.apilado} racks</span></div>
+    <div class="ph"><h2>Bloque ${b.n}</h2><span class="note num">1 cuadrado = 1 lugar: un pallet Arlog o una pila de ${S.apilado} racks</span><button type="button" class="btn" data-volver="1">▲ Volver al plano</button></div>
     <div class="foot"><span class="lbl">🖨️ Hoja para relevar</span><button type="button" class="btn" data-hoja="${b.n}|sur">Medio bloque Sur (${b.n}S)</button><button type="button" class="btn" data-hoja="${b.n}|norte">Medio bloque Norte (${b.n}N)</button><button type="button" class="btn" data-hoja="${b.n}|">Bloque completo</button>${API?`<button type="button" class="btn danger" data-vaciar="${b.n}|">Vaciar plano del bloque</button>`:''}</div>
     <div class="op"><h3>Armado de cada lado</h3><div class="note">Cada lado se puede armar entero en pallets o en racks, o mezclar línea por línea desde la calle. A lo largo, los racks van en filas de a 2 espalda con espalda con calle transversal de ${String(CALLE_R).replace('.',',')} m entre pares (${rackGeo('sur').filas} filas en ${fmt(S.bloqueL)} m); los pallets de a 2 con pasada humana de 0,5 m.</div>
       <div class="foot">${['norte','calle','sur'].map(z=>`<label class="lbl" for="tipo-${z}">${z==='calle'?'Calle':ZN[z]}</label><select id="tipo-${z}" data-tipo="${z}" style="width:auto">${optM(z)}${opt(z,'PALLET')}${opt(z,'RACK')}</select>`).join('')}</div></div>
@@ -20501,7 +20501,8 @@ document.addEventListener('click',e=>{
     const va=e.target.closest('[data-vaciar]'); if(va){const [n,sd]=va.dataset.vaciar.split('|');return vaciar(+n,sd||null)}
     const ir=e.target.closest('[data-ir]'); if(ir)return API.ir(ir.dataset.ir);
   }
-  const blk=e.target.closest('[data-blk]'); if(blk){sel=+blk.dataset.blk;movArt=null;renderNave();renderFicha();return}
+  const blk=e.target.closest('[data-blk]'); if(blk){sel=+blk.dataset.blk;movArt=null;renderNave();renderFicha();const fi=document.getElementById('ficha');if(fi)fi.scrollIntoView({behavior:'smooth',block:'start'});return}
+  if(e.target.closest('[data-volver]')){const pl=document.querySelector('.plan');if(pl)pl.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(id==='reset'){const r=e.target;if(r.dataset.armed){S=mkDEF();sel=2;save();calcOcc();renderAll();msg('Valores originales restablecidos');delete r.dataset.armed;r.textContent='Restablecer valores originales'}else{r.dataset.armed=1;r.textContent='Tocá de nuevo para confirmar';setTimeout(()=>{delete r.dataset.armed;r.textContent='Restablecer valores originales'},4000)}return}
   if(id==='copy'){
     const rows=[['Bloque','Zona','Armado','Lugares','Rack selectivo','Pasillo','No disponible','Stock','Pallets','Racks','Lugares usados','Ocupación %']];
