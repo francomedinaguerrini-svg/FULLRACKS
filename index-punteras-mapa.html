@@ -294,6 +294,16 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
 .sort-btn{white-space:nowrap;padding:5px 12px;border:1px solid #d2d2d7;border-radius:20px;font-size:12px;background:#fff;color:#1d1d1f;cursor:pointer;flex-shrink:0}
 .sort-btn.active{background:#1d1d1f;color:#fff;border-color:#1d1d1f}
 .list{padding:0 12px 80px}
+#view-stock .count{text-align:left}
+@media(min-width:900px){
+  #view-stock .metrics{display:flex;gap:8px;padding:10px 12px 0}
+  #view-stock .metric{padding:7px 14px;display:flex;align-items:baseline;gap:10px}
+  #view-stock .metric-value{font-size:17px}
+  #view-stock .filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr;align-items:center;gap:8px}
+  #view-stock .filter-row{display:contents}
+  #view-stock .history-bar{grid-column:1/-1;order:9}
+  #view-stock .filters select{min-width:0}
+}
 .card{background:#fff;border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid #e5e5ea}
 .card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
 .art-num{font-size:13px;font-weight:600}
@@ -1084,15 +1094,17 @@ select{flex:1;padding:9px 8px;border:1px solid #d2d2d7;border-radius:10px;font-s
     <div class="filter-row">
       <select id="f-wms"><option value="">Todos los niveles</option><option value="PISO">PISO</option><option value="NIVEL 2">NIVEL 2</option><option value="NIVEL 3">NIVEL 3</option><option value="NIVEL 4">NIVEL 4</option></select>
       <select id="f-diseno"><option value="">Todos los diseños</option></select>
+      <select id="f-rod"><option value="">Todos los rodados</option></select>
     </div>
   </div>
   <div class="sort-bar">
-    <button class="sort-btn active" onclick="setSort('rot',this)">Rotación ↓</button>
-    <button class="sort-btn" onclick="setSort('stock',this)">Stock FP ↓</button>
-    <button class="sort-btn" onclick="setSort('pall',this)">Pallets ↓</button>
-    <button class="sort-btn" onclick="setSort('art',this)">Artículo</button>
-    <button class="sort-btn" onclick="setSort('prov',this)">Proveedor</button>
-    <button class="sort-btn" onclick="setSort('cond',this)">Condición</button>
+    <button class="sort-btn active" data-k="rot" onclick="setSort('rot',this)">Rotación ↓</button>
+    <button class="sort-btn" data-k="stock" onclick="setSort('stock',this)">Stock FP ↓</button>
+    <button class="sort-btn" data-k="_cob" onclick="setSort('_cob',this)">Cobertura</button>
+    <button class="sort-btn" data-k="pall" onclick="setSort('pall',this)">Pallets ↓</button>
+    <button class="sort-btn" data-k="art" onclick="setSort('art',this)">Artículo</button>
+    <button class="sort-btn" data-k="prov" onclick="setSort('prov',this)">Proveedor</button>
+    <button class="sort-btn" data-k="cond" onclick="setSort('cond',this)">Condición</button>
   </div>
   <div class="count" id="count-lbl"></div>
   <div class="list" id="list"></div>
@@ -3335,6 +3347,7 @@ function init(){
   const seld=document.getElementById('f-diseno');
   seld.innerHTML='<option value="">Todos los diseños</option>';
   disenos.forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;seld.appendChild(o)});
+  stkLlenarRodados();
   const _fh=document.getElementById('fechahoy'); if(_fh) _fh.textContent=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   actualizarUltimaFecha();
   // Start at home screen
@@ -3368,26 +3381,116 @@ function wmsClass(w){
 function setSort(k,btn){
   if(sortKey===k){sortDir*=-1;}else{sortKey=k;sortDir=k==='prov'||k==='art'||k==='cond'?1:-1;}
   document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
+  if(btn) btn.classList.add('active');
+  else { var _b=document.querySelector('.sort-btn[data-k="'+k+'"]'); if(_b) _b.classList.add('active'); }
   render();
 }
 
+
+// ===== Stock: totales del filtro, vista tabla y datos calculados =====
+// Rodado = último número de la medida: "175 65 14" → 14, "295 80 22.5" → 22.5, "205/55R16" → 16
+function rodadoDe(med){ var t=String(med||'').toUpperCase().replace(/ZR|R(?=\d)/g,' ').split(/[\s\/xX-]+/).filter(Boolean);
+  for(var i=t.length-1;i>=0;i--){ if(/PR$/.test(t[i])) continue; var v=t[i].replace(',','.').replace(/[A-Z]+$/,''); if(/^\d{2}(\.5)?$/.test(v)) return String(+v); } return ''; }
+function stkLlenarRodados(){ var el=document.getElementById('f-rod'); if(!el) return; var cnt={};
+  DATA.forEach(function(r){ var rd=rodadoDe(r.med); if(rd) cnt[rd]=(cnt[rd]||0)+(+r.stock||0); });
+  var act=el.value; el.innerHTML='<option value="">Todos los rodados</option>'+Object.keys(cnt).sort(function(a,b){ return a-b; }).map(function(k){ return '<option value="'+k+'">R'+k+' · '+cnt[k].toLocaleString('es-AR')+' un.</option>'; }).join(''); el.value=act; }
+function stkVista(){ var v=null; try{ v=localStorage.getItem('wms_stock_vista'); }catch(e){} return v || (window.innerWidth>=1000?'tabla':'tarjetas'); }
+function stkSetVista(v){ try{ localStorage.setItem('wms_stock_vista',v); }catch(e){} stkVistaBtns(); render(); }
+function stkVistaBtns(){ var v=stkVista(); document.querySelectorAll('[data-stkv]').forEach(function(b){ b.classList.toggle('active', b.dataset.stkv===v); }); }
+function stkUbicTxt(art){
+  var out=[]; try{ var pu=buscarEnPunteras(art); if(pu&&pu.total) out.push('PUNT '+pu.ubicaciones.join(', ')); }catch(e){}
+  try{ rackPosDeArt(art).forEach(function(pv){ out.push(pv[0]+(pv[1].unidades!=null?' ('+pv[1].unidades+')':'')); }); }catch(e){}
+  var d=DATA.find(function(r){ return String(r.art)===String(art); }); if(d&&d.bloque) out.push('BLQ '+d.bloque);
+  return out;
+}
+// datos calculados por artículo (una sola pasada por render)
+function stkExtras(rows){
+  var cache={}, dif={}, dots={};
+  try{ var D=difInformeDatos(); D.enContra.concat(D.aFavor,D.compensados).forEach(function(x){ dif[String(x.art)]=x.buscar; }); }catch(e){}
+  try{ dots=JSON.parse(localStorage.getItem('wms_dots')||'{}'); }catch(e){}
+  return function(r){
+    var k=String(r.art); if(cache[k]) return cache[k];
+    var rot=+r.rot||0, st=+r.stock||0, ds=dots[k]||[];
+    var dotMin=ds.length?Math.min.apply(null,ds.map(function(d){ return +d.anio||9999; })):null;
+    return cache[k]={ _cob: rot>0 ? st/(rot/30) : (st>0?9999:0), _ped: _salPend(k), _dif: dif[k]||0, _dot: dotMin, _dotU: ds.reduce(function(t,d){ return t+(+d.unidades||0); },0), _dots: ds };
+  };
+}
+function stkCobTxt(c){ if(c>=9999) return 'sin rotación'; if(c<1) return '< 1 día'; return Math.round(c).toLocaleString('es-AR')+' días'; }
+function stkCobCol(c){ return c<7?'#a95450':c<30?'#8f7430':'#1d1d1f'; }
+function stkTotalesHTML(rows,X,f){
+  var nf=function(v){ return Math.round(v).toLocaleString('es-AR'); };
+  var un=0,pa=0,rot=0,ped=0,dotU=0,dotV=0,dotMin=null,yr=new Date().getFullYear();
+  var porProv={}, porDis={}, porRod={};
+  rows.forEach(function(r){ var x=X(r); un+=+r.stock||0; pa+=+r.pall||0; rot+=+r.rot||0; ped+=x._ped;
+    dotU+=x._dotU; x._dots.forEach(function(d){ if(yr-(+d.anio)>=5) dotV+=(+d.unidades||0); });
+    if(x._dot!=null && (dotMin==null||x._dot<dotMin)) dotMin=x._dot;
+    porProv[r.prov]=(porProv[r.prov]||0)+(+r.stock||0); porDis[r.diseno]=(porDis[r.diseno]||0)+(+r.stock||0); var rd=rodadoDe(r.med); if(rd) porRod['R'+rd]=(porRod['R'+rd]||0)+(+r.stock||0); });
+  var cob = rot>0 ? un/(rot/30) : null;
+  var chip=function(obj,campo,actual){ var L=Object.keys(obj).filter(function(k){ return k&&obj[k]>0; }).sort(function(a,b){ return obj[b]-obj[a]; });
+    if(L.length<2 || actual) return '';
+    return L.slice(0,8).map(function(k){ return '<button onclick="stkFiltrar(\''+campo+'\','+JSON.stringify(k).replace(/"/g,'&quot;')+')" style="font-size:11px;padding:3px 9px;border:1px solid #e5e5ea;border-radius:12px;background:#fff;cursor:pointer;white-space:nowrap">'+k+' <b>'+nf(obj[k])+'</b></button>'; }).join('')+(L.length>8?'<span style="font-size:11px;color:#86868b;align-self:center">+'+(L.length-8)+' más</span>':''); };
+  var it=function(l,v,extra){ return '<span style="white-space:nowrap"><span style="color:#86868b">'+l+'</span> <b style="font-size:15px;color:#1d1d1f">'+v+'</b>'+(extra?' <span style="color:#86868b">'+extra+'</span>':'')+'</span>'; };
+  var h='<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:7px;text-align:left">'+
+    '<div style="display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;align-items:baseline">'+
+    it('Artículos',nf(rows.length))+it('Unidades',nf(un))+it('Pallets',nf(pa))+it('Rotación',nf(rot),'/mes')+
+    it('Cobertura',cob==null?'—':stkCobTxt(cob))+(ped?it('En pedidos',nf(ped),'un.'):'')+
+    it('DOT',dotU?nf(dotU)+' un.':'sin cargar', dotU?('más viejo '+dotMin+(dotV?' · <span style="color:#a95450">'+nf(dotV)+' un. con 5 años o más</span>':'')):'')+
+    '<span style="margin-left:auto;display:flex;gap:4px"><button data-stkv="tabla" class="sort-btn" onclick="stkSetVista(\'tabla\')">☰ Tabla</button><button data-stkv="tarjetas" class="sort-btn" onclick="stkSetVista(\'tarjetas\')">▦ Tarjetas</button></span></div>';
+  var cp=chip(porProv,'f-prov',f.fp), cd=chip(porDis,'f-diseno',f.fd), cr=chip(porRod,'f-rod',f.frod);
+  if(cp) h+='<div style="display:flex;flex-wrap:wrap;gap:4px"><span style="font-size:11px;color:#86868b;align-self:center;width:72px">Por marca</span>'+cp+'</div>';
+  if(cd) h+='<div style="display:flex;flex-wrap:wrap;gap:4px"><span style="font-size:11px;color:#86868b;align-self:center;width:72px">Por diseño</span>'+cd+'</div>';
+  if(cr) h+='<div style="display:flex;flex-wrap:wrap;gap:4px"><span style="font-size:11px;color:#86868b;align-self:center;width:72px">Por rodado</span>'+cr+'</div>';
+  h+='</div>';
+  setTimeout(stkVistaBtns,0);
+  return h;
+}
+function stkFiltrar(id,val){ if(id==='f-rod') val=String(val).replace(/^R/,''); var el=document.getElementById(id); if(!el) return; if(![].some.call(el.options,function(o){ return o.value===val; })){ var o=document.createElement('option'); o.value=val; o.textContent=val; el.appendChild(o); } el.value=val; render(); }
+function stkTablaHTML(rows,X){
+  var nf=function(v){ return (+v||0).toLocaleString('es-AR'); }, yr=new Date().getFullYear();
+  var th=function(t,k,al){ var on=sortKey===k; return '<th onclick="setSort(\''+k+'\',null)" style="padding:7px 8px;text-align:'+(al||'left')+';cursor:pointer;white-space:nowrap;'+(on?'color:#0071e3':'')+'">'+t+(on?(sortDir>0?' ↑':' ↓'):'')+'</th>'; };
+  var h='<div style="background:#fff;border:1px solid #e5e5ea;border-radius:12px;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">'+
+    '<thead style="position:sticky;top:0;background:#f5f5f7;z-index:1"><tr style="color:#6e6e73;font-size:11px;text-transform:uppercase;letter-spacing:.03em">'+
+    th('Art.','art')+th('Medida','med')+th('Diseño','diseno')+'<th style="padding:7px 8px;text-align:left">IC/IV</th>'+th('Marca','prov')+'<th style="padding:7px 8px;text-align:left">Ubicación</th>'+
+    th('Pall.','pall','right')+th('Stock','stock','right')+th('Rot./mes','rot','right')+th('Cobertura','_cob','right')+th('En pedidos','_ped','right')+th('Dif. ficha','_dif','right')+th('DOT','_dot')+th('Estado','cond')+'<th></th></tr></thead><tbody>';
+  rows.slice(0,600).forEach(function(r,i){ var x=X(r), ub=stkUbicTxt(r.art), a=JSON.stringify(String(r.art)).replace(/"/g,'&quot;');
+    var dotTxt = x._dot==null ? '<span style="color:#c7c7cc">—</span>' : '<span style="color:'+(yr-x._dot>=5?'#a95450':yr-x._dot>=3?'#8f7430':'#1d1d1f')+'">'+x._dot+'</span>'+(x._dots.length>1?' <span style="color:#86868b">+'+(x._dots.length-1)+'</span>':'');
+    h+='<tr style="border-top:1px solid #f0f0f0;'+(i%2?'background:#fafafa':'')+'">'+
+      '<td style="padding:6px 8px;color:#86868b">'+r.art+'</td><td style="padding:6px 8px;font-weight:700;white-space:nowrap">'+r.med+'</td><td style="padding:6px 8px;white-space:nowrap">'+(r.diseno||'')+(r.uso?' <span style="color:#86868b">'+r.uso+'</span>':'')+'</td>'+
+      '<td style="padding:6px 8px;color:#0071e3;font-weight:600">'+(RANGOS[String(r.art)]||'')+'</td><td style="padding:6px 8px;white-space:nowrap">'+(r.prov||'')+'</td>'+
+      '<td style="padding:6px 8px;font-size:11.5px;max-width:240px">'+(ub.length?ub.slice(0,3).join(' · ')+(ub.length>3?' <span style="color:#86868b">+'+(ub.length-3)+'</span>':''):'<span style="color:#c7c7cc">sin ubicación</span>')+'</td>'+
+      '<td style="padding:6px 8px;text-align:right">'+nf(r.pall)+'</td><td style="padding:6px 8px;text-align:right;font-weight:700">'+nf(r.stock)+'</td><td style="padding:6px 8px;text-align:right">'+nf(r.rot)+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;white-space:nowrap;color:'+stkCobCol(x._cob)+';font-weight:600">'+stkCobTxt(x._cob)+'</td>'+
+      '<td style="padding:6px 8px;text-align:right">'+(x._ped?nf(x._ped):'<span style="color:#c7c7cc">—</span>')+'</td>'+
+      '<td style="padding:6px 8px;text-align:right;font-weight:600;color:'+(x._dif<0?'#a95450':x._dif>0?'#3f7d55':'#c7c7cc')+'">'+(x._dif?(x._dif>0?'+':'')+x._dif:'—')+'</td>'+
+      '<td style="padding:6px 8px;white-space:nowrap">'+dotTxt+'</td>'+
+      '<td style="padding:6px 8px;white-space:nowrap"><span class="badge '+(r.cond==='bajo stock'?'bajo':'sobre')+'">'+(r.cond||'')+'</span></td>'+
+      '<td style="padding:6px 8px"><button onclick="ajustarStockManual('+a+')" style="font-size:11px;font-weight:600;padding:2px 8px;border:1px solid #d2d2d7;border-radius:6px;background:#fff;color:#0071e3;cursor:pointer;white-space:nowrap">✎ Contar</button></td></tr>';
+  });
+  h+='</tbody></table></div>'+(rows.length>600?'<div class="empty">Se muestran los primeros 600 · usá el buscador o los filtros</div>':'');
+  return h;
+}
 function render(){
   const q=(document.getElementById('buscar').value||'').toLowerCase().trim();
   const fp=document.getElementById('f-prov').value;
   const fc=document.getElementById('f-cond').value;
   const fw=document.getElementById('f-wms').value;
   const fd=document.getElementById('f-diseno').value;
+  const _fre=document.getElementById('f-rod'); let frod=_fre?_fre.value:'';
+  // "R14", "r 14", "rod 14" o "rodado 14" en el buscador = filtrar por rodado
+  let q2=q; const _mr=q.match(/^(?:r|rod|rodado)\s*(\d{2}(?:[.,]5)?)$/);
+  if(_mr){ frod=_mr[1].replace(',','.'); q2=''; }
   let rows=DATA.filter(r=>{
+    if(frod&&rodadoDe(r.med)!==frod)return false;
     if(fp&&r.prov!==fp)return false;
     if(fc&&r.cond!==fc)return false;
     if(fw&&r.wms!==fw)return false;
     if(fd&&r.diseno!==fd)return false;
-    if(q){const s=(r.art+' '+r.prov+' '+r.med+' '+r.diseno+' '+r.tipo+' '+r.uso+' '+(RANGOS[String(r.art)]||'')).toLowerCase();if(!s.includes(q))return false;}
+    if(q2){const s=(r.art+' '+r.prov+' '+r.med+' '+r.diseno+' '+r.tipo+' '+r.uso+' '+(RANGOS[String(r.art)]||'')).toLowerCase();if(!s.includes(q2))return false;}
     return true;
   });
+  const _X = stkExtras(rows);
   rows.sort((a,b)=>{
-    let av=a[sortKey],bv=b[sortKey];
+    let av=sortKey.charAt(0)==='_'?_X(a)[sortKey]:a[sortKey],bv=sortKey.charAt(0)==='_'?_X(b)[sortKey]:b[sortKey];
     if(av==null)av='';if(bv==null)bv='';
     if(typeof av==='number')return(av-bv)*sortDir;
     return String(av).localeCompare(String(bv))*sortDir;
@@ -3395,9 +3498,10 @@ function render(){
   const _mbajo=document.getElementById('m-bajo'); if(_mbajo) _mbajo.textContent=rows.filter(r=>r.cond==='bajo stock').length;
   const _mpall=document.getElementById('m-pall'); if(_mpall) _mpall.textContent=rows.reduce((s,r)=>s+(r.pall||0),0).toLocaleString('es-AR');
   const _mstock=document.getElementById('m-stock'); if(_mstock) _mstock.textContent=rows.reduce((s,r)=>s+(r.stock||0),0).toLocaleString('es-AR');
-  const _clbl=document.getElementById('count-lbl'); if(_clbl) _clbl.textContent=rows.length+' artículos';
+  const _clbl=document.getElementById('count-lbl'); if(_clbl) _clbl.innerHTML=stkTotalesHTML(rows,_X,{q:q,fp:fp,fd:fd,frod:frod});
   const list=document.getElementById('list');
   if(!rows.length){list.innerHTML='<div class="empty">Sin resultados</div>';return;}
+  if(stkVista()==='tabla'){ list.innerHTML=stkTablaHTML(rows,_X); return; }
   list.innerHTML=rows.slice(0,300).map(r=>`
     <div class="card" style="${r.cond==='bajo stock'?'border-left:3px solid #d70015':''}">
       <!-- Medida y diseño GRANDE -->
@@ -12995,7 +13099,7 @@ window.addEventListener('message', function(ev){
   if(f && ev.source===f.contentWindow) f.style.height = Math.max(600, d.h+20)+'px';
 });
 
-['buscar','f-prov','f-cond','f-wms','f-diseno'].forEach(id=>document.getElementById(id).addEventListener('input',render));
+['buscar','f-prov','f-cond','f-wms','f-diseno','f-rod'].forEach(id=>document.getElementById(id).addEventListener('input',render));
 init();
 try{ migrarPunterasABloques(); }catch(e){ console.warn(e); }
 </script>
